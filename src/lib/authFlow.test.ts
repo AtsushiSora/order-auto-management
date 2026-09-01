@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { getAuthCallbackSession, isPasswordSetupUrl, validateNewPassword } from "./authFlow";
+import {
+  getAuthCallbackSession,
+  getSafeAuthErrorDetail,
+  isPasswordSetupUrl,
+  validateNewPassword,
+} from "./authFlow";
 
 describe("isPasswordSetupUrl", () => {
   it("招待リンクのハッシュを検出する", () => {
@@ -30,6 +35,21 @@ describe("getAuthCallbackSession", () => {
 
   it("必要なトークンが揃っていない場合は取得しない", () => {
     expect(getAuthCallbackSession("https://example.test/#access_token=access-value&type=recovery")).toBeNull();
+  });
+});
+
+describe("getSafeAuthErrorDetail", () => {
+  it("エラーコードと状態だけを診断表示に含める", () => {
+    expect(getSafeAuthErrorDetail({
+      code: "refresh_token_not_found",
+      status: 400,
+      name: "AuthApiError",
+      message: "Invalid Refresh Token",
+    })).toBe("refresh_token_not_found / 400 / AuthApiError / Invalid Refresh Token");
+  });
+
+  it("トークンらしい文字列を診断表示から除く", () => {
+    expect(getSafeAuthErrorDetail({ message: "bad eyJsecret.payload.value" })).toBe("bad [token]");
   });
 });
 

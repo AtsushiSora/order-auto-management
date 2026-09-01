@@ -10,7 +10,7 @@ import {
   useState,
 } from "react";
 import { isSupabaseConfigured, supabase } from "../lib/supabase";
-import { getAuthCallbackSession, isPasswordSetupUrl } from "../lib/authFlow";
+import { getAuthCallbackSession, getSafeAuthErrorDetail, isPasswordSetupUrl } from "../lib/authFlow";
 import type { StaffProfile, StaffRole } from "../types";
 
 const INACTIVITY_LIMIT_MS = 30 * 60 * 1000;
@@ -114,7 +114,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (!active) return;
         if (sessionError || !data.session) {
           clearAuthenticatedState();
-          setError("再設定リンクを確認できませんでした。最新のメールをもう一度開いてください。");
+          const detail = getSafeAuthErrorDetail(sessionError);
+          setError(`再設定リンクを確認できませんでした（${detail}）。`);
           setLoading(false);
           return;
         }

@@ -5,6 +5,13 @@ export type AuthCallbackSession = {
   refreshToken: string;
 };
 
+type AuthErrorLike = {
+  code?: unknown;
+  message?: unknown;
+  name?: unknown;
+  status?: unknown;
+};
+
 const getAuthParams = (href: string) => {
   const url = new URL(href);
   const hashParams = new URLSearchParams(url.hash.replace(/^#/, ""));
@@ -25,6 +32,18 @@ export const getAuthCallbackSession = (href: string): AuthCallbackSession | null
 
   if (!accessToken || !refreshToken) return null;
   return { accessToken, refreshToken };
+};
+
+export const getSafeAuthErrorDetail = (error: unknown) => {
+  if (!error || typeof error !== "object") return "unknown_error";
+  const value = error as AuthErrorLike;
+  const code = typeof value.code === "string" ? value.code : null;
+  const status = typeof value.status === "number" ? String(value.status) : null;
+  const name = typeof value.name === "string" ? value.name : null;
+  const message = typeof value.message === "string"
+    ? value.message.replace(/eyJ[\w.-]+/g, "[token]").slice(0, 120)
+    : null;
+  return [code, status, name, message].filter(Boolean).join(" / ") || "unknown_error";
 };
 
 export const validateNewPassword = (password: string, confirmation: string) => {
