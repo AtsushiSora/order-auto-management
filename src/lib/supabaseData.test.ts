@@ -176,6 +176,7 @@ describe("Supabaseデータ変換", () => {
       id: "cashflow-id",
       vehicle_id: null,
       direction: "incoming",
+      kind: "sale_receipt",
       description: "返金しない預り金",
       amount: 10000,
       processed_amount: 10000,
@@ -184,6 +185,6 @@ describe("Supabaseデータ変換", () => {
       scheduled_on: "2026-09-01",
       processed_on: "2026-09-01",
       created_at: "2026-09-01T00:00:00Z",
-    }).method).toBe("現金");
+    })).toMatchObject({ method: "現金", kind: "販売代金" });
   });
 });

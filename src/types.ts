@@ -90,12 +90,14 @@ export type Expense = {
 
 export type CashflowDirection = "入金" | "支払い";
 export type CashflowStatus = "未処理" | "一部" | "完了";
+export type CashflowKind = "買取代金" | "販売代金" | "経費支払い" | "返金" | "その他";
 export type PaymentMethod = "現金" | "振込" | "ローン会社" | "カード" | "その他";
 
 export type Cashflow = {
   id: string;
   vehicleId: string | null;
   direction: CashflowDirection;
+  kind: CashflowKind;
   description: string;
   amount: number;
   processedAmount: number;
@@ -158,7 +160,7 @@ export type NewVehicleInput = Pick<
 >;
 
 export type NewExpenseInput = Omit<Expense, "id" | "createdAt">;
-export type NewCashflowInput = Omit<Cashflow, "id" | "createdAt">;
+export type NewCashflowInput = Omit<Cashflow, "id" | "createdAt" | "kind"> & { kind?: CashflowKind };
 
 export type PurchaseContractInput = {
   contractId: string | null;

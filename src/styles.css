@@ -8,7 +8,9 @@
   --navy-900: #073357;
   --navy-800: #0d466f;
   --blue-600: #0768d7;
+  --blue-50: #f4f8ff;
   --blue-100: #e8f2ff;
+  --blue-200: #cfe2fb;
   --teal-700: #087f83;
   --teal-100: #e8f6f5;
   --green-700: #17815d;
@@ -1249,6 +1251,69 @@ button.alert-card:hover {
   font-size: 9px;
 }
 
+.workflow-card {
+  display: flex;
+  gap: 13px;
+  padding: 15px;
+  margin-bottom: 16px;
+  border: 1px solid var(--slate-200);
+  border-radius: 14px;
+  background: var(--slate-50);
+}
+
+.workflow-card.warning { border-color: #f3d08c; background: #fff9ec; }
+.workflow-card.success { border-color: #a8dfc1; background: #effbf4; }
+.workflow-card.neutral { border-color: #cbd5e1; background: #f8fafc; }
+
+.workflow-icon {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  flex: 0 0 42px;
+  border-radius: 12px;
+  color: var(--blue-700);
+  background: #fff;
+}
+
+.workflow-card.warning .workflow-icon { color: var(--amber-700); }
+.workflow-card.success .workflow-icon { color: var(--green-700); }
+.workflow-content { min-width: 0; flex: 1; }
+.workflow-content > strong { display: block; margin: 1px 0 4px; color: var(--navy-900); }
+.workflow-content > p { margin: 0; color: var(--slate-600); font-size: 0.86rem; line-height: 1.55; }
+
+.workflow-action {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 10px;
+  margin-top: 13px;
+}
+
+.workflow-action .field-label { margin: 0; }
+
+.payment-workflow {
+  padding: 16px;
+  border: 1px solid var(--slate-200);
+  border-radius: 14px;
+  background: var(--slate-50);
+}
+
+.payment-workflow.pending { border-color: #f3d08c; background: #fffdf7; }
+.payment-workflow.complete { border-color: #a8dfc1; background: #f4fbf7; }
+.payment-workflow-heading { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; }
+.payment-workflow-heading span:first-child { display: grid; gap: 3px; }
+.payment-workflow-heading strong { color: var(--navy-900); font-size: 1.2rem; }
+.payment-workflow-heading small { color: var(--slate-500); }
+.payment-workflow dl { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 14px 0; }
+.payment-workflow dl div { padding: 10px 12px; border-radius: 10px; background: #fff; }
+.payment-workflow dt { color: var(--slate-500); font-size: 0.76rem; }
+.payment-workflow dd { margin: 3px 0 0; color: var(--navy-900); font-weight: 800; }
+.payment-complete-note,
+.payment-lock-note { display: flex; align-items: center; gap: 7px; margin: 12px 0 0; font-size: 0.86rem; }
+.payment-complete-note { color: var(--green-700); }
+.payment-lock-note { color: var(--amber-700); }
+
 .inline-form {
   margin-bottom: 15px;
   padding: 14px;
@@ -1547,6 +1612,24 @@ button.alert-card:hover {
 .direction-label.incoming { color: var(--green-700); }
 .direction-label.outgoing { color: var(--red-700); }
 .remaining-value { color: var(--red-700) !important; }
+
+.cashflow-action-cell { min-width: 130px; }
+.small-action-button {
+  border: 1px solid var(--blue-200);
+  border-radius: 9px;
+  padding: 7px 10px;
+  color: var(--blue-700);
+  background: var(--blue-50);
+  font-weight: 750;
+  white-space: nowrap;
+}
+.small-action-button:hover { background: var(--blue-100); }
+.small-action-button:disabled { cursor: wait; opacity: 0.55; }
+.completed-label,
+.locked-label { display: inline-flex; align-items: center; gap: 5px; font-size: 0.8rem; font-weight: 700; white-space: nowrap; }
+.completed-label { color: var(--green-700); }
+.locked-label { color: var(--amber-700); }
+.list-error { margin: 0 0 14px; }
 
 .info-banner,
 .integration-banner {
@@ -1982,6 +2065,15 @@ button.alert-card:hover {
 
   .document-checklist {
     grid-template-columns: 1fr;
+  }
+
+  .workflow-action,
+  .payment-workflow dl {
+    grid-template-columns: 1fr;
+  }
+
+  .workflow-action .primary-button {
+    width: 100%;
   }
 
   .section-heading {

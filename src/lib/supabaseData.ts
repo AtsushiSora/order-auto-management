@@ -3,6 +3,7 @@ import type {
   Approval,
   Cashflow,
   CashflowDirection,
+  CashflowKind,
   CashflowStatus,
   Contract,
   ContractStatus,
@@ -74,6 +75,16 @@ const cashflowStatusFromDb: Record<string, CashflowStatus> = {
   partial: "一部",
   completed: "完了",
 };
+const cashflowKindToDb: Record<CashflowKind, string> = {
+  買取代金: "purchase_payment",
+  販売代金: "sale_receipt",
+  経費支払い: "expense_payment",
+  返金: "refund",
+  その他: "other",
+};
+const cashflowKindFromDb = Object.fromEntries(
+  Object.entries(cashflowKindToDb).map(([label, value]) => [value, label]),
+) as Record<string, CashflowKind>;
 const paymentMethodToDb: Record<PaymentMethod, string> = {
   現金: "cash",
   振込: "bank_transfer",
@@ -206,12 +217,13 @@ export const newExpenseToDb = (input: NewExpenseInput) => ({
   incurred_on: input.incurredOn,
 });
 
-const inferCashflowKind = (input: NewCashflowInput) => {
-  if (input.direction === "支払い" && input.description.includes("買取")) return "purchase_payment";
-  if (input.direction === "入金" && input.description.includes("販売")) return "sale_receipt";
-  if (input.direction === "支払い" && input.description.includes("経費")) return "expense_payment";
-  if (input.description.includes("返金")) return "refund";
-  return "other";
+const inferCashflowKind = (input: NewCashflowInput): CashflowKind => {
+  if (input.kind) return input.kind;
+  if (input.direction === "支払い" && input.description.includes("買取")) return "買取代金";
+  if (input.direction === "入金" && input.description.includes("販売")) return "販売代金";
+  if (input.direction === "支払い" && input.description.includes("経費")) return "経費支払い";
+  if (input.description.includes("返金")) return "返金";
+  return "その他";
 };
 
 export const mapCashflowFromDb = (source: unknown): Cashflow => {
@@ -220,6 +232,7 @@ export const mapCashflowFromDb = (source: unknown): Cashflow => {
     id: stringValue(row, "id"),
     vehicleId: nullableString(row, "vehicle_id"),
     direction: directionFromDb[stringValue(row, "direction")] ?? "入金",
+    kind: cashflowKindFromDb[stringValue(row, "kind")] ?? "その他",
     description: stringValue(row, "description"),
     amount: numberValue(row, "amount"),
     processedAmount: numberValue(row, "processed_amount"),
@@ -234,7 +247,7 @@ export const mapCashflowFromDb = (source: unknown): Cashflow => {
 export const newCashflowToDb = (input: NewCashflowInput) => ({
   vehicle_id: input.vehicleId,
   direction: directionToDb[input.direction],
-  kind: inferCashflowKind(input),
+  kind: cashflowKindToDb[inferCashflowKind(input)],
   description: input.description,
   amount: input.amount,
   processed_amount: input.processedAmount,

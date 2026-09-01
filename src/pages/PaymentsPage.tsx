@@ -1,4 +1,4 @@
-import { ArrowDownLeft, ArrowUpRight, Plus, WalletCards } from "lucide-react";
+import { ArrowDownLeft, ArrowUpRight, CheckCircle2, LockKeyhole, Plus, WalletCards } from "lucide-react";
 import { useState, type FormEvent } from "react";
 import { Drawer } from "../components/Drawer";
 import { PageHeader } from "../components/PageHeader";
@@ -6,6 +6,7 @@ import { StatusBadge } from "../components/StatusBadge";
 import { outstandingAmount } from "../lib/calculations";
 import { formatCurrency, formatDate } from "../lib/format";
 import { useAppData } from "../state/AppDataContext";
+import { useAuth } from "../state/AuthContext";
 import type {
   CashflowDirection,
   CashflowStatus,
@@ -28,13 +29,17 @@ const initialCashflow = (): NewCashflowInput => ({
 const methods: PaymentMethod[] = ["現金", "振込", "ローン会社", "カード", "その他"];
 
 export function PaymentsPage() {
-  const { data, addCashflow } = useAppData();
+  const { data, addCashflow, completeCashflow } = useAppData();
+  const { profile } = useAuth();
+  const canManage = profile?.role === "owner" || profile?.role === "regular" || profile?.role === "accounting";
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [directionFilter, setDirectionFilter] = useState<"すべて" | CashflowDirection>("すべて");
   const [statusFilter, setStatusFilter] = useState<"すべて" | "未完了" | "完了">("未完了");
   const [form, setForm] = useState<NewCashflowInput>(initialCashflow);
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [processingId, setProcessingId] = useState<string | null>(null);
+  const [listError, setListError] = useState("");
 
   const filtered = data.cashflows.filter((cashflow) => {
     const matchesDirection = directionFilter === "すべて" || cashflow.direction === directionFilter;
@@ -100,17 +105,34 @@ export function PaymentsPage() {
     }
   };
 
+  const markCompleted = async (cashflowId: string) => {
+    const cashflow = data.cashflows.find((item) => item.id === cashflowId);
+    if (!cashflow || cashflow.status === "完了") return;
+    const vehicle = data.vehicles.find((item) => item.id === cashflow.vehicleId);
+    if (cashflow.kind === "買取代金" && vehicle?.status === "入庫予定") {
+      setListError("買取代金は対象車両の入庫を確定するまで支払済みにできません。");
+      return;
+    }
+    const remaining = outstandingAmount(cashflow.amount, cashflow.processedAmount);
+    if (!window.confirm(`${cashflow.description}の残額 ${formatCurrency(remaining)} を完了にしますか？`)) return;
+    setProcessingId(cashflowId);
+    setListError("");
+    try { await completeCashflow(cashflowId, new Date().toISOString().slice(0, 10)); }
+    catch (reason) { setListError(reason instanceof Error ? reason.message : "入出金を完了できませんでした。"); }
+    finally { setProcessingId(null); }
+  };
+
   return (
     <>
       <PageHeader
         title="入出金"
         description="販売代金の入金と、買取・経費の支払いを残額まで管理します。"
-        action={
+        action={canManage ? (
           <button type="button" className="primary-button" onClick={openForm}>
             <Plus size={20} />
             入出金を登録
           </button>
-        }
+        ) : undefined}
       />
 
       <section className="cashflow-summary-grid">
@@ -138,6 +160,8 @@ export function PaymentsPage() {
         <div className="result-count">{filtered.length}件</div>
       </div>
 
+      {listError ? <p className="form-error list-error">{listError}</p> : null}
+
       <section className="panel table-panel">
         <div className="table-scroll">
           <table className="data-table">
@@ -150,6 +174,7 @@ export function PaymentsPage() {
                 <th>状態</th>
                 <th className="number-cell">合計</th>
                 <th className="number-cell">残額</th>
+                <th>操作</th>
               </tr>
             </thead>
             <tbody>
@@ -168,6 +193,9 @@ export function PaymentsPage() {
                     <td><StatusBadge>{cashflow.status}</StatusBadge></td>
                     <td className="number-cell">{formatCurrency(cashflow.amount)}</td>
                     <td className={`number-cell ${remaining > 0 ? "remaining-value" : ""}`}><strong>{formatCurrency(remaining)}</strong></td>
+                    <td className="cashflow-action-cell">
+                      {cashflow.status === "完了" ? <span className="completed-label"><CheckCircle2 size={16} />完了</span> : cashflow.kind === "買取代金" && vehicle?.status === "入庫予定" ? <span className="locked-label"><LockKeyhole size={15} />入庫待ち</span> : canManage ? <button type="button" className="small-action-button" disabled={processingId === cashflow.id} onClick={() => void markCompleted(cashflow.id)}>{processingId === cashflow.id ? "処理中" : cashflow.direction === "支払い" ? "支払済みにする" : "入金済みにする"}</button> : <span className="muted-cell">閲覧のみ</span>}
+                    </td>
                   </tr>
                 );
               })}

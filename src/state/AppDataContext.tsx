@@ -44,10 +44,12 @@ type AppDataContextValue = {
   isDemo: boolean;
   addVehicle: (input: NewVehicleInput) => Promise<Vehicle>;
   updateVehicle: (vehicleId: string, patch: Partial<Vehicle>) => Promise<void>;
+  markVehicleArrived: (vehicleId: string, arrivedOn: string) => Promise<void>;
   updateVehicleDocument: (input: VehicleDocumentInput) => Promise<VehicleDocument>;
   archiveVehicle: (vehicleId: string) => Promise<void>;
   addExpense: (input: NewExpenseInput) => Promise<void>;
   addCashflow: (input: NewCashflowInput) => Promise<void>;
+  completeCashflow: (cashflowId: string, processedOn: string) => Promise<void>;
   savePurchaseContract: (input: PurchaseContractInput) => Promise<void>;
   resetDemoData: () => void;
   refreshData: () => Promise<void>;
@@ -63,10 +65,15 @@ const loadInitialDemoData = (): AppData => {
     const stored = window.localStorage.getItem(STORAGE_KEY);
     if (!stored) return cloneSeedData();
     const parsed = JSON.parse(stored) as Partial<AppData>;
+    const seed = cloneSeedData();
     return {
-      ...cloneSeedData(),
+      ...seed,
       ...parsed,
       vehicleDocuments: parsed.vehicleDocuments ?? [],
+      cashflows: (parsed.cashflows ?? seed.cashflows).map((cashflow) => ({
+        ...cashflow,
+        kind: cashflow.kind ?? demoCashflowKind(cashflow),
+      })),
     };
   } catch {
     return cloneSeedData();
@@ -83,6 +90,15 @@ const nextManagementNumber = (vehicles: Vehicle[]): string => {
   const next = Math.max(0, ...currentNumbers) + 1;
   return `${year}-${String(next).padStart(4, "0")}`;
 };
+
+function demoCashflowKind(input: NewCashflowInput) {
+  if (input.kind) return input.kind;
+  if (input.direction === "支払い" && input.description.includes("買取")) return "買取代金" as const;
+  if (input.direction === "入金" && input.description.includes("販売")) return "販売代金" as const;
+  if (input.direction === "支払い" && input.description.includes("経費")) return "経費支払い" as const;
+  if (input.description.includes("返金")) return "返金" as const;
+  return "その他" as const;
+}
 
 const errorMessage = (error: unknown) => {
   if (error instanceof Error) return error.message;
@@ -191,6 +207,31 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
           : vehicle),
       }));
     },
+    markVehicleArrived: async (vehicleId, arrivedOn) => {
+      if (!arrivedOn) throw new Error("実際の入庫日を入力してください。");
+      if (arrivedOn > new Date().toISOString().slice(0, 10)) {
+        throw new Error("実際の入庫日に未来の日付は指定できません。");
+      }
+      if (configured && supabase) {
+        const { error } = await supabase.rpc("mark_vehicle_arrived", {
+          p_vehicle_id: vehicleId,
+          p_arrived_on: arrivedOn,
+        });
+        if (error) throw new Error(error.message);
+        await refreshData();
+        return;
+      }
+
+      const target = data.vehicles.find((vehicle) => vehicle.id === vehicleId);
+      if (!target) throw new Error("対象車両が見つかりません。");
+      if (target.status !== "入庫予定") throw new Error("この車両はすでに入庫処理されています。");
+      setData((current) => ({
+        ...current,
+        vehicles: current.vehicles.map((vehicle) => vehicle.id === vehicleId
+          ? { ...vehicle, status: "入庫済み", arrivedAt: arrivedOn, updatedAt: new Date().toISOString() }
+          : vehicle),
+      }));
+    },
     updateVehicleDocument: async (input) => {
       if (configured && supabase) {
         const { data: updated, error } = await supabase
@@ -277,7 +318,36 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
 
       setData((current) => ({
         ...current,
-        cashflows: [{ ...input, id: crypto.randomUUID(), createdAt: new Date().toISOString() }, ...current.cashflows],
+        cashflows: [{ ...input, kind: demoCashflowKind(input), id: crypto.randomUUID(), createdAt: new Date().toISOString() }, ...current.cashflows],
+      }));
+    },
+    completeCashflow: async (cashflowId, processedOn) => {
+      if (!processedOn) throw new Error("処理日を入力してください。");
+      if (processedOn > new Date().toISOString().slice(0, 10)) {
+        throw new Error("処理日に未来の日付は指定できません。");
+      }
+      if (configured && supabase) {
+        const { error } = await supabase.rpc("complete_cashflow", {
+          p_cashflow_id: cashflowId,
+          p_processed_on: processedOn,
+        });
+        if (error) throw new Error(error.message);
+        await refreshData();
+        return;
+      }
+
+      const cashflow = data.cashflows.find((item) => item.id === cashflowId);
+      if (!cashflow) throw new Error("対象の入出金が見つかりません。");
+      if (cashflow.kind === "買取代金") {
+        const vehicle = data.vehicles.find((item) => item.id === cashflow.vehicleId);
+        if (!vehicle) throw new Error("対象車両が見つかりません。");
+        if (vehicle.status === "入庫予定") throw new Error("買取代金は車両の入庫後に支払ってください。");
+      }
+      setData((current) => ({
+        ...current,
+        cashflows: current.cashflows.map((item) => item.id === cashflowId
+          ? { ...item, processedAmount: item.amount, status: "完了", processedOn }
+          : item),
       }));
     },
     savePurchaseContract: async (input) => {
@@ -348,6 +418,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
             id: crypto.randomUUID(),
             vehicleId,
             direction: "支払い" as const,
+            kind: "買取代金" as const,
             description: `買取代金 ${input.customerLabel.trim()}`,
             amount: input.amount,
             processedAmount: 0,
