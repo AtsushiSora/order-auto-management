@@ -2116,6 +2116,54 @@ button.alert-card:hover {
   margin-top: 4px;
 }
 
+.test-login-area {
+  margin-top: 18px;
+}
+
+.login-divider {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+  color: var(--slate-400);
+  font-size: 10px;
+}
+
+.login-divider::before,
+.login-divider::after {
+  height: 1px;
+  flex: 1;
+  background: var(--slate-200);
+  content: "";
+}
+
+.test-login-button {
+  width: 100%;
+  min-height: 46px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 1px solid #47a6a8;
+  border-radius: 9px;
+  color: var(--teal-700);
+  background: #f0fbfb;
+  font-size: 13px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.test-login-button:hover {
+  border-color: var(--teal-700);
+  background: #e3f7f7;
+}
+
+.test-login-area p {
+  margin: 8px 0 0;
+  color: var(--slate-500);
+  font-size: 9px;
+}
+
 .password-hint {
   margin: -5px 0 0;
   color: var(--slate-500);

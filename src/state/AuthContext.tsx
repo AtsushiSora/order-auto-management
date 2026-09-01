@@ -14,9 +14,14 @@ import { getAuthCallbackSession, getSafeAuthErrorDetail, isPasswordSetupUrl } fr
 import type { StaffProfile, StaffRole } from "../types";
 
 const INACTIVITY_LIMIT_MS = 30 * 60 * 1000;
+const TEST_SESSION_KEY = "order-auto-test-session";
+
+const hasStoredTestSession = () =>
+  typeof window !== "undefined" && window.sessionStorage.getItem(TEST_SESSION_KEY) === "active";
 
 type AuthContextValue = {
   configured: boolean;
+  isTestSession: boolean;
   loading: boolean;
   user: User | null;
   session: Session | null;
@@ -24,6 +29,7 @@ type AuthContextValue = {
   passwordSetupRequired: boolean;
   error: string | null;
   signIn: (email: string, password: string) => Promise<void>;
+  testSignIn: () => void;
   updatePassword: (password: string) => Promise<void>;
   signOut: () => Promise<void>;
 };
@@ -48,10 +54,13 @@ const parseProfile = (data: unknown): StaffProfile => {
 };
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [loading, setLoading] = useState(isSupabaseConfigured);
+  const [isTestSession, setIsTestSession] = useState(hasStoredTestSession);
+  const [loading, setLoading] = useState(isSupabaseConfigured && !hasStoredTestSession());
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
-  const [profile, setProfile] = useState<StaffProfile | null>(isSupabaseConfigured ? null : demoProfile);
+  const [profile, setProfile] = useState<StaffProfile | null>(
+    isSupabaseConfigured && !hasStoredTestSession() ? null : demoProfile,
+  );
   const [passwordSetupRequired, setPasswordSetupRequired] = useState(
     isSupabaseConfigured && isPasswordSetupUrl(window.location.href),
   );
@@ -97,6 +106,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [clearAuthenticatedState]);
 
   useEffect(() => {
+    if (isTestSession) {
+      setLoading(false);
+      setError(null);
+      setProfile(demoProfile);
+      return;
+    }
     if (!supabase) return;
 
     const authClient = supabase;
@@ -144,14 +159,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       active = false;
       listener.subscription.unsubscribe();
     };
-  }, [clearAuthenticatedState, loadProfile]);
+  }, [clearAuthenticatedState, isTestSession, loadProfile]);
 
   const signOut = useCallback(async () => {
+    if (isTestSession) {
+      window.sessionStorage.removeItem(TEST_SESSION_KEY);
+      setIsTestSession(false);
+      clearAuthenticatedState();
+      return;
+    }
     if (!supabase) return;
     const { error: signOutError } = await supabase.auth.signOut({ scope: "local" });
     clearAuthenticatedState();
     if (signOutError) throw signOutError;
-  }, [clearAuthenticatedState]);
+  }, [clearAuthenticatedState, isTestSession]);
 
   useEffect(() => {
     if (!supabase || !session || !profile?.isActive) return;
@@ -171,7 +192,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [profile?.isActive, session, signOut]);
 
   const value = useMemo<AuthContextValue>(() => ({
-    configured: isSupabaseConfigured,
+    configured: isSupabaseConfigured && !isTestSession,
+    isTestSession,
     loading,
     user,
     session,
@@ -184,6 +206,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const { error: signInError } = await supabase.auth.signInWithPassword({ email, password });
       if (signInError) throw new Error("メールアドレスまたはパスワードを確認してください。");
     },
+    testSignIn: () => {
+      window.sessionStorage.setItem(TEST_SESSION_KEY, "active");
+      setError(null);
+      setProfile(demoProfile);
+      setIsTestSession(true);
+      setLoading(false);
+      window.location.hash = "#/dashboard";
+    },
     updatePassword: async (password) => {
       if (!supabase) return;
       const { error: updateError } = await supabase.auth.updateUser({ password });
@@ -193,7 +223,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       window.location.hash = "#/dashboard";
     },
     signOut,
-  }), [error, loading, passwordSetupRequired, profile, session, signOut, user]);
+  }), [error, isTestSession, loading, passwordSetupRequired, profile, session, signOut, user]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

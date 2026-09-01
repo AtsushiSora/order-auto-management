@@ -59,7 +59,12 @@ const loadInitialDemoData = (): AppData => {
   try {
     const stored = window.localStorage.getItem(STORAGE_KEY);
     if (!stored) return cloneSeedData();
-    return JSON.parse(stored) as AppData;
+    const parsed = JSON.parse(stored) as Partial<AppData>;
+    return {
+      ...cloneSeedData(),
+      ...parsed,
+      vehicleDocuments: parsed.vehicleDocuments ?? [],
+    };
   } catch {
     return cloneSeedData();
   }

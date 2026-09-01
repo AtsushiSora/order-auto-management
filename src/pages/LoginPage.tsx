@@ -1,9 +1,10 @@
 import { useState, type FormEvent } from "react";
-import { CarFront, KeyRound, LoaderCircle, ShieldCheck } from "lucide-react";
+import { CarFront, FlaskConical, KeyRound, LoaderCircle, ShieldCheck } from "lucide-react";
 import { useAuth } from "../state/AuthContext";
 
 export function LoginPage() {
-  const { signIn } = useAuth();
+  const { signIn, testSignIn } = useAuth();
+  const testLoginEnabled = import.meta.env.VITE_ENABLE_TEST_LOGIN !== "false";
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -59,6 +60,17 @@ export function LoginPage() {
           </button>
         </form>
 
+        {testLoginEnabled ? (
+          <div className="test-login-area">
+            <div className="login-divider"><span>または</span></div>
+            <button type="button" className="test-login-button" onClick={testSignIn}>
+              <FlaskConical size={19} />
+              テストログイン
+            </button>
+            <p>メール・パスワード不要／架空データのみ使用します。</p>
+          </div>
+        ) : null}
+
         <div className="login-security-note">
           <ShieldCheck size={18} />
           <span>30分操作がない場合は自動でログアウトします。</span>
@@ -67,4 +79,3 @@ export function LoginPage() {
     </main>
   );
 }
-

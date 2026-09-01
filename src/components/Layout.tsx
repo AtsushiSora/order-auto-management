@@ -48,7 +48,7 @@ export function Layout({
 }) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
-  const { profile, signOut } = useAuth();
+  const { profile, signOut, isTestSession } = useAuth();
   const { isDemo } = useAppData();
   const visibleNavItems = navItems.filter((item) => !item.ownerOnly || profile?.role === "owner");
   const userLabel = profile?.displayName ?? "利用者";
@@ -99,7 +99,7 @@ export function Layout({
         <div className="sidebar-footer">
           <div className="demo-dot" />
           <div>
-            <strong>{isDemo ? "初期デモ版" : "共有データ接続中"}</strong>
+            <strong>{isTestSession ? "テストモード" : isDemo ? "初期デモ版" : "共有データ接続中"}</strong>
             <span>{isDemo ? "架空データのみ" : "Supabase・社内限定"}</span>
           </div>
         </div>
@@ -143,9 +143,9 @@ export function Layout({
             {userMenuOpen ? (
               <div className="user-dropdown panel">
                 <div><strong>{userLabel}</strong><small>{roleLabel}</small></div>
-                <button type="button" onClick={() => void signOut()} disabled={isDemo}>
+                <button type="button" onClick={() => void signOut()} disabled={isDemo && !isTestSession}>
                   <LogOut size={17} />
-                  {isDemo ? "デモモード" : "ログアウト"}
+                  {isTestSession ? "テスト終了" : isDemo ? "デモモード" : "ログアウト"}
                 </button>
               </div>
             ) : null}
