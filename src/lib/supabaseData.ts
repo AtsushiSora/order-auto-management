@@ -14,6 +14,9 @@ import type {
   PaymentMethod,
   PaymentStatus,
   Vehicle,
+  VehicleDocument,
+  VehicleDocumentInput,
+  VehicleDocumentType,
   VehicleStatus,
 } from "../types";
 
@@ -40,6 +43,19 @@ const acquisitionSourceToDb: Record<AcquisitionSource, string> = {
 const acquisitionSourceFromDb = Object.fromEntries(
   Object.entries(acquisitionSourceToDb).map(([label, value]) => [value, label]),
 ) as Record<string, AcquisitionSource>;
+
+const vehicleDocumentTypeToDb: Record<VehicleDocumentType, string> = {
+  車検証: "vehicle_inspection_certificate",
+  譲渡証明書: "transfer_certificate",
+  印鑑証明: "seal_registration_certificate",
+  住民票: "residence_certificate",
+  申請依頼書: "application_request_form",
+  自賠責保険: "compulsory_automobile_liability_insurance",
+  その他: "other",
+};
+const vehicleDocumentTypeFromDb = Object.fromEntries(
+  Object.entries(vehicleDocumentTypeToDb).map(([label, value]) => [value, label]),
+) as Record<string, VehicleDocumentType>;
 
 const expenseStatusToDb: Record<ExpenseStatus, string> = { 予定: "planned", 確定: "confirmed" };
 const expenseStatusFromDb: Record<string, ExpenseStatus> = { planned: "予定", confirmed: "確定" };
@@ -134,6 +150,30 @@ export const vehiclePatchToDb = (patch: Partial<Vehicle>) => {
   return result;
 };
 
+export const mapVehicleDocumentFromDb = (source: unknown): VehicleDocument => {
+  const row = source as DbRow;
+  return {
+    id: stringValue(row, "id"),
+    vehicleId: stringValue(row, "vehicle_id"),
+    documentType: vehicleDocumentTypeFromDb[stringValue(row, "document_type")] ?? "その他",
+    isRequired: Boolean(row.is_required),
+    isReceived: Boolean(row.is_received),
+    receivedAt: nullableString(row, "received_at"),
+    note: stringValue(row, "note"),
+    createdAt: stringValue(row, "created_at"),
+    updatedAt: stringValue(row, "updated_at"),
+  };
+};
+
+export const vehicleDocumentToDb = (input: VehicleDocumentInput) => ({
+  vehicle_id: input.vehicleId,
+  document_type: vehicleDocumentTypeToDb[input.documentType],
+  is_required: input.isRequired,
+  is_received: input.isReceived,
+  received_at: input.isReceived ? (input.receivedAt ?? new Date().toISOString().slice(0, 10)) : null,
+  note: input.note.trim() || null,
+});
+
 export const mapExpenseFromDb = (source: unknown): Expense => {
   const row = source as DbRow;
   return {
@@ -221,4 +261,3 @@ export const mapApprovalFromDb = (source: unknown): Approval => {
     status: approvalStatusFromDb[stringValue(row, "status")] ?? "承認待ち",
   };
 };
-

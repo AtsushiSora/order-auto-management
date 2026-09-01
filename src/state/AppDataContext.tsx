@@ -16,10 +16,12 @@ import {
   mapContractFromDb,
   mapExpenseFromDb,
   mapVehicleFromDb,
+  mapVehicleDocumentFromDb,
   newCashflowToDb,
   newExpenseToDb,
   newVehicleToDb,
   vehiclePatchToDb,
+  vehicleDocumentToDb,
 } from "../lib/supabaseData";
 import type {
   AppData,
@@ -27,17 +29,21 @@ import type {
   NewExpenseInput,
   NewVehicleInput,
   Vehicle,
+  VehicleDocument,
+  VehicleDocumentInput,
 } from "../types";
 import { useAuth } from "./AuthContext";
 
 const STORAGE_KEY = "order-auto-management-demo-v1";
-const emptyData: AppData = { vehicles: [], expenses: [], cashflows: [], contracts: [], approvals: [] };
+const emptyData: AppData = { vehicles: [], vehicleDocuments: [], expenses: [], cashflows: [], contracts: [], approvals: [] };
 
 type AppDataContextValue = {
   data: AppData;
   isDemo: boolean;
   addVehicle: (input: NewVehicleInput) => Promise<Vehicle>;
   updateVehicle: (vehicleId: string, patch: Partial<Vehicle>) => Promise<void>;
+  updateVehicleDocument: (input: VehicleDocumentInput) => Promise<VehicleDocument>;
+  archiveVehicle: (vehicleId: string) => Promise<void>;
   addExpense: (input: NewExpenseInput) => Promise<void>;
   addCashflow: (input: NewCashflowInput) => Promise<void>;
   resetDemoData: () => void;
@@ -90,20 +96,22 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     setLoading(true);
     setLoadError(null);
     try {
-      const [vehiclesResult, expensesResult, cashflowsResult, contractsResult, approvalsResult] = await Promise.all([
+      const [vehiclesResult, documentsResult, expensesResult, cashflowsResult, contractsResult, approvalsResult] = await Promise.all([
         supabase.from("vehicles").select("*").is("deleted_at", null).order("created_at", { ascending: false }),
+        supabase.from("vehicle_documents").select("*").order("created_at", { ascending: true }),
         supabase.from("expenses").select("*").is("deleted_at", null).order("incurred_on", { ascending: false }),
         supabase.from("cashflows").select("*").is("deleted_at", null).order("scheduled_on", { ascending: false }),
         supabase.from("contracts").select("*").is("deleted_at", null).order("updated_at", { ascending: false }),
         supabase.from("approvals").select("*").order("created_at", { ascending: false }),
       ]);
 
-      const firstError = [vehiclesResult, expensesResult, cashflowsResult, contractsResult, approvalsResult]
+      const firstError = [vehiclesResult, documentsResult, expensesResult, cashflowsResult, contractsResult, approvalsResult]
         .find((result) => result.error)?.error;
       if (firstError) throw firstError;
 
       setData({
         vehicles: (vehiclesResult.data ?? []).map(mapVehicleFromDb),
+        vehicleDocuments: (documentsResult.data ?? []).map(mapVehicleDocumentFromDb),
         expenses: (expensesResult.data ?? []).map(mapExpenseFromDb),
         cashflows: (cashflowsResult.data ?? []).map(mapCashflowFromDb),
         contracts: (contractsResult.data ?? []).map(mapContractFromDb),
@@ -175,6 +183,59 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
           : vehicle),
       }));
     },
+    updateVehicleDocument: async (input) => {
+      if (configured && supabase) {
+        const { data: updated, error } = await supabase
+          .from("vehicle_documents")
+          .upsert(vehicleDocumentToDb(input), { onConflict: "vehicle_id,document_type" })
+          .select("*")
+          .single();
+        if (error) throw new Error(error.message);
+        const document = mapVehicleDocumentFromDb(updated);
+        setData((current) => ({
+          ...current,
+          vehicleDocuments: [
+            ...current.vehicleDocuments.filter((item) => !(item.vehicleId === document.vehicleId && item.documentType === document.documentType)),
+            document,
+          ],
+        }));
+        return document;
+      }
+
+      const existing = data.vehicleDocuments.find(
+        (item) => item.vehicleId === input.vehicleId && item.documentType === input.documentType,
+      );
+      const now = new Date().toISOString();
+      const document: VehicleDocument = {
+        ...input,
+        id: existing?.id ?? crypto.randomUUID(),
+        createdAt: existing?.createdAt ?? now,
+        updatedAt: now,
+      };
+      setData((current) => ({
+        ...current,
+        vehicleDocuments: [
+          ...current.vehicleDocuments.filter((item) => !(item.vehicleId === document.vehicleId && item.documentType === document.documentType)),
+          document,
+        ],
+      }));
+      return document;
+    },
+    archiveVehicle: async (vehicleId) => {
+      if (configured && supabase) {
+        if (!session?.user.id) throw new Error("ログイン情報を確認できませんでした。");
+        const { error } = await supabase
+          .from("vehicles")
+          .update({ deleted_at: new Date().toISOString(), deleted_by: session.user.id })
+          .eq("id", vehicleId);
+        if (error) throw new Error(error.message);
+      }
+      setData((current) => ({
+        ...current,
+        vehicles: current.vehicles.filter((vehicle) => vehicle.id !== vehicleId),
+        vehicleDocuments: current.vehicleDocuments.filter((document) => document.vehicleId !== vehicleId),
+      }));
+    },
     addExpense: async (input) => {
       if (configured && supabase) {
         const { data: inserted, error } = await supabase
@@ -215,7 +276,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       if (!configured) setData(cloneSeedData());
     },
     refreshData,
-  }), [configured, data, refreshData]);
+  }), [configured, data, refreshData, session?.user.id]);
 
   if (loading) return <SystemLoading message="共有データを読み込んでいます" />;
   if (loadError) return <DataLoadError message={loadError} onRetry={() => void refreshData()} />;
@@ -228,4 +289,3 @@ export const useAppData = () => {
   if (!value) throw new Error("useAppData must be used within AppDataProvider");
   return value;
 };
-

@@ -75,6 +75,7 @@ export const seedData: AppData = {
       updatedAt: "2026-09-01T08:15:00+09:00",
     },
   ],
+  vehicleDocuments: [],
   expenses: [
     {
       id: "expense-001",
@@ -202,4 +203,3 @@ export const seedData: AppData = {
     },
   ],
 };
-

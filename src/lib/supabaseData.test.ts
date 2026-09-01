@@ -3,8 +3,10 @@ import {
   mapCashflowFromDb,
   mapExpenseFromDb,
   mapVehicleFromDb,
+  mapVehicleDocumentFromDb,
   newCashflowToDb,
   newVehicleToDb,
+  vehicleDocumentToDb,
 } from "./supabaseData";
 
 describe("Supabaseデータ変換", () => {
@@ -66,6 +68,31 @@ describe("Supabaseデータ変換", () => {
     expect(row.purchase_price).toBe(0);
   });
 
+  it("譲渡証明書の受領状態をDB形式へ変換できる", () => {
+    const row = vehicleDocumentToDb({
+      vehicleId: "vehicle-id",
+      documentType: "譲渡証明書",
+      isRequired: true,
+      isReceived: true,
+      receivedAt: "2026-09-02",
+      note: "原本",
+    });
+
+    expect(row.document_type).toBe("transfer_certificate");
+    expect(row.received_at).toBe("2026-09-02");
+    expect(mapVehicleDocumentFromDb({
+      id: "document-id",
+      vehicle_id: "vehicle-id",
+      document_type: "transfer_certificate",
+      is_required: true,
+      is_received: true,
+      received_at: "2026-09-02",
+      note: "原本",
+      created_at: "2026-09-02T00:00:00Z",
+      updated_at: "2026-09-02T00:00:00Z",
+    }).documentType).toBe("譲渡証明書");
+  });
+
   it("買取代金をDBの業務区分へ変換する", () => {
     const row = newCashflowToDb({
       vehicleId: "vehicle-id",
@@ -111,4 +138,3 @@ describe("Supabaseデータ変換", () => {
     }).method).toBe("現金");
   });
 });
-

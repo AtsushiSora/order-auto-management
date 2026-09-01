@@ -52,6 +52,27 @@ export type Vehicle = {
   updatedAt: string;
 };
 
+export type VehicleDocumentType =
+  | "車検証"
+  | "譲渡証明書"
+  | "印鑑証明"
+  | "住民票"
+  | "申請依頼書"
+  | "自賠責保険"
+  | "その他";
+
+export type VehicleDocument = {
+  id: string;
+  vehicleId: string;
+  documentType: VehicleDocumentType;
+  isRequired: boolean;
+  isReceived: boolean;
+  receivedAt: string | null;
+  note: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type ExpenseStatus = "予定" | "確定";
 export type PaymentStatus = "未払い" | "支払済み";
 
@@ -108,11 +129,14 @@ export type Approval = {
 
 export type AppData = {
   vehicles: Vehicle[];
+  vehicleDocuments: VehicleDocument[];
   expenses: Expense[];
   cashflows: Cashflow[];
   contracts: Contract[];
   approvals: Approval[];
 };
+
+export type VehicleDocumentInput = Omit<VehicleDocument, "id" | "createdAt" | "updatedAt">;
 
 export type NewVehicleInput = Pick<
   Vehicle,

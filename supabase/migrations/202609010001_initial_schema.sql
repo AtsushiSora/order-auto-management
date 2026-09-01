@@ -108,6 +108,7 @@ create table public.vehicle_documents (
   vehicle_id uuid not null references public.vehicles(id) on delete restrict,
   document_type text not null check (document_type in (
     'vehicle_inspection_certificate',
+    'transfer_certificate',
     'seal_registration_certificate',
     'residence_certificate',
     'application_request_form',
