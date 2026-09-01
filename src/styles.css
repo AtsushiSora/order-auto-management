@@ -1082,6 +1082,55 @@ button.alert-card:hover {
   background: var(--slate-100);
 }
 
+.field-label input:disabled {
+  color: var(--slate-500);
+  background: var(--slate-100);
+}
+
+.integration-banner.connected {
+  border-color: #a7ddd0;
+  background: #f1fbf7;
+}
+
+.integration-banner.connected > svg {
+  color: var(--green-700);
+}
+
+.table-empty {
+  display: grid;
+  place-items: center;
+  gap: 8px;
+  min-height: 180px;
+  color: var(--slate-400);
+  text-align: center;
+}
+
+.table-empty p {
+  margin: 0;
+  color: var(--slate-500);
+  font-size: 12px;
+}
+
+.contract-link-notice {
+  display: grid;
+  gap: 5px;
+  padding: 13px 14px;
+  border: 1px solid #9fd6c8;
+  border-radius: 9px;
+  color: var(--green-700);
+  background: #edf9f5;
+}
+
+.contract-link-notice strong {
+  font-size: 12px;
+}
+
+.contract-link-notice span {
+  color: var(--slate-600);
+  font-size: 10px;
+  line-height: 1.6;
+}
+
 .required {
   width: max-content;
   display: inline-block;

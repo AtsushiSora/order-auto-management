@@ -20,6 +20,7 @@ import {
   newCashflowToDb,
   newExpenseToDb,
   newVehicleToDb,
+  purchaseContractToRpc,
   vehiclePatchToDb,
   vehicleDocumentToDb,
 } from "../lib/supabaseData";
@@ -28,6 +29,7 @@ import type {
   NewCashflowInput,
   NewExpenseInput,
   NewVehicleInput,
+  PurchaseContractInput,
   Vehicle,
   VehicleDocument,
   VehicleDocumentInput,
@@ -46,6 +48,7 @@ type AppDataContextValue = {
   archiveVehicle: (vehicleId: string) => Promise<void>;
   addExpense: (input: NewExpenseInput) => Promise<void>;
   addCashflow: (input: NewCashflowInput) => Promise<void>;
+  savePurchaseContract: (input: PurchaseContractInput) => Promise<void>;
   resetDemoData: () => void;
   refreshData: () => Promise<void>;
 };
@@ -276,6 +279,86 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         ...current,
         cashflows: [{ ...input, id: crypto.randomUUID(), createdAt: new Date().toISOString() }, ...current.cashflows],
       }));
+    },
+    savePurchaseContract: async (input) => {
+      if (configured && supabase) {
+        const { error } = await supabase.rpc("save_purchase_contract", purchaseContractToRpc(input));
+        if (error) throw new Error(error.message);
+        await refreshData();
+        return;
+      }
+
+      const existing = input.contractId
+        ? data.contracts.find((contract) => contract.id === input.contractId && contract.type === "買取")
+        : null;
+      if (existing?.status === "契約済み") {
+        throw new Error("契約済みの内容は在庫画面から修正してください。");
+      }
+
+      const now = new Date().toISOString();
+      const contractId = existing?.id ?? crypto.randomUUID();
+      const vehicleId = input.status === "契約済み" ? crypto.randomUUID() : null;
+      const contract = {
+        id: contractId,
+        type: "買取" as const,
+        vehicleId,
+        customerLabel: input.customerLabel.trim(),
+        amount: input.amount,
+        status: input.status,
+        contractedOn: input.contractedOn,
+        vehicleName: input.vehicleName.trim(),
+        chassisNumber: input.chassisNumber.trim(),
+        acquisitionSource: input.acquisitionSource,
+        askingPrice: input.askingPrice,
+        storageLocation: input.storageLocation.trim(),
+        plannedArrivalDate: input.plannedArrivalDate,
+        paymentMethod: input.paymentMethod,
+        updatedAt: now,
+      };
+
+      setData((current) => {
+        const next = {
+          ...current,
+          contracts: [contract, ...current.contracts.filter((item) => item.id !== contractId)],
+        };
+        if (!vehicleId) return next;
+
+        const vehicle: Vehicle = {
+          id: vehicleId,
+          managementNumber: nextManagementNumber(current.vehicles),
+          name: input.vehicleName.trim(),
+          chassisNumber: input.chassisNumber.trim(),
+          status: "入庫予定",
+          acquisitionSource: input.acquisitionSource,
+          purchasePrice: input.amount,
+          askingPrice: input.askingPrice,
+          salePrice: null,
+          storageLocation: input.storageLocation.trim(),
+          plannedArrivalDate: input.plannedArrivalDate,
+          arrivedAt: null,
+          deliveredAt: null,
+          documentsComplete: false,
+          createdAt: now,
+          updatedAt: now,
+        };
+        return {
+          ...next,
+          vehicles: [vehicle, ...current.vehicles],
+          cashflows: input.amount === 0 ? current.cashflows : [{
+            id: crypto.randomUUID(),
+            vehicleId,
+            direction: "支払い" as const,
+            description: `買取代金 ${input.customerLabel.trim()}`,
+            amount: input.amount,
+            processedAmount: 0,
+            status: "未処理" as const,
+            method: input.paymentMethod,
+            scheduledOn: input.plannedArrivalDate,
+            processedOn: null,
+            createdAt: now,
+          }, ...current.cashflows],
+        };
+      });
     },
     resetDemoData: () => {
       if (!configured) setData(cloneSeedData());

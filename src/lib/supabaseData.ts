@@ -13,6 +13,7 @@ import type {
   NewVehicleInput,
   PaymentMethod,
   PaymentStatus,
+  PurchaseContractInput,
   Vehicle,
   VehicleDocument,
   VehicleDocumentInput,
@@ -88,6 +89,12 @@ const contractStatusFromDb: Record<string, ContractStatus> = {
   awaiting_signature: "署名待ち",
   contracted: "契約済み",
   cancelled: "キャンセル済み",
+};
+const contractStatusToDb: Record<ContractStatus, string> = {
+  下書き: "draft",
+  署名待ち: "awaiting_signature",
+  契約済み: "contracted",
+  キャンセル済み: "cancelled",
 };
 const approvalStatusFromDb: Record<string, Approval["status"]> = {
   pending: "承認待ち",
@@ -242,14 +249,36 @@ export const mapContractFromDb = (source: unknown): Contract => {
   return {
     id: stringValue(row, "id"),
     type: stringValue(row, "type") === "sale" ? "販売" : "買取",
-    vehicleId: stringValue(row, "vehicle_id"),
+    vehicleId: nullableString(row, "vehicle_id"),
     customerLabel: stringValue(row, "customer_label"),
     amount: numberValue(row, "amount"),
     status: contractStatusFromDb[stringValue(row, "status")] ?? "下書き",
     contractedOn: stringValue(row, "contracted_on"),
+    vehicleName: stringValue(row, "vehicle_name"),
+    chassisNumber: stringValue(row, "chassis_number"),
+    acquisitionSource: acquisitionSourceFromDb[stringValue(row, "acquisition_source")],
+    askingPrice: numberValue(row, "asking_price"),
+    storageLocation: stringValue(row, "storage_location"),
+    plannedArrivalDate: stringValue(row, "planned_arrival_date"),
+    paymentMethod: paymentMethodFromDb[stringValue(row, "purchase_payment_method")],
     updatedAt: stringValue(row, "updated_at"),
   };
 };
+
+export const purchaseContractToRpc = (input: PurchaseContractInput) => ({
+  p_contract_id: input.contractId,
+  p_customer_label: input.customerLabel.trim(),
+  p_amount: input.amount,
+  p_status: contractStatusToDb[input.status],
+  p_contracted_on: input.contractedOn,
+  p_vehicle_name: input.vehicleName.trim(),
+  p_chassis_number: input.chassisNumber.trim() || null,
+  p_acquisition_source: acquisitionSourceToDb[input.acquisitionSource],
+  p_asking_price: input.askingPrice,
+  p_storage_location: input.storageLocation.trim(),
+  p_planned_arrival_date: input.plannedArrivalDate,
+  p_payment_method: paymentMethodToDb[input.paymentMethod],
+});
 
 export const mapApprovalFromDb = (source: unknown): Approval => {
   const row = source as DbRow;

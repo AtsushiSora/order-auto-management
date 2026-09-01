@@ -1,11 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
   mapCashflowFromDb,
+  mapContractFromDb,
   mapExpenseFromDb,
   mapVehicleFromDb,
   mapVehicleDocumentFromDb,
   newCashflowToDb,
   newVehicleToDb,
+  purchaseContractToRpc,
   vehicleDocumentToDb,
 } from "./supabaseData";
 
@@ -66,6 +68,53 @@ describe("Supabaseデータ変換", () => {
     });
 
     expect(row.purchase_price).toBe(0);
+  });
+
+  it("在庫登録前の買取契約を画面用データへ戻す", () => {
+    const contract = mapContractFromDb({
+      id: "contract-id",
+      vehicle_id: null,
+      type: "purchase",
+      status: "draft",
+      customer_label: "動作確認 顧客",
+      contracted_on: "2026-09-02",
+      amount: 123000,
+      vehicle_name: "動作確認車",
+      chassis_number: null,
+      acquisition_source: "customer",
+      asking_price: 300000,
+      storage_location: "自宅",
+      planned_arrival_date: "2026-09-03",
+      purchase_payment_method: "bank_transfer",
+      created_at: "2026-09-02T00:00:00Z",
+      updated_at: "2026-09-02T00:00:00Z",
+    });
+
+    expect(contract.vehicleId).toBeNull();
+    expect(contract.vehicleName).toBe("動作確認車");
+    expect(contract.status).toBe("下書き");
+  });
+
+  it("買取契約を在庫連動RPCの引数へ変換する", () => {
+    const input = purchaseContractToRpc({
+      contractId: null,
+      customerLabel: "0円動作確認 顧客",
+      contractedOn: "2026-09-02",
+      status: "契約済み",
+      amount: 0,
+      vehicleName: "0円買取テスト車",
+      chassisNumber: "",
+      acquisitionSource: "オークション",
+      askingPrice: 100000,
+      storageLocation: "自宅",
+      plannedArrivalDate: "2026-09-03",
+      paymentMethod: "振込",
+    });
+
+    expect(input.p_status).toBe("contracted");
+    expect(input.p_acquisition_source).toBe("auction");
+    expect(input.p_payment_method).toBe("bank_transfer");
+    expect(input.p_amount).toBe(0);
   });
 
   it("譲渡証明書の受領状態をDB形式へ変換できる", () => {

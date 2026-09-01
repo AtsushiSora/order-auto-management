@@ -111,11 +111,18 @@ export type ContractStatus = "下書き" | "署名待ち" | "契約済み" | "�
 export type Contract = {
   id: string;
   type: "買取" | "販売";
-  vehicleId: string;
+  vehicleId: string | null;
   customerLabel: string;
   amount: number;
   status: ContractStatus;
   contractedOn: string;
+  vehicleName?: string;
+  chassisNumber?: string;
+  acquisitionSource?: AcquisitionSource;
+  askingPrice?: number;
+  storageLocation?: string;
+  plannedArrivalDate?: string;
+  paymentMethod?: PaymentMethod;
   updatedAt: string;
 };
 
@@ -152,6 +159,21 @@ export type NewVehicleInput = Pick<
 
 export type NewExpenseInput = Omit<Expense, "id" | "createdAt">;
 export type NewCashflowInput = Omit<Cashflow, "id" | "createdAt">;
+
+export type PurchaseContractInput = {
+  contractId: string | null;
+  customerLabel: string;
+  amount: number;
+  status: Exclude<ContractStatus, "キャンセル済み">;
+  contractedOn: string;
+  vehicleName: string;
+  chassisNumber: string;
+  acquisitionSource: AcquisitionSource;
+  askingPrice: number;
+  storageLocation: string;
+  plannedArrivalDate: string;
+  paymentMethod: PaymentMethod;
+};
 
 export const staffRoleLabels: Record<StaffRole, string> = {
   owner: "事業主",

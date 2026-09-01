@@ -1,61 +1,193 @@
-import { ExternalLink, FileSignature, Plus, ShoppingCart } from "lucide-react";
+import { Eye, FileSignature, Plus, ShoppingCart } from "lucide-react";
+import { useState, type FormEvent } from "react";
+import { Drawer } from "../components/Drawer";
 import { PageHeader } from "../components/PageHeader";
 import { StatusBadge } from "../components/StatusBadge";
 import { formatCurrency, formatDate } from "../lib/format";
 import { useAppData } from "../state/AppDataContext";
+import { useAuth } from "../state/AuthContext";
+import type {
+  AcquisitionSource,
+  Contract,
+  ContractStatus,
+  PaymentMethod,
+  PurchaseContractInput,
+} from "../types";
+
+const acquisitionSources: AcquisitionSource[] = ["一般のお客様", "オークション", "業者", "保険関係"];
+const paymentMethods: PaymentMethod[] = ["振込", "現金", "ローン会社", "カード", "その他"];
+const editableStatuses: Array<Exclude<ContractStatus, "キャンセル済み">> = ["下書き", "署名待ち", "契約済み"];
+
+const initialPurchaseForm = (): PurchaseContractInput => ({
+  contractId: null,
+  customerLabel: "",
+  amount: 0,
+  status: "下書き",
+  contractedOn: new Date().toISOString().slice(0, 10),
+  vehicleName: "",
+  chassisNumber: "",
+  acquisitionSource: "一般のお客様",
+  askingPrice: 0,
+  storageLocation: "自宅",
+  plannedArrivalDate: new Date().toISOString().slice(0, 10),
+  paymentMethod: "振込",
+});
 
 export function ContractsPage({ type }: { type: "買取" | "販売" }) {
-  const { data } = useAppData();
+  const { data, savePurchaseContract } = useAppData();
+  const { profile } = useAuth();
+  const canEdit = profile?.role === "owner" || profile?.role === "regular";
   const contracts = data.contracts.filter((contract) => contract.type === type);
   const Icon = type === "買取" ? FileSignature : ShoppingCart;
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [form, setForm] = useState<PurchaseContractInput>(initialPurchaseForm);
+  const [error, setError] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const selectedContract = form.contractId ? data.contracts.find((contract) => contract.id === form.contractId) ?? null : null;
+  const readOnly = !canEdit || selectedContract?.status === "契約済み";
+
+  const openNew = () => {
+    setForm(initialPurchaseForm());
+    setError("");
+    setDrawerOpen(true);
+  };
+
+  const openContract = (contract: Contract) => {
+    const vehicle = data.vehicles.find((item) => item.id === contract.vehicleId);
+    setForm({
+      contractId: contract.id,
+      customerLabel: contract.customerLabel,
+      amount: contract.amount,
+      status: contract.status === "キャンセル済み" ? "下書き" : contract.status,
+      contractedOn: contract.contractedOn,
+      vehicleName: contract.vehicleName || vehicle?.name || "",
+      chassisNumber: contract.chassisNumber || vehicle?.chassisNumber || "",
+      acquisitionSource: contract.acquisitionSource || vehicle?.acquisitionSource || "一般のお客様",
+      askingPrice: contract.askingPrice ?? vehicle?.askingPrice ?? 0,
+      storageLocation: contract.storageLocation || vehicle?.storageLocation || "自宅",
+      plannedArrivalDate: contract.plannedArrivalDate || vehicle?.plannedArrivalDate || new Date().toISOString().slice(0, 10),
+      paymentMethod: contract.paymentMethod || "振込",
+    });
+    setError("");
+    setDrawerOpen(true);
+  };
+
+  const submit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!form.customerLabel.trim()) return setError("お客様名・取引先名を入力してください。");
+    if (!form.vehicleName.trim()) return setError("車両名を入力してください。");
+    if (!form.storageLocation.trim()) return setError("保管場所を入力してください。");
+    if (!form.contractedOn || !form.plannedArrivalDate) return setError("契約日と入庫予定日を入力してください。");
+    if (form.amount < 0 || form.askingPrice < 0) return setError("金額は0円以上で入力してください。");
+    setSubmitting(true);
+    setError("");
+    try {
+      await savePurchaseContract({
+        ...form,
+        customerLabel: form.customerLabel.trim(),
+        vehicleName: form.vehicleName.trim(),
+        chassisNumber: form.chassisNumber.trim(),
+        storageLocation: form.storageLocation.trim(),
+      });
+      setDrawerOpen(false);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "買取契約を保存できませんでした。");
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   return (
     <>
       <PageHeader
         title={`${type}契約`}
-        description={`既存の${type}契約機能を車両管理番号へひもづけて表示します。`}
-        action={
-          <button type="button" className="primary-button" disabled title="Supabase統合後に有効になります">
-            <Plus size={20} />
-            {type}契約を作成
-          </button>
-        }
+        description={type === "買取" ? "契約済みにすると、在庫と買取代金の支払い予定へ自動で連動します。" : "販売契約を在庫車両へひもづけて管理します。"}
+        action={type === "買取" && canEdit ? (
+          <button type="button" className="primary-button" onClick={openNew}><Plus size={20} />買取契約を作成</button>
+        ) : (
+          <button type="button" className="primary-button" disabled title="次の実装段階で有効になります"><Plus size={20} />{type}契約を作成</button>
+        )}
       />
 
-      <div className="integration-banner">
+      <div className={`integration-banner ${type === "買取" ? "connected" : ""}`}>
         <Icon size={23} />
         <div>
-          <strong>既存の契約機能と連携予定</strong>
-          <span>現在は画面確認用です。新しい共通Supabaseへの統合後、ここから契約作成・署名を開始できるようにします。</span>
+          <strong>{type === "買取" ? "在庫・支払い予定と連携済み" : "在庫との連携は次の工程です"}</strong>
+          <span>{type === "買取" ? "下書きや署名待ちでは在庫を作らず、契約済みになった時だけ管理番号を発行します。" : "現在は既存データの確認のみできます。"}</span>
         </div>
-        <span className="phase-chip">連携前</span>
+        <span className="phase-chip">{type === "買取" ? "連携中" : "連携前"}</span>
       </div>
 
       <section className="panel table-panel">
         <div className="table-scroll">
           <table className="data-table">
-            <thead>
-              <tr><th>契約日</th><th>車両</th><th>お客様</th><th>状態</th><th className="number-cell">契約金額</th><th>操作</th></tr>
-            </thead>
+            <thead><tr><th>契約日</th><th>車両</th><th>お客様・取引先</th><th>状態</th><th className="number-cell">契約金額</th><th>操作</th></tr></thead>
             <tbody>
               {contracts.map((contract) => {
                 const vehicle = data.vehicles.find((item) => item.id === contract.vehicleId);
                 return (
                   <tr key={contract.id}>
                     <td className="muted-cell">{formatDate(contract.contractedOn)}</td>
-                    <td>{vehicle ? <span className="vehicle-reference"><strong>{vehicle.managementNumber}</strong><small>{vehicle.name}</small></span> : "—"}</td>
+                    <td>
+                      <span className="vehicle-reference">
+                        <strong>{vehicle?.managementNumber ?? "在庫登録前"}</strong>
+                        <small>{vehicle?.name || contract.vehicleName || "車両情報なし"}</small>
+                      </span>
+                    </td>
                     <td>{contract.customerLabel}</td>
                     <td><StatusBadge>{contract.status}</StatusBadge></td>
                     <td className="number-cell"><strong>{formatCurrency(contract.amount)}</strong></td>
-                    <td><button type="button" className="table-action-button" disabled><ExternalLink size={16} />確認</button></td>
+                    <td><button type="button" className="table-action-button" onClick={() => openContract(contract)}><Eye size={16} />{contract.status === "契約済み" ? "確認" : "編集"}</button></td>
                   </tr>
                 );
               })}
             </tbody>
           </table>
         </div>
+        {contracts.length === 0 ? <div className="table-empty"><Icon size={28} /><p>{type}契約はまだありません。</p></div> : null}
       </section>
+
+      {drawerOpen && type === "買取" ? (
+        <Drawer title={selectedContract ? "買取契約を確認" : "買取契約を作成"} subtitle={selectedContract?.status === "契約済み" ? "契約済み・在庫連携済み" : "下書きは後から修正できます"} onClose={() => setDrawerOpen(false)}>
+          <form className="form-stack" onSubmit={submit}>
+            <div className="form-section">
+              <h3>契約情報</h3>
+              <label className="field-label">お客様名・取引先名 <span className="required">必須</span><input value={form.customerLabel} disabled={readOnly} onChange={(event) => setForm({ ...form, customerLabel: event.target.value })} placeholder="一般のお客様名・会場名・業者名" autoFocus /></label>
+              <div className="form-row">
+                <label className="field-label">契約日 <span className="required">必須</span><input type="date" value={form.contractedOn} disabled={readOnly} onChange={(event) => setForm({ ...form, contractedOn: event.target.value })} /></label>
+                <label className="field-label">契約状態<select value={form.status} disabled={readOnly} onChange={(event) => setForm({ ...form, status: event.target.value as PurchaseContractInput["status"] })}>{editableStatuses.map((status) => <option key={status}>{status}</option>)}</select></label>
+              </div>
+              <div className="form-row">
+                <label className="field-label">買取金額（税込）<input type="number" min="0" value={form.amount} disabled={readOnly} onChange={(event) => setForm({ ...form, amount: Number(event.target.value) })} /></label>
+                <label className="field-label">支払い方法<select value={form.paymentMethod} disabled={readOnly} onChange={(event) => setForm({ ...form, paymentMethod: event.target.value as PaymentMethod })}>{paymentMethods.map((method) => <option key={method}>{method}</option>)}</select></label>
+              </div>
+              {form.amount === 0 ? <p className="form-hint">0円買取として契約・在庫登録します。支払い予定は作成しません。</p> : null}
+            </div>
+
+            <div className="form-section">
+              <h3>車両・入庫情報</h3>
+              <label className="field-label">車両名 <span className="required">必須</span><input value={form.vehicleName} disabled={readOnly} onChange={(event) => setForm({ ...form, vehicleName: event.target.value })} placeholder="メーカー 車種 グレード" /></label>
+              <label className="field-label">車台番号<input value={form.chassisNumber} disabled={readOnly} onChange={(event) => setForm({ ...form, chassisNumber: event.target.value })} placeholder="未確認なら空欄で登録できます" /></label>
+              <div className="form-row">
+                <label className="field-label">仕入れ元<select value={form.acquisitionSource} disabled={readOnly} onChange={(event) => setForm({ ...form, acquisitionSource: event.target.value as AcquisitionSource })}>{acquisitionSources.map((source) => <option key={source}>{source}</option>)}</select></label>
+                <label className="field-label">販売予定価格（税込）<input type="number" min="0" value={form.askingPrice} disabled={readOnly} onChange={(event) => setForm({ ...form, askingPrice: Number(event.target.value) })} /></label>
+              </div>
+              <div className="form-row">
+                <label className="field-label">入庫予定日 <span className="required">必須</span><input type="date" value={form.plannedArrivalDate} disabled={readOnly} onChange={(event) => setForm({ ...form, plannedArrivalDate: event.target.value })} /></label>
+                <label className="field-label">保管場所 <span className="required">必須</span><input value={form.storageLocation} disabled={readOnly} onChange={(event) => setForm({ ...form, storageLocation: event.target.value })} /></label>
+              </div>
+            </div>
+
+            {form.status === "契約済み" && !readOnly ? <div className="contract-link-notice"><strong>保存と同時に連携します</strong><span>車両管理番号を発行し、在庫を「入庫予定」で登録します。買取金額が1円以上なら未払い予定も作成します。</span></div> : null}
+            {readOnly ? <p className="form-hint">契約済みの車両情報・金額は、連携先の在庫画面から修正できます。</p> : null}
+            {error ? <p className="form-error">{error}</p> : null}
+            <div className="form-actions">
+              <button type="button" className="secondary-button" onClick={() => setDrawerOpen(false)}>{readOnly ? "閉じる" : "キャンセル"}</button>
+              {!readOnly ? <button type="submit" className="primary-button" disabled={submitting}>{submitting ? "保存中" : form.status === "契約済み" ? "契約して在庫へ登録" : "保存する"}</button> : null}
+            </div>
+          </form>
+        </Drawer>
+      ) : null}
     </>
   );
 }
-
