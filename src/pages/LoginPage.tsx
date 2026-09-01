@@ -4,7 +4,8 @@ import { useAuth } from "../state/AuthContext";
 
 export function LoginPage() {
   const { signIn, testSignIn } = useAuth();
-  const testLoginEnabled = import.meta.env.VITE_ENABLE_TEST_LOGIN !== "false";
+  const testLoginEnabled =
+    import.meta.env.DEV || import.meta.env.VITE_ENABLE_TEST_LOGIN === "true";
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
