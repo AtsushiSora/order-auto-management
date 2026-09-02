@@ -155,7 +155,7 @@ export function VehiclesPage({
             <button type="button" className="vehicle-card" key={vehicle.id} onClick={() => { setSelectedVehicleId(vehicle.id); setDrawerMode("detail"); }}>
               <div className="vehicle-card-top"><span className="vehicle-thumbnail"><Car size={31} /></span><StatusBadge>{vehicle.status}</StatusBadge></div>
               <div className="vehicle-card-title"><small>{vehicle.managementNumber}</small><h2>{vehicle.name}</h2><p>{vehicle.acquisitionSource}</p></div>
-              <dl className="vehicle-card-values"><div><dt>販売価格</dt><dd>{formatCurrency(vehicle.askingPrice)}</dd></div><div><dt>予想利益</dt><dd className={profit.expectedProfit < 0 ? "negative" : "positive"}>{formatCurrency(profit.expectedProfit)}</dd></div></dl>
+              <dl className="vehicle-card-values"><div><dt>{vehicle.salePrice == null ? "販売予定価格" : "販売価格"}</dt><dd>{formatCurrency(profit.revenueBasis)}</dd></div><div><dt>{profit.isFinal ? "確定粗利" : "予想利益"}</dt><dd className={profit.expectedProfit < 0 ? "negative" : "positive"}>{formatCurrency(profit.isFinal ? profit.provisionalProfit : profit.expectedProfit)}</dd></div></dl>
               <div className={`document-indicator ${vehicle.documentsComplete ? "complete" : "missing"}`}>{vehicle.documentsComplete ? <CheckCircle2 size={17} /> : <FileWarning size={17} />}{vehicle.documentsComplete ? "必要書類 確認済み" : "書類の確認が必要"}</div>
               <span className="vehicle-card-action">詳細を見る</span>
             </button>
