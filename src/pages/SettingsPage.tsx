@@ -1,12 +1,103 @@
 import { useEffect, useState } from "react";
-import { Database, HardDrive, KeyRound, RotateCcw, ShieldCheck, UserCog } from "lucide-react";
+import { Database, HardDrive, KeyRound, MailPlus, RotateCcw, ShieldCheck, UserCog } from "lucide-react";
 import { PageHeader } from "../components/PageHeader";
-import { staffRoleLabels } from "../lib/staffProfiles";
+import { staffRoleLabels, validateStaffInvitationInput } from "../lib/staffProfiles";
 import { useAuth } from "../state/AuthContext";
 import { useAppData } from "../state/AppDataContext";
 import type { StaffProfile, StaffRole } from "../types";
 
 const staffRoles = Object.keys(staffRoleLabels) as StaffRole[];
+const inviteRoles = ["accounting", "regular", "spot"] as const;
+
+function StaffInvitePanel({ isDemo }: { isDemo: boolean }) {
+  const { inviteStaffProfile } = useAppData();
+  const [open, setOpen] = useState(false);
+  const [reviewing, setReviewing] = useState(false);
+  const [email, setEmail] = useState("");
+  const [displayName, setDisplayName] = useState("");
+  const [role, setRole] = useState<(typeof inviteRoles)[number]>("regular");
+  const [sending, setSending] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const prepareReview = () => {
+    setMessage(null);
+    setError(null);
+    try {
+      const checked = validateStaffInvitationInput({ email, displayName, role });
+      setEmail(checked.email);
+      setDisplayName(checked.displayName);
+      setReviewing(true);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "入力内容を確認してください。");
+    }
+  };
+
+  const sendInvitation = async () => {
+    setSending(true);
+    setError(null);
+    try {
+      await inviteStaffProfile({ email, displayName, role });
+      setMessage(isDemo ? "テスト利用者を追加しました。" : `${email}へ招待メールを送りました。`);
+      setEmail("");
+      setDisplayName("");
+      setRole("regular");
+      setReviewing(false);
+      setOpen(false);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "招待メールを送信できませんでした。");
+    } finally {
+      setSending(false);
+    }
+  };
+
+  return (
+    <div className="staff-invite-panel">
+      <div className="staff-invite-heading">
+        <div>
+          <strong>新しい利用者</strong>
+          <span>{isDemo ? "架空の利用者を追加して画面を確認できます。" : "招待された本人がメールから8文字以上のパスワードを設定します。"}</span>
+        </div>
+        {!open ? <button type="button" className="secondary-button" onClick={() => { setOpen(true); setMessage(null); }}><MailPlus size={17} />利用者を招待</button> : null}
+      </div>
+
+      {message ? <p className="inline-success">{message}</p> : null}
+      {open && !reviewing ? <div className="staff-invite-form">
+        <label className="field-label">メールアドレス <span className="required">必須</span>
+          <input type="email" autoComplete="off" value={email} placeholder="staff@example.com" onChange={(event) => setEmail(event.target.value)} />
+        </label>
+        <label className="field-label">表示名 <span className="required">必須</span>
+          <input value={displayName} maxLength={80} placeholder="例：妻・税務担当" onChange={(event) => setDisplayName(event.target.value)} />
+        </label>
+        <label className="field-label">最初の権限 <span className="required">必須</span>
+          <select value={role} onChange={(event) => setRole(event.target.value as (typeof inviteRoles)[number])}>
+            {inviteRoles.map((value) => <option key={value} value={value}>{staffRoleLabels[value]}</option>)}
+          </select>
+        </label>
+        {error ? <p className="inline-error staff-invite-message">{error}</p> : null}
+        <div className="staff-invite-actions">
+          <button type="button" className="secondary-button" onClick={() => { setOpen(false); setError(null); }}>キャンセル</button>
+          <button type="button" className="primary-button" onClick={prepareReview}>入力内容を確認</button>
+        </div>
+      </div> : null}
+
+      {open && reviewing ? <div className="staff-invite-review">
+        <strong>この内容で招待します</strong>
+        <dl>
+          <div><dt>メール</dt><dd>{email}</dd></div>
+          <div><dt>表示名</dt><dd>{displayName}</dd></div>
+          <div><dt>権限</dt><dd>{staffRoleLabels[role]}</dd></div>
+        </dl>
+        <p>{isDemo ? "テスト用の利用者として追加され、メールは送信されません。" : "確定すると招待メールが送信されます。送信先をもう一度確認してください。"}</p>
+        {error ? <p className="inline-error staff-invite-message">{error}</p> : null}
+        <div className="staff-invite-actions">
+          <button type="button" className="secondary-button" disabled={sending} onClick={() => { setReviewing(false); setError(null); }}>入力へ戻る</button>
+          <button type="button" className="primary-button" disabled={sending} onClick={() => void sendInvitation()}>{sending ? "送信中…" : isDemo ? "テスト利用者を追加" : "招待メールを送る"}</button>
+        </div>
+      </div> : null}
+    </div>
+  );
+}
 
 function StaffProfileEditor({ staff, currentUserId }: { staff: StaffProfile; currentUserId: string | undefined }) {
   const { updateStaffProfile } = useAppData();
@@ -98,12 +189,13 @@ export function SettingsPage() {
             <p>事業主だけが権限変更、利用停止、復活を行えます。現在の利用中は{activeCount}人です。</p>
           </div>
         </div>
+        <StaffInvitePanel isDemo={isDemo} />
         <div className="staff-profile-list">
           {data.staffProfiles.map((staff) => (
             <StaffProfileEditor key={staff.id} staff={staff} currentUserId={profile?.id} />
           ))}
         </div>
-        <p className="staff-invite-note">新しい利用者の招待と最初の登録は、現在はSupabaseの管理画面で行います。ここでは登録後の権限と利用状態を変更できます。</p>
+        <p className="staff-invite-note">事業主権限は招待時に付けません。必要な場合は、招待後に登録済み利用者の権限から変更します。</p>
       </section>
 
       <section className="settings-grid">

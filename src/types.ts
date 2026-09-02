@@ -31,6 +31,12 @@ export type UpdateStaffProfileInput = {
   isActive: boolean;
 };
 
+export type InviteStaffProfileInput = {
+  email: string;
+  displayName: string;
+  role: Exclude<StaffRole, "owner">;
+};
+
 export type StaffSettlementDirection = "スタッフへ支給" | "スタッフへ請求";
 export type StaffEngagementType = "紹介のみ" | "契約から全て担当";
 export type StaffBusinessType = "販売" | "買取・オークション" | "廃車";

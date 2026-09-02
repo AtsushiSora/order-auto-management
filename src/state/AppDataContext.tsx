@@ -14,7 +14,7 @@ import { buildAntiqueLedgerEntries } from "../lib/antiqueLedger";
 import { buildExpenseEvidencePath, PRIVATE_BUCKET, validateEvidenceFile } from "../lib/evidence";
 import { canIssueDocument, findCompletedSaleReceipt, includedTaxAmount, nextDemoDocumentNumber } from "../lib/issuedDocuments";
 import { calculateStaffPlannedAmount } from "../lib/staffSettlements";
-import { validateStaffProfileUpdate } from "../lib/staffProfiles";
+import { validateStaffInvitationInput, validateStaffProfileUpdate } from "../lib/staffProfiles";
 import { supabase } from "../lib/supabase";
 import {
   antiqueLedgerDetailToDb,
@@ -79,6 +79,7 @@ import type {
   VehiclePublicationInput,
   WebsiteInquiryStatus,
   CashflowOffset,
+  InviteStaffProfileInput,
   UpdateStaffProfileInput,
 } from "../types";
 import { useAuth } from "./AuthContext";
@@ -108,6 +109,7 @@ const emptyData: AppData = {
 type AppDataContextValue = {
   data: AppData;
   isDemo: boolean;
+  inviteStaffProfile: (input: InviteStaffProfileInput) => Promise<void>;
   updateStaffProfile: (input: UpdateStaffProfileInput) => Promise<void>;
   addVehicle: (input: NewVehicleInput) => Promise<Vehicle>;
   updateVehicle: (vehicleId: string, patch: Partial<Vehicle>) => Promise<void>;
@@ -418,6 +420,42 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   const value = useMemo<AppDataContextValue>(() => ({
     data,
     isDemo: !configured,
+    inviteStaffProfile: async (input) => {
+      if (profile?.role !== "owner" || !profile.isActive) {
+        throw new Error("利用者を招待できるのは事業主だけです。");
+      }
+      const checked = validateStaffInvitationInput(input);
+      if (configured && supabase) {
+        const { error } = await supabase.functions.invoke("invite-staff-user", {
+          body: checked,
+        });
+        if (error) {
+          let message = "招待メールを送信できませんでした。";
+          const context = "context" in error ? error.context : null;
+          if (context instanceof Response) {
+            try {
+              const detail = await context.clone().json() as { error?: unknown };
+              if (typeof detail.error === "string" && detail.error.trim()) message = detail.error;
+            } catch {
+              // 安全な固定文言を使用する。
+            }
+          }
+          throw new Error(message);
+        }
+        await refreshData();
+        return;
+      }
+
+      setData((current) => ({
+        ...current,
+        staffProfiles: [...current.staffProfiles, {
+          id: crypto.randomUUID(),
+          displayName: checked.displayName,
+          role: checked.role,
+          isActive: true,
+        }],
+      }));
+    },
     updateStaffProfile: async (input) => {
       const checked = validateStaffProfileUpdate(profile, data.staffProfiles, input);
       if (configured && supabase) {

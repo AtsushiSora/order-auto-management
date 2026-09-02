@@ -1,4 +1,4 @@
-import type { StaffProfile, StaffRole, UpdateStaffProfileInput } from "../types";
+import type { InviteStaffProfileInput, StaffProfile, StaffRole, UpdateStaffProfileInput } from "../types";
 
 export const staffRoleLabels: Record<StaffRole, string> = {
   owner: "事業主",
@@ -39,4 +39,19 @@ export function validateStaffProfileUpdate(
   }
 
   return { ...input, displayName };
+}
+
+export function validateStaffInvitationInput(input: InviteStaffProfileInput) {
+  const email = input.email.trim().toLowerCase();
+  const displayName = input.displayName.trim();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254) {
+    throw new Error("正しいメールアドレスを入力してください。");
+  }
+  if (!displayName || displayName.length > 80) {
+    throw new Error("表示名は1文字から80文字で入力してください。");
+  }
+  if (!(["accounting", "regular", "spot"] as const).includes(input.role)) {
+    throw new Error("招待する利用者の権限を確認してください。");
+  }
+  return { email, displayName, role: input.role };
 }

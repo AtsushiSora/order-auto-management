@@ -2000,6 +2000,93 @@ button.mini-summary-card:hover {
   gap: 12px;
 }
 
+.staff-invite-panel {
+  margin-bottom: 14px;
+  padding: 15px;
+  border: 1px solid var(--blue-200);
+  border-radius: 12px;
+  background: var(--blue-50);
+}
+
+.staff-invite-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.staff-invite-heading strong,
+.staff-invite-heading span {
+  display: block;
+}
+
+.staff-invite-heading strong {
+  color: var(--navy-900);
+  font-size: 13px;
+}
+
+.staff-invite-heading span {
+  margin-top: 4px;
+  color: var(--slate-600);
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+.staff-invite-form {
+  display: grid;
+  grid-template-columns: minmax(220px, 1.4fr) minmax(180px, 1fr) minmax(160px, 0.8fr);
+  gap: 12px;
+  margin-top: 15px;
+  padding-top: 15px;
+  border-top: 1px solid var(--blue-200);
+}
+
+.staff-invite-form .field-label {
+  margin: 0;
+}
+
+.staff-invite-actions {
+  grid-column: 1 / -1;
+  display: flex;
+  justify-content: flex-end;
+  gap: 9px;
+}
+
+.staff-invite-message {
+  grid-column: 1 / -1;
+  margin: 0;
+}
+
+.staff-invite-review {
+  margin-top: 15px;
+  padding: 15px;
+  border: 1px solid var(--blue-200);
+  border-radius: 10px;
+  background: #fff;
+}
+
+.staff-invite-review > strong {
+  color: var(--navy-900);
+}
+
+.staff-invite-review dl {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 9px;
+  margin: 12px 0;
+}
+
+.staff-invite-review dl div {
+  min-width: 0;
+  padding: 9px 11px;
+  border-radius: 8px;
+  background: var(--slate-100);
+}
+
+.staff-invite-review dt { color: var(--slate-500); font-size: 9px; }
+.staff-invite-review dd { overflow-wrap: anywhere; margin: 3px 0 0; color: var(--navy-900); font-size: 11px; font-weight: 750; }
+.staff-invite-review > p { margin: 0 0 12px; color: var(--slate-600); font-size: 10px; line-height: 1.6; }
+
 .staff-profile-card {
   padding: 16px;
   border: 1px solid var(--slate-200);
@@ -2582,6 +2669,25 @@ button.mini-summary-card:hover {
   }
 
   .staff-profile-fields {
+    grid-template-columns: 1fr;
+  }
+
+  .staff-invite-heading {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .staff-invite-heading .secondary-button {
+    width: 100%;
+  }
+
+  .staff-invite-form,
+  .staff-invite-review dl {
+    grid-template-columns: 1fr;
+  }
+
+  .staff-invite-actions {
+    display: grid;
     grid-template-columns: 1fr;
   }
 
