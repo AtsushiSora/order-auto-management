@@ -30,6 +30,7 @@ type AuthContextValue = {
   error: string | null;
   signIn: (email: string, password: string) => Promise<void>;
   testSignIn: () => void;
+  switchTestRole: (role: "owner" | "spot") => void;
   updatePassword: (password: string) => Promise<void>;
   signOut: () => Promise<void>;
 };
@@ -38,6 +39,13 @@ const demoProfile: StaffProfile = {
   id: "demo-owner",
   displayName: "事業主",
   role: "owner",
+  isActive: true,
+};
+
+const demoSpotProfile: StaffProfile = {
+  id: "demo-spot",
+  displayName: "スポットスタッフ",
+  role: "spot",
   isActive: true,
 };
 
@@ -213,6 +221,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setIsTestSession(true);
       setLoading(false);
       window.location.hash = "#/dashboard";
+    },
+    switchTestRole: (role) => {
+      if (!isTestSession) return;
+      setProfile(role === "spot" ? demoSpotProfile : demoProfile);
+      window.location.hash = role === "spot" ? "#/spot-workspace" : "#/dashboard";
     },
     updatePassword: async (password) => {
       if (!supabase) return;

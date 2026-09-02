@@ -11,6 +11,7 @@ import { ProfitsPage } from "./pages/ProfitsPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { SiteIntegrationPage } from "./pages/SiteIntegrationPage";
 import { StaffSettlementsPage } from "./pages/StaffSettlementsPage";
+import { SpotWorkspacePage } from "./pages/SpotWorkspacePage";
 import { VehiclesPage } from "./pages/VehiclesPage";
 import { useAuth } from "./state/AuthContext";
 import type { PageId } from "./types";
@@ -28,6 +29,7 @@ const pageIds: PageId[] = [
   "accounting",
   "issued-documents",
   "staff-settlements",
+  "spot-workspace",
   "settings",
 ];
 
@@ -48,11 +50,14 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    const spotAllowed = page === "spot-workspace" || page === "staff-settlements";
+    const restrictedForSpot = profile?.role === "spot" && !spotAllowed;
+    const restrictedForOthers = profile?.role !== "spot" && page === "spot-workspace";
     const restrictedSettings = page === "settings" && profile?.role !== "owner";
-    const restrictedLedger = page === "antique-ledger" && profile?.role === "spot";
-    if (restrictedSettings || restrictedLedger) {
-      window.location.hash = "#/dashboard";
-      setPage("dashboard");
+    if (restrictedForSpot || restrictedForOthers || restrictedSettings) {
+      const fallback: PageId = profile?.role === "spot" ? "spot-workspace" : "dashboard";
+      window.location.hash = `#/${fallback}`;
+      setPage(fallback);
     }
   }, [page, profile?.role]);
 
@@ -91,6 +96,8 @@ export default function App() {
         return <IssuedDocumentsPage />;
       case "staff-settlements":
         return <StaffSettlementsPage />;
+      case "spot-workspace":
+        return <SpotWorkspacePage />;
       case "settings":
         return <SettingsPage />;
       default:

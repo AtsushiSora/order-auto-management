@@ -9,6 +9,7 @@ import {
   mapJournalExportFromDb,
   mapIssuedDocumentFromDb,
   mapStaffSettlementFromDb,
+  mapSpotAssignmentFromDb,
   mapVehicleFromDb,
   mapVehicleDocumentFromDb,
   mapWebsiteInquiryFromDb,
@@ -24,6 +25,8 @@ import {
   websiteInquiryStatusToRpc,
   issueDocumentToRpc,
   staffSettlementToRpc,
+  spotAssignmentToRpc,
+  spotReferralToRpc,
 } from "./supabaseData";
 
 describe("Supabaseデータ変換", () => {
@@ -495,6 +498,42 @@ describe("Supabaseデータ変換", () => {
       p_manual_amount: 12000,
       p_payment_method: "cash",
       p_agreement_note: "双方合意済み",
+    });
+  });
+
+  it("スポット担当案件は本人用の表示値と安全なRPC引数へ変換する", () => {
+    expect(mapSpotAssignmentFromDb({
+      id: "assignment-id",
+      staff_id: "spot-id",
+      engagement_type: "full_service",
+      business_type: "sale",
+      vehicle_id: "vehicle-id",
+      contract_id: null,
+      lead_label: "販売担当案件",
+      referral_note: "来店予定",
+      status: "open",
+      created_at: "2026-09-02T00:00:00Z",
+      updated_at: "2026-09-02T00:00:00Z",
+    })).toMatchObject({ engagementType: "契約から全て担当", businessType: "販売", status: "進行中" });
+
+    expect(spotAssignmentToRpc({
+      assignmentId: null,
+      staffId: "spot-id",
+      engagementType: "紹介のみ",
+      businessType: "廃車",
+      vehicleId: null,
+      leadLabel: " 事故車の紹介 ",
+      referralNote: " 事業主へ連絡済み ",
+    })).toMatchObject({
+      p_engagement_type: "referral_only",
+      p_business_type: "scrap",
+      p_lead_label: "事故車の紹介",
+    });
+
+    expect(spotReferralToRpc("買取・オークション", " 紹介先 ", " 内容 ")).toEqual({
+      p_business_type: "purchase_auction",
+      p_lead_label: "紹介先",
+      p_referral_note: "内容",
     });
   });
 });

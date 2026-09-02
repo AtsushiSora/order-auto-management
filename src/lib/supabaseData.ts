@@ -18,6 +18,8 @@ import type {
   SaveStaffSettlementInput,
   StaffProfile,
   StaffSettlement,
+  SpotAssignment,
+  SaveSpotAssignmentInput,
   NewCashflowInput,
   NewExpenseInput,
   NewVehicleInput,
@@ -233,6 +235,9 @@ const staffCalculationToDb = Object.fromEntries(Object.entries(staffCalculationF
 const staffSettlementStatusFromDb: Record<string, StaffSettlement["status"]> = {
   planned: "予定", confirmed: "確定", settled: "精算済み", cancelled: "取消",
 };
+const spotAssignmentStatusFromDb: Record<string, SpotAssignment["status"]> = {
+  open: "進行中", completed: "完了", cancelled: "取消",
+};
 
 const stringValue = (row: DbRow, key: string) => String(row[key] ?? "");
 const nullableString = (row: DbRow, key: string) => (row[key] == null ? null : String(row[key]));
@@ -280,6 +285,54 @@ export const mapStaffProfileFromDb = (source: unknown): StaffProfile => {
     isActive: Boolean(row.is_active),
   };
 };
+
+export const mapSpotAssignmentFromDb = (source: unknown): SpotAssignment => {
+  const row = source as DbRow;
+  return {
+    id: stringValue(row, "id"),
+    staffId: stringValue(row, "staff_id"),
+    engagementType: staffEngagementFromDb[stringValue(row, "engagement_type")] ?? "紹介のみ",
+    businessType: staffBusinessFromDb[stringValue(row, "business_type")] ?? "販売",
+    vehicleId: nullableString(row, "vehicle_id"),
+    contractId: nullableString(row, "contract_id"),
+    leadLabel: stringValue(row, "lead_label"),
+    referralNote: stringValue(row, "referral_note"),
+    status: spotAssignmentStatusFromDb[stringValue(row, "status")] ?? "進行中",
+    createdAt: stringValue(row, "created_at"),
+    updatedAt: stringValue(row, "updated_at"),
+  };
+};
+
+export const spotAssignmentToRpc = (input: SaveSpotAssignmentInput) => ({
+  p_assignment_id: input.assignmentId,
+  p_staff_id: input.staffId,
+  p_engagement_type: staffEngagementToDb[input.engagementType],
+  p_business_type: staffBusinessToDb[input.businessType],
+  p_vehicle_id: input.vehicleId,
+  p_lead_label: input.leadLabel.trim(),
+  p_referral_note: input.referralNote.trim(),
+});
+
+export const spotReferralToRpc = (businessType: SpotAssignment["businessType"], leadLabel: string, referralNote: string) => ({
+  p_business_type: staffBusinessToDb[businessType],
+  p_lead_label: leadLabel.trim(),
+  p_referral_note: referralNote.trim(),
+});
+
+export const spotPurchaseContractToRpc = (assignmentId: string, input: PurchaseContractInput) => ({
+  p_assignment_id: assignmentId,
+  ...purchaseContractToRpc(input),
+});
+
+export const spotSaleContractToRpc = (assignmentId: string, input: SaleContractInput) => ({
+  p_assignment_id: assignmentId,
+  p_contract_id: input.contractId,
+  p_customer_label: input.customerLabel.trim(),
+  p_amount: input.amount,
+  p_status: contractStatusToDb[input.status],
+  p_contracted_on: input.contractedOn,
+  p_payment_method: paymentMethodToDb[input.paymentMethod],
+});
 
 export const vehiclePublicationToRpc = (input: VehiclePublicationInput) => ({
   p_vehicle_id: input.vehicleId,

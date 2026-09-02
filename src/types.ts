@@ -11,6 +11,7 @@ export type PageId =
   | "accounting"
   | "issued-documents"
   | "staff-settlements"
+  | "spot-workspace"
   | "settings";
 
 export type StaffRole = "owner" | "accounting" | "regular" | "spot";
@@ -56,6 +57,26 @@ export type SaveStaffSettlementInput = Omit<
   StaffSettlement,
   "id" | "plannedAmount" | "confirmedAmount" | "status" | "confirmedAt" | "settledAt" | "createdAt" | "updatedAt"
 > & { settlementId: string | null; manualAmount: number };
+
+export type SpotAssignmentStatus = "進行中" | "完了" | "取消";
+
+export type SpotAssignment = {
+  id: string;
+  staffId: string;
+  engagementType: StaffEngagementType;
+  businessType: StaffBusinessType;
+  vehicleId: string | null;
+  contractId: string | null;
+  leadLabel: string;
+  referralNote: string;
+  status: SpotAssignmentStatus;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type SaveSpotAssignmentInput = Omit<SpotAssignment, "id" | "contractId" | "status" | "createdAt" | "updatedAt"> & {
+  assignmentId: string | null;
+};
 
 export type VehicleStatus =
   | "入庫予定"
@@ -346,6 +367,7 @@ export type AntiqueLedgerEntry = {
 
 export type AppData = {
   staffProfiles: StaffProfile[];
+  spotAssignments: SpotAssignment[];
   vehicles: Vehicle[];
   vehicleDocuments: VehicleDocument[];
   expenses: Expense[];

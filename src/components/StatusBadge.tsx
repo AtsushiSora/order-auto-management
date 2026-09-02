@@ -20,6 +20,7 @@ type BadgeValue =
   | "全体経費"
   | "精算済み"
   | "取消"
+  | "進行中"
   | "有効"
   | "無効";
 
@@ -45,6 +46,7 @@ const toneByValue: Record<BadgeValue, string> = {
   全体経費: "purple",
   精算済み: "green",
   取消: "dark",
+  進行中: "blue",
   新着: "red",
   対応中: "amber",
   掲載中: "green",

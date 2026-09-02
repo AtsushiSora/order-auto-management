@@ -27,6 +27,7 @@ import {
   mapIssuedDocumentFromDb,
   mapStaffProfileFromDb,
   mapStaffSettlementFromDb,
+  mapSpotAssignmentFromDb,
   mapVehicleFromDb,
   mapVehicleDocumentFromDb,
   mapWebsiteInquiryFromDb,
@@ -43,6 +44,10 @@ import {
   websiteInquiryStatusToRpc,
   issueDocumentToRpc,
   staffSettlementToRpc,
+  spotAssignmentToRpc,
+  spotPurchaseContractToRpc,
+  spotReferralToRpc,
+  spotSaleContractToRpc,
 } from "../lib/supabaseData";
 import type {
   AppData,
@@ -51,6 +56,9 @@ import type {
   IssuedDocument,
   IssueDocumentInput,
   SaveStaffSettlementInput,
+  SaveSpotAssignmentInput,
+  SpotAssignment,
+  StaffBusinessType,
   StaffSettlement,
   NewCashflowInput,
   NewExpenseInput,
@@ -73,6 +81,7 @@ const STORAGE_KEY = "order-auto-management-demo-v1";
 const demoEvidenceUrls = new Map<string, string>();
 const emptyData: AppData = {
   staffProfiles: [],
+  spotAssignments: [],
   vehicles: [],
   vehicleDocuments: [],
   expenses: [],
@@ -110,6 +119,12 @@ type AppDataContextValue = {
   confirmStaffSettlement: (settlementId: string, confirmedAmount: number, confirmedOn: string) => Promise<void>;
   settleStaffSettlement: (settlementId: string, settledOn: string) => Promise<void>;
   cancelStaffSettlement: (settlementId: string) => Promise<void>;
+  saveSpotAssignment: (input: SaveSpotAssignmentInput) => Promise<SpotAssignment>;
+  createSpotReferral: (businessType: StaffBusinessType, leadLabel: string, referralNote: string) => Promise<SpotAssignment>;
+  updateSpotReferral: (assignmentId: string, leadLabel: string, referralNote: string) => Promise<SpotAssignment>;
+  finishSpotAssignment: (assignmentId: string, cancel: boolean) => Promise<void>;
+  saveSpotPurchaseContract: (assignmentId: string, input: PurchaseContractInput) => Promise<void>;
+  saveSpotSaleContract: (assignmentId: string, input: SaleContractInput) => Promise<void>;
   addCashflow: (input: NewCashflowInput) => Promise<void>;
   completeCashflow: (cashflowId: string, processedOn: string) => Promise<void>;
   savePurchaseContract: (input: PurchaseContractInput) => Promise<void>;
@@ -151,6 +166,7 @@ const loadInitialDemoData = (): AppData => {
       ...seed,
       ...parsed,
       staffProfiles: parsed.staffProfiles ?? seed.staffProfiles,
+      spotAssignments: parsed.spotAssignments ?? [],
       vehicles: (parsed.vehicles ?? seed.vehicles).map((vehicle) => ({
         ...publicationDefaults(vehicle),
         ...vehicle,
@@ -203,7 +219,7 @@ const errorMessage = (error: unknown) => {
 };
 
 export function AppDataProvider({ children }: { children: ReactNode }) {
-  const { configured, session } = useAuth();
+  const { configured, session, profile } = useAuth();
   const [data, setData] = useState<AppData>(() => configured ? emptyData : loadInitialDemoData());
   const [loading, setLoading] = useState(configured);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -217,8 +233,9 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     setLoading(true);
     setLoadError(null);
     try {
-      const [staffResult, vehiclesResult, documentsResult, expensesResult, attachmentsResult, issuedDocumentsResult, staffSettlementsResult, cashflowsResult, contractsResult, approvalsResult, inquiriesResult, ledgerResult, journalReviewsResult, journalExportsResult] = await Promise.all([
+      const [staffResult, spotAssignmentsResult, vehiclesResult, documentsResult, expensesResult, attachmentsResult, issuedDocumentsResult, staffSettlementsResult, cashflowsResult, contractsResult, approvalsResult, inquiriesResult, ledgerResult, journalReviewsResult, journalExportsResult] = await Promise.all([
         supabase.from("staff_profiles").select("*").eq("is_active", true).order("display_name", { ascending: true }),
+        supabase.from("spot_assignments").select("*").order("created_at", { ascending: false }),
         supabase.from("vehicles").select("*").is("deleted_at", null).order("created_at", { ascending: false }),
         supabase.from("vehicle_documents").select("*").order("created_at", { ascending: true }),
         supabase.from("expenses").select("*").is("deleted_at", null).order("incurred_on", { ascending: false }),
@@ -234,12 +251,13 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         supabase.from("journal_exports").select("*").order("created_at", { ascending: false }),
       ]);
 
-      const firstError = [staffResult, vehiclesResult, documentsResult, expensesResult, attachmentsResult, issuedDocumentsResult, staffSettlementsResult, cashflowsResult, contractsResult, approvalsResult, inquiriesResult, ledgerResult, journalReviewsResult, journalExportsResult]
+      const firstError = [staffResult, spotAssignmentsResult, vehiclesResult, documentsResult, expensesResult, attachmentsResult, issuedDocumentsResult, staffSettlementsResult, cashflowsResult, contractsResult, approvalsResult, inquiriesResult, ledgerResult, journalReviewsResult, journalExportsResult]
         .find((result) => result.error)?.error;
       if (firstError) throw firstError;
 
       setData({
         staffProfiles: (staffResult.data ?? []).map(mapStaffProfileFromDb),
+        spotAssignments: (spotAssignmentsResult.data ?? []).map(mapSpotAssignmentFromDb),
         vehicles: (vehiclesResult.data ?? []).map(mapVehicleFromDb),
         vehicleDocuments: (documentsResult.data ?? []).map(mapVehicleDocumentFromDb),
         expenses: (expensesResult.data ?? []).map(mapExpenseFromDb),
@@ -787,6 +805,77 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         cashflows: current.cashflows.filter((cashflow) => cashflow.staffSettlementId !== settlementId),
       }));
     },
+    saveSpotAssignment: async (input) => {
+      const staff = data.staffProfiles.find((item) => item.id === input.staffId && item.role === "spot" && item.isActive);
+      if (!staff) throw new Error("有効なスポットスタッフを選択してください。");
+      if (input.engagementType === "契約から全て担当" && input.businessType === "販売" && !input.vehicleId) {
+        throw new Error("販売を全て担当する案件では対象車両が必要です。");
+      }
+      if (configured && supabase) {
+        const { data: saved, error } = await supabase.rpc("save_spot_assignment", spotAssignmentToRpc(input));
+        if (error) throw new Error(error.message);
+        const assignment = mapSpotAssignmentFromDb(Array.isArray(saved) ? saved[0] : saved);
+        setData((current) => ({ ...current, spotAssignments: [assignment, ...current.spotAssignments.filter((item) => item.id !== assignment.id)] }));
+        return assignment;
+      }
+      const existing = input.assignmentId ? data.spotAssignments.find((item) => item.id === input.assignmentId) : null;
+      if (existing && (existing.status !== "進行中" || existing.contractId)) throw new Error("契約作成前の進行中案件だけ修正できます。");
+      const now = new Date().toISOString();
+      const assignment: SpotAssignment = {
+        id: existing?.id ?? crypto.randomUUID(), staffId: input.staffId, engagementType: input.engagementType,
+        businessType: input.businessType, vehicleId: input.vehicleId, contractId: null,
+        leadLabel: input.leadLabel.trim(), referralNote: input.referralNote.trim(), status: "進行中",
+        createdAt: existing?.createdAt ?? now, updatedAt: now,
+      };
+      setData((current) => ({ ...current, spotAssignments: [assignment, ...current.spotAssignments.filter((item) => item.id !== assignment.id)] }));
+      return assignment;
+    },
+    createSpotReferral: async (businessType, leadLabel, referralNote) => {
+      if (!leadLabel.trim()) throw new Error("紹介先・案件名を入力してください。");
+      if (!configured || !supabase || !profile || profile.role !== "spot") throw new Error("スポットスタッフのログイン時だけ紹介を登録できます。");
+      const { data: saved, error } = await supabase.rpc("create_spot_referral", spotReferralToRpc(businessType, leadLabel, referralNote));
+      if (error) throw new Error(error.message);
+      const assignment = mapSpotAssignmentFromDb(Array.isArray(saved) ? saved[0] : saved);
+      setData((current) => ({ ...current, spotAssignments: [assignment, ...current.spotAssignments] }));
+      return assignment;
+    },
+    updateSpotReferral: async (assignmentId, leadLabel, referralNote) => {
+      if (!leadLabel.trim()) throw new Error("紹介先・案件名を入力してください。");
+      if (!configured || !supabase) throw new Error("共有データ接続時だけ紹介を修正できます。");
+      const { data: saved, error } = await supabase.rpc("update_spot_referral", {
+        p_assignment_id: assignmentId, p_lead_label: leadLabel.trim(), p_referral_note: referralNote.trim(),
+      });
+      if (error) throw new Error(error.message);
+      const assignment = mapSpotAssignmentFromDb(Array.isArray(saved) ? saved[0] : saved);
+      setData((current) => ({ ...current, spotAssignments: [assignment, ...current.spotAssignments.filter((item) => item.id !== assignment.id)] }));
+      return assignment;
+    },
+    finishSpotAssignment: async (assignmentId, cancel) => {
+      if (configured && supabase) {
+        const { error } = await supabase.rpc("finish_spot_assignment", { p_assignment_id: assignmentId, p_cancel: cancel });
+        if (error) throw new Error(error.message);
+        await refreshData();
+        return;
+      }
+      setData((current) => ({
+        ...current,
+        spotAssignments: current.spotAssignments.map((item) => item.id === assignmentId
+          ? { ...item, status: cancel ? "取消" : "完了", updatedAt: new Date().toISOString() }
+          : item),
+      }));
+    },
+    saveSpotPurchaseContract: async (assignmentId, input) => {
+      if (!configured || !supabase) throw new Error("共有データ接続時だけ専用契約を保存できます。");
+      const { error } = await supabase.rpc("save_spot_purchase_contract", spotPurchaseContractToRpc(assignmentId, input));
+      if (error) throw new Error(error.message);
+      await refreshData();
+    },
+    saveSpotSaleContract: async (assignmentId, input) => {
+      if (!configured || !supabase) throw new Error("共有データ接続時だけ専用契約を保存できます。");
+      const { error } = await supabase.rpc("save_spot_sale_contract", spotSaleContractToRpc(assignmentId, input));
+      if (error) throw new Error(error.message);
+      await refreshData();
+    },
     addCashflow: async (input) => {
       if (configured && supabase) {
         const { data: inserted, error } = await supabase
@@ -1134,7 +1223,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       if (!configured) setData(cloneSeedData());
     },
     refreshData,
-  }), [configured, data, persistExpense, refreshData, session?.user.id]);
+  }), [configured, data, persistExpense, profile?.id, profile?.role, refreshData, session?.user.id]);
 
   if (loading) return <SystemLoading message="共有データを読み込んでいます" />;
   if (loadError) return <DataLoadError message={loadError} onRetry={() => void refreshData()} />;

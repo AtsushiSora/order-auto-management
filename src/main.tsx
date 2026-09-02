@@ -20,15 +20,6 @@ function AppGate() {
   if (configured && (error || !profile?.isActive)) {
     return <AccessBlocked message={error ?? "この利用者は現在利用できません。"} onLogout={() => void signOut()} />;
   }
-  if (configured && profile?.role === "spot") {
-    return (
-      <AccessBlocked
-        message="スポットスタッフ専用画面は次の実装段階です。金額や顧客情報が見えない安全な専用画面を接続してから利用できます。"
-        onLogout={() => void signOut()}
-      />
-    );
-  }
-
   return <AppDataProvider><App /></AppDataProvider>;
 }
 

@@ -1,5 +1,6 @@
 import {
   BarChart3,
+  BriefcaseBusiness,
   BookOpen,
   Car,
   ChevronDown,
@@ -28,6 +29,7 @@ const navItems: Array<{
   phase?: "第2段階";
   ownerOnly?: boolean;
   hiddenForSpot?: boolean;
+  spotOnly?: boolean;
 }> = [
   { id: "dashboard", label: "TOP", icon: Home },
   { id: "vehicles", label: "在庫", icon: Car },
@@ -37,6 +39,7 @@ const navItems: Array<{
   { id: "payments", label: "入出金", icon: WalletCards },
   { id: "issued-documents", label: "S・R発行", icon: FileOutput, hiddenForSpot: true },
   { id: "staff-settlements", label: "スタッフ精算", icon: Users },
+  { id: "spot-workspace", label: "担当案件", icon: BriefcaseBusiness, spotOnly: true },
   { id: "profits", label: "利益", icon: BarChart3 },
   { id: "site-integration", label: "サイト連携", icon: Globe2 },
   { id: "antique-ledger", label: "古物台帳", icon: BookOpen, hiddenForSpot: true },
@@ -55,12 +58,12 @@ export function Layout({
 }) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
-  const { profile, signOut, isTestSession } = useAuth();
+  const { profile, signOut, isTestSession, switchTestRole } = useAuth();
   const { isDemo } = useAppData();
-  const visibleNavItems = navItems.filter((item) =>
-    (!item.ownerOnly || profile?.role === "owner") &&
-    (!item.hiddenForSpot || profile?.role !== "spot"),
-  );
+  const visibleNavItems = navItems.filter((item) => {
+    if (profile?.role === "spot") return item.spotOnly || item.id === "staff-settlements";
+    return !item.spotOnly && (!item.ownerOnly || profile?.role === "owner");
+  });
   const userLabel = profile?.displayName ?? "利用者";
   const roleLabel = profile ? staffRoleLabels[profile.role] : "確認中";
 
@@ -153,6 +156,7 @@ export function Layout({
             {userMenuOpen ? (
               <div className="user-dropdown panel">
                 <div><strong>{userLabel}</strong><small>{roleLabel}</small></div>
+                {isTestSession ? <button type="button" onClick={() => { switchTestRole(profile?.role === "spot" ? "owner" : "spot"); setUserMenuOpen(false); }}><Users size={17} />{profile?.role === "spot" ? "事業主表示を確認" : "スポット表示を確認"}</button> : null}
                 <button type="button" onClick={() => void signOut()} disabled={isDemo && !isTestSession}>
                   <LogOut size={17} />
                   {isTestSession ? "テスト終了" : isDemo ? "デモモード" : "ログアウト"}
