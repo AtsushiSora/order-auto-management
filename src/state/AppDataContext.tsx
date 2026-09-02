@@ -125,6 +125,7 @@ type AppDataContextValue = {
   finishSpotAssignment: (assignmentId: string, cancel: boolean) => Promise<void>;
   saveSpotPurchaseContract: (assignmentId: string, input: PurchaseContractInput) => Promise<void>;
   saveSpotSaleContract: (assignmentId: string, input: SaleContractInput) => Promise<void>;
+  issueContractHandoff: (assignmentId: string) => Promise<{ completionToken: string; expiresAt: string }>;
   addCashflow: (input: NewCashflowInput) => Promise<void>;
   completeCashflow: (cashflowId: string, processedOn: string) => Promise<void>;
   savePurchaseContract: (input: PurchaseContractInput) => Promise<void>;
@@ -875,6 +876,16 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       const { error } = await supabase.rpc("save_spot_sale_contract", spotSaleContractToRpc(assignmentId, input));
       if (error) throw new Error(error.message);
       await refreshData();
+    },
+    issueContractHandoff: async (assignmentId) => {
+      if (!configured || !supabase) throw new Error("共有データ接続時だけ契約完了連携を発行できます。");
+      const { data: issued, error } = await supabase.rpc("issue_contract_handoff", { p_assignment_id: assignmentId });
+      if (error) throw new Error(error.message);
+      const row = Array.isArray(issued) ? issued[0] : issued;
+      const completionToken = String(row?.completion_token ?? "");
+      const expiresAt = String(row?.expires_at ?? "");
+      if (!/^[0-9a-f]{64}$/.test(completionToken) || !expiresAt) throw new Error("契約完了連携を発行できませんでした。");
+      return { completionToken, expiresAt };
     },
     addCashflow: async (input) => {
       if (configured && supabase) {

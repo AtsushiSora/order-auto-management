@@ -12,6 +12,7 @@ import { PageHeader } from "../components/PageHeader";
 import { StatusBadge } from "../components/StatusBadge";
 import {
   createContractHandoff,
+  getContractAppUrl,
   isSameOriginContractHandoff,
 } from "../lib/contractHandoff";
 import { formatCurrency, formatDate } from "../lib/format";
@@ -74,6 +75,7 @@ export function SpotWorkspacePage() {
     updateSpotReferral,
     saveSpotPurchaseContract,
     saveSpotSaleContract,
+    issueContractHandoff,
   } = useAppData();
   const assignments = data.spotAssignments.filter(
     (item) => item.staffId === profile?.id,
@@ -230,6 +232,9 @@ export function SpotWorkspacePage() {
 
   const launchPurchaseContractSystem = async () => {
     if (!contractAssignment) return;
+    if (!isSameOriginContractHandoff(window.location.origin, getContractAppUrl("purchase"))) {
+      return setError("入力引き継ぎは公開版の管理システムから実行してください。");
+    }
     if (!purchaseForm.customerLabel.trim() || !purchaseForm.vehicleName.trim())
       return setError("お客様名と車両名を入力してください。");
     let handoffStorageKey = "";
@@ -237,8 +242,11 @@ export function SpotWorkspacePage() {
     setError("");
     try {
       const nextForm = { ...purchaseForm, status: "署名待ち" as const };
+      await saveSpotPurchaseContract(contractAssignment.id, nextForm);
+      const completion = await issueContractHandoff(contractAssignment.id);
       const handoff = createContractHandoff(window.sessionStorage, "purchase", {
         assignmentId: contractAssignment.id,
+        completionToken: completion.completionToken,
         customerName: nextForm.customerLabel.trim(),
         contractDate: nextForm.contractedOn,
         vehicleName: nextForm.vehicleName.trim(),
@@ -249,13 +257,6 @@ export function SpotWorkspacePage() {
         paymentMethod: nextForm.paymentMethod,
       });
       handoffStorageKey = handoff.storageKey;
-      if (!isSameOriginContractHandoff(window.location.origin, handoff.url)) {
-        window.sessionStorage.removeItem(handoff.storageKey);
-        throw new Error(
-          "入力引き継ぎは公開版の管理システムから実行してください。",
-        );
-      }
-      await saveSpotPurchaseContract(contractAssignment.id, nextForm);
       window.location.assign(handoff.url);
     } catch (reason) {
       if (handoffStorageKey) window.sessionStorage.removeItem(handoffStorageKey);
@@ -270,6 +271,9 @@ export function SpotWorkspacePage() {
 
   const launchSaleContractSystem = async () => {
     if (!contractAssignment) return;
+    if (!isSameOriginContractHandoff(window.location.origin, getContractAppUrl("sale"))) {
+      return setError("入力引き継ぎは公開版の管理システムから実行してください。");
+    }
     const vehicle = data.vehicles.find(
       (item) => item.id === contractAssignment.vehicleId,
     );
@@ -281,8 +285,11 @@ export function SpotWorkspacePage() {
     setError("");
     try {
       const nextForm = { ...saleForm, status: "署名待ち" as const };
+      await saveSpotSaleContract(contractAssignment.id, nextForm);
+      const completion = await issueContractHandoff(contractAssignment.id);
       const handoff = createContractHandoff(window.sessionStorage, "sale", {
         assignmentId: contractAssignment.id,
+        completionToken: completion.completionToken,
         customerName: nextForm.customerLabel.trim(),
         contractDate: nextForm.contractedOn,
         vehicleName: vehicle.name,
@@ -292,13 +299,6 @@ export function SpotWorkspacePage() {
         paymentMethod: nextForm.paymentMethod,
       });
       handoffStorageKey = handoff.storageKey;
-      if (!isSameOriginContractHandoff(window.location.origin, handoff.url)) {
-        window.sessionStorage.removeItem(handoff.storageKey);
-        throw new Error(
-          "入力引き継ぎは公開版の管理システムから実行してください。",
-        );
-      }
-      await saveSpotSaleContract(contractAssignment.id, nextForm);
       window.location.assign(handoff.url);
     } catch (reason) {
       if (handoffStorageKey) window.sessionStorage.removeItem(handoffStorageKey);

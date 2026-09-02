@@ -7,6 +7,7 @@ export type ContractHandoffTarget = "sale" | "purchase";
 
 export type SaleContractHandoff = {
   assignmentId: string;
+  completionToken: string;
   customerName: string;
   contractDate: string;
   vehicleName: string;
@@ -18,6 +19,7 @@ export type SaleContractHandoff = {
 
 export type PurchaseContractHandoff = {
   assignmentId: string;
+  completionToken: string;
   customerName: string;
   contractDate: string;
   vehicleName: string;
@@ -44,6 +46,10 @@ const contractAppUrl: Record<ContractHandoffTarget, string> = {
   sale: "https://atsushisora.github.io/hanbai-keiyakusho/contract-create.html",
   purchase: "https://atsushisora.github.io/kaitori-contract/contract.html",
 };
+
+export function getContractAppUrl(target: ContractHandoffTarget) {
+  return contractAppUrl[target];
+}
 
 function removeExpiredHandoffs(storage: StorageLike, now: number) {
   const keys = Array.from({ length: storage.length }, (_, index) => storage.key(index))
