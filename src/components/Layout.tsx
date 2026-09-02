@@ -25,6 +25,7 @@ const navItems: Array<{
   icon: typeof Home;
   phase?: "第2段階";
   ownerOnly?: boolean;
+  hiddenForSpot?: boolean;
 }> = [
   { id: "dashboard", label: "TOP", icon: Home },
   { id: "vehicles", label: "在庫", icon: Car },
@@ -34,7 +35,7 @@ const navItems: Array<{
   { id: "payments", label: "入出金", icon: WalletCards },
   { id: "profits", label: "利益", icon: BarChart3 },
   { id: "site-integration", label: "サイト連携", icon: Globe2 },
-  { id: "antique-ledger", label: "古物台帳", icon: BookOpen, phase: "第2段階" },
+  { id: "antique-ledger", label: "古物台帳", icon: BookOpen, hiddenForSpot: true },
   { id: "accounting", label: "経理・仕訳候補", icon: ReceiptJapaneseYen, phase: "第2段階" },
   { id: "settings", label: "設定", icon: Settings, ownerOnly: true },
 ];
@@ -52,7 +53,10 @@ export function Layout({
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const { profile, signOut, isTestSession } = useAuth();
   const { isDemo } = useAppData();
-  const visibleNavItems = navItems.filter((item) => !item.ownerOnly || profile?.role === "owner");
+  const visibleNavItems = navItems.filter((item) =>
+    (!item.ownerOnly || profile?.role === "owner") &&
+    (!item.hiddenForSpot || profile?.role !== "spot"),
+  );
   const userLabel = profile?.displayName ?? "利用者";
   const roleLabel = profile ? staffRoleLabels[profile.role] : "確認中";
 

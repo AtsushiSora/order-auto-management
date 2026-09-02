@@ -167,6 +167,69 @@ export type WebsiteInquiry = {
   receivedAt: string;
 };
 
+export type LedgerIntakeType = "買受け" | "委託";
+export type LedgerCounterpartyType = "個人" | "法人・業者" | "オークション";
+export type IdentityVerificationMethod =
+  | "運転免許証"
+  | "マイナンバーカード"
+  | "在留カード"
+  | "印鑑証明書等"
+  | "古物商許可証"
+  | "オークション会場の取引記録"
+  | "その他";
+export type LedgerDispositionType = "売却" | "委託引渡し" | "返還" | "廃車";
+export type AntiqueLedgerStatus = "入庫待ち" | "要確認" | "記録済み";
+
+/**
+ * 車両・契約からは取得できない古物台帳の補足情報だけを保存する。
+ * 取引日、車名、車台番号、金額、取引先名は既存データから自動連携する。
+ */
+export type AntiqueLedgerDetail = {
+  id: string;
+  vehicleId: string;
+  intakeType: LedgerIntakeType;
+  receivedOnOverride: string | null;
+  registrationNumber: string;
+  registeredOwnerName: string;
+  itemFeatures: string;
+  counterpartyType: LedgerCounterpartyType;
+  sellerNameOverride: string;
+  sellerAddress: string;
+  sellerOccupation: string;
+  sellerAge: number | null;
+  identityVerificationMethod: IdentityVerificationMethod | null;
+  identityVerificationNote: string;
+  disposalOnOverride: string | null;
+  disposalTypeOverride: LedgerDispositionType | null;
+  buyerNameOverride: string;
+  note: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type SaveAntiqueLedgerDetailInput = Omit<
+  AntiqueLedgerDetail,
+  "id" | "createdAt" | "updatedAt"
+>;
+
+export type AntiqueLedgerEntry = {
+  vehicleId: string;
+  managementNumber: string;
+  itemName: string;
+  chassisNumber: string;
+  acquisitionSource: AcquisitionSource;
+  purchaseAmount: number;
+  receivedOn: string | null;
+  sellerName: string;
+  disposedOn: string | null;
+  dispositionType: LedgerDispositionType | "保有中";
+  saleAmount: number | null;
+  buyerName: string;
+  status: AntiqueLedgerStatus;
+  missingItems: string[];
+  detail: AntiqueLedgerDetail;
+};
+
 export type AppData = {
   vehicles: Vehicle[];
   vehicleDocuments: VehicleDocument[];
@@ -175,6 +238,7 @@ export type AppData = {
   contracts: Contract[];
   approvals: Approval[];
   websiteInquiries: WebsiteInquiry[];
+  antiqueLedgerDetails: AntiqueLedgerDetail[];
 };
 
 export type VehicleDocumentInput = Omit<VehicleDocument, "id" | "createdAt" | "updatedAt">;

@@ -1,5 +1,6 @@
 import type {
   AcquisitionSource,
+  AntiqueLedgerDetail,
   Approval,
   Cashflow,
   CashflowDirection,
@@ -16,6 +17,7 @@ import type {
   PaymentStatus,
   PurchaseContractInput,
   SaleContractInput,
+  SaveAntiqueLedgerDetailInput,
   SaveExpenseInput,
   Vehicle,
   VehiclePublicationInput,
@@ -139,6 +141,54 @@ const inquiryStatusToDb: Record<WebsiteInquiryStatus, string> = {
   対応中: "in_progress",
   完了: "completed",
 };
+const ledgerIntakeTypeFromDb: Record<string, AntiqueLedgerDetail["intakeType"]> = {
+  purchase: "買受け",
+  consignment: "委託",
+};
+const ledgerIntakeTypeToDb: Record<AntiqueLedgerDetail["intakeType"], string> = {
+  買受け: "purchase",
+  委託: "consignment",
+};
+const ledgerCounterpartyTypeFromDb: Record<string, AntiqueLedgerDetail["counterpartyType"]> = {
+  individual: "個人",
+  business: "法人・業者",
+  auction: "オークション",
+};
+const ledgerCounterpartyTypeToDb: Record<AntiqueLedgerDetail["counterpartyType"], string> = {
+  個人: "individual",
+  "法人・業者": "business",
+  オークション: "auction",
+};
+const identityMethodFromDb: Record<string, NonNullable<AntiqueLedgerDetail["identityVerificationMethod"]>> = {
+  drivers_license: "運転免許証",
+  my_number_card: "マイナンバーカード",
+  residence_card: "在留カード",
+  seal_certificate: "印鑑証明書等",
+  antique_dealer_license: "古物商許可証",
+  auction_record: "オークション会場の取引記録",
+  other: "その他",
+};
+const identityMethodToDb: Record<NonNullable<AntiqueLedgerDetail["identityVerificationMethod"]>, string> = {
+  運転免許証: "drivers_license",
+  マイナンバーカード: "my_number_card",
+  在留カード: "residence_card",
+  印鑑証明書等: "seal_certificate",
+  古物商許可証: "antique_dealer_license",
+  オークション会場の取引記録: "auction_record",
+  その他: "other",
+};
+const dispositionTypeFromDb: Record<string, NonNullable<AntiqueLedgerDetail["disposalTypeOverride"]>> = {
+  sale: "売却",
+  consigned_delivery: "委託引渡し",
+  return: "返還",
+  scrap: "廃車",
+};
+const dispositionTypeToDb: Record<NonNullable<AntiqueLedgerDetail["disposalTypeOverride"]>, string> = {
+  売却: "sale",
+  委託引渡し: "consigned_delivery",
+  返還: "return",
+  廃車: "scrap",
+};
 
 const stringValue = (row: DbRow, key: string) => String(row[key] ?? "");
 const nullableString = (row: DbRow, key: string) => (row[key] == null ? null : String(row[key]));
@@ -210,6 +260,58 @@ export const mapWebsiteInquiryFromDb = (source: unknown): WebsiteInquiry => {
 export const websiteInquiryStatusToRpc = (inquiryId: string, status: WebsiteInquiryStatus) => ({
   p_inquiry_id: inquiryId,
   p_status: inquiryStatusToDb[status],
+});
+
+export const mapAntiqueLedgerDetailFromDb = (source: unknown): AntiqueLedgerDetail => {
+  const row = source as DbRow;
+  const identityMethod = nullableString(row, "identity_verification_method");
+  const disposalType = nullableString(row, "disposal_type_override");
+  return {
+    id: stringValue(row, "id"),
+    vehicleId: stringValue(row, "vehicle_id"),
+    intakeType: ledgerIntakeTypeFromDb[stringValue(row, "intake_type")] ?? "買受け",
+    receivedOnOverride: nullableString(row, "received_on_override"),
+    registrationNumber: stringValue(row, "registration_number"),
+    registeredOwnerName: stringValue(row, "registered_owner_name"),
+    itemFeatures: stringValue(row, "item_features"),
+    counterpartyType: ledgerCounterpartyTypeFromDb[stringValue(row, "counterparty_type")] ?? "個人",
+    sellerNameOverride: stringValue(row, "seller_name_override"),
+    sellerAddress: stringValue(row, "seller_address"),
+    sellerOccupation: stringValue(row, "seller_occupation"),
+    sellerAge: row.seller_age == null ? null : numberValue(row, "seller_age"),
+    identityVerificationMethod: identityMethod ? identityMethodFromDb[identityMethod] ?? null : null,
+    identityVerificationNote: stringValue(row, "identity_verification_note"),
+    disposalOnOverride: nullableString(row, "disposal_on_override"),
+    disposalTypeOverride: disposalType ? dispositionTypeFromDb[disposalType] ?? null : null,
+    buyerNameOverride: stringValue(row, "buyer_name_override"),
+    note: stringValue(row, "note"),
+    createdAt: stringValue(row, "created_at"),
+    updatedAt: stringValue(row, "updated_at"),
+  };
+};
+
+export const antiqueLedgerDetailToDb = (input: SaveAntiqueLedgerDetailInput) => ({
+  vehicle_id: input.vehicleId,
+  intake_type: ledgerIntakeTypeToDb[input.intakeType],
+  received_on_override: input.receivedOnOverride || null,
+  registration_number: input.registrationNumber.trim(),
+  registered_owner_name: input.registeredOwnerName.trim(),
+  item_features: input.itemFeatures.trim(),
+  counterparty_type: ledgerCounterpartyTypeToDb[input.counterpartyType],
+  seller_name_override: input.sellerNameOverride.trim(),
+  seller_address: input.sellerAddress.trim(),
+  seller_occupation: input.sellerOccupation.trim(),
+  seller_age: input.counterpartyType === "個人" ? input.sellerAge : null,
+  identity_verification_method: input.identityVerificationMethod
+    ? identityMethodToDb[input.identityVerificationMethod]
+    : null,
+  identity_verification_note: input.identityVerificationNote.trim(),
+  disposal_on_override: input.disposalOnOverride || null,
+  disposal_type_override: input.disposalTypeOverride
+    ? dispositionTypeToDb[input.disposalTypeOverride]
+    : null,
+  buyer_name_override: input.buyerNameOverride.trim(),
+  note: input.note.trim(),
 });
 
 export const newVehicleToDb = (input: NewVehicleInput) => ({

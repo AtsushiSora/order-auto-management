@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
+  antiqueLedgerDetailToDb,
+  mapAntiqueLedgerDetailFromDb,
   mapCashflowFromDb,
   mapContractFromDb,
   mapExpenseFromDb,
@@ -280,5 +282,49 @@ describe("Supabaseデータ変換", () => {
       processed_on: "2026-09-01",
       created_at: "2026-09-01T00:00:00Z",
     })).toMatchObject({ method: "現金", kind: "販売代金" });
+  });
+
+  it("古物台帳の補足情報をDB形式と画面形式へ変換する", () => {
+    const row = antiqueLedgerDetailToDb({
+      vehicleId: "vehicle-id",
+      intakeType: "買受け",
+      receivedOnOverride: null,
+      registrationNumber: " 品川 300 あ 12-34 ",
+      registeredOwnerName: " 所有者 ",
+      itemFeatures: " 白 ",
+      counterpartyType: "個人",
+      sellerNameOverride: "",
+      sellerAddress: " 東京都 ",
+      sellerOccupation: " 会社員 ",
+      sellerAge: 40,
+      identityVerificationMethod: "運転免許証",
+      identityVerificationNote: " 原本確認 ",
+      disposalOnOverride: null,
+      disposalTypeOverride: null,
+      buyerNameOverride: "",
+      note: "",
+    });
+
+    expect(row).toMatchObject({
+      vehicle_id: "vehicle-id",
+      registration_number: "品川 300 あ 12-34",
+      counterparty_type: "individual",
+      identity_verification_method: "drivers_license",
+    });
+    expect(mapAntiqueLedgerDetailFromDb({
+      id: "ledger-id",
+      vehicle_id: "vehicle-id",
+      intake_type: "purchase",
+      counterparty_type: "auction",
+      identity_verification_method: "auction_record",
+      disposal_type_override: "sale",
+      seller_age: null,
+      created_at: "2026-09-02T00:00:00Z",
+      updated_at: "2026-09-02T00:00:00Z",
+    })).toMatchObject({
+      counterpartyType: "オークション",
+      identityVerificationMethod: "オークション会場の取引記録",
+      disposalTypeOverride: "売却",
+    });
   });
 });

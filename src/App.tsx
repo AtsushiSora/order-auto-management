@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Layout } from "./components/Layout";
 import { AccountingPlaceholderPage } from "./pages/AccountingPlaceholderPage";
+import { AntiqueLedgerPage } from "./pages/AntiqueLedgerPage";
 import { ContractsPage } from "./pages/ContractsPage";
 import { DashboardPage } from "./pages/DashboardPage";
 import { ExpensesPage } from "./pages/ExpensesPage";
@@ -43,7 +44,9 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (page === "settings" && profile?.role !== "owner") {
+    const restrictedSettings = page === "settings" && profile?.role !== "owner";
+    const restrictedLedger = page === "antique-ledger" && profile?.role === "spot";
+    if (restrictedSettings || restrictedLedger) {
       window.location.hash = "#/dashboard";
       setPage("dashboard");
     }
@@ -77,7 +80,7 @@ export default function App() {
       case "site-integration":
         return <SiteIntegrationPage />;
       case "antique-ledger":
-        return <AccountingPlaceholderPage type="古物台帳" />;
+        return <AntiqueLedgerPage />;
       case "accounting":
         return <AccountingPlaceholderPage type="経理・仕訳候補" />;
       case "settings":

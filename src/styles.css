@@ -1073,7 +1073,8 @@ button.alert-card:hover {
 }
 
 .field-label input,
-.field-label select {
+.field-label select,
+.field-label textarea {
   width: 100%;
   height: 43px;
   padding: 0 11px;
@@ -1085,8 +1086,17 @@ button.alert-card:hover {
   font-weight: 500;
 }
 
+.field-label textarea {
+  height: auto;
+  min-height: 82px;
+  padding: 10px 11px;
+  line-height: 1.55;
+  resize: vertical;
+}
+
 .field-label input:focus,
-.field-label select:focus {
+.field-label select:focus,
+.field-label textarea:focus {
   border-color: #659edb;
   outline: 0;
   box-shadow: 0 0 0 3px rgba(7, 104, 215, 0.1);
@@ -1102,6 +1112,11 @@ button.alert-card:hover {
 }
 
 .field-label input:disabled {
+  color: var(--slate-500);
+  background: var(--slate-100);
+}
+
+.field-label textarea:disabled {
   color: var(--slate-500);
   background: var(--slate-100);
 }
@@ -1536,6 +1551,7 @@ button.alert-card:hover {
 }
 
 .mini-summary-card.amber { border-color: #ead8b4; background: linear-gradient(135deg, #fff, #fff8e9); }
+.mini-summary-card.blue { border-color: #bfd5ed; background: linear-gradient(135deg, #fff, #eef6ff); }
 .mini-summary-card.red { border-color: #edc4c7; background: linear-gradient(135deg, #fff, #fff4f4); }
 .mini-summary-card.teal { border-color: #b7dcda; background: linear-gradient(135deg, #fff, #ecf8f7); }
 
@@ -1550,6 +1566,103 @@ button.alert-card:hover {
   color: var(--slate-900);
   font-size: 22px;
   font-variant-numeric: tabular-nums;
+}
+
+button.mini-summary-card {
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: 140ms ease;
+}
+
+button.mini-summary-card:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-md);
+}
+
+.ledger-summary-grid .mini-summary-card {
+  position: relative;
+  padding-left: 58px;
+}
+
+.ledger-summary-grid .mini-summary-card > svg {
+  position: absolute;
+  left: 20px;
+  color: var(--slate-600);
+}
+
+.ledger-table td:nth-child(2) {
+  min-width: 260px;
+}
+
+.ledger-table td:nth-child(3) {
+  min-width: 210px;
+}
+
+.ledger-linked-section {
+  background: #f8fbfd;
+}
+
+.ledger-linked-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px 14px;
+  margin: 0 0 14px;
+}
+
+.ledger-linked-grid div {
+  padding: 11px 12px;
+  border: 1px solid var(--slate-200);
+  border-radius: 8px;
+  background: #fff;
+}
+
+.ledger-linked-grid .wide {
+  grid-column: 1 / -1;
+}
+
+.ledger-linked-grid dt {
+  margin-bottom: 5px;
+  color: var(--slate-500);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.ledger-linked-grid dd {
+  margin: 0;
+  color: var(--slate-800);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.55;
+}
+
+.ledger-missing-box,
+.ledger-complete-box {
+  padding: 13px 15px;
+  border: 1px solid #ead8b4;
+  border-radius: 9px;
+  color: var(--amber-700);
+  background: var(--amber-100);
+}
+
+.ledger-missing-box strong,
+.ledger-complete-box {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+}
+
+.ledger-missing-box p {
+  margin: 7px 0 0;
+  font-size: 11px;
+  line-height: 1.6;
+}
+
+.ledger-complete-box {
+  border-color: #b9dfd1;
+  color: var(--green-700);
+  background: var(--green-100);
 }
 
 .vehicle-reference strong,
@@ -2129,6 +2242,47 @@ button.alert-card:hover {
   .danger-zone {
     align-items: stretch;
     flex-direction: column;
+  }
+}
+
+@media print {
+  .sidebar,
+  .topbar,
+  .page-header-action,
+  .ledger-legal-note,
+  .ledger-summary-grid,
+  .ledger-filter-bar,
+  .ledger-table th:last-child,
+  .ledger-table td:last-child {
+    display: none !important;
+  }
+
+  .app-main,
+  .content {
+    width: 100%;
+    margin: 0;
+    padding: 0;
+  }
+
+  .page-header {
+    margin-bottom: 12px;
+  }
+
+  .panel,
+  .ledger-table-panel {
+    border: 0;
+    box-shadow: none;
+  }
+
+  .ledger-table {
+    white-space: normal;
+  }
+
+  .ledger-table th,
+  .ledger-table td {
+    padding: 7px;
+    color: #000 !important;
+    font-size: 9px;
   }
 }
 

@@ -11,7 +11,9 @@ import { DataLoadError, SystemLoading } from "../components/SystemState";
 import { seedData } from "../data/seed";
 import { supabase } from "../lib/supabase";
 import {
+  antiqueLedgerDetailToDb,
   mapApprovalFromDb,
+  mapAntiqueLedgerDetailFromDb,
   mapCashflowFromDb,
   mapContractFromDb,
   mapExpenseFromDb,
@@ -35,6 +37,7 @@ import type {
   NewVehicleInput,
   PurchaseContractInput,
   SaleContractInput,
+  SaveAntiqueLedgerDetailInput,
   SaveExpenseInput,
   Vehicle,
   VehicleDocument,
@@ -45,7 +48,16 @@ import type {
 import { useAuth } from "./AuthContext";
 
 const STORAGE_KEY = "order-auto-management-demo-v1";
-const emptyData: AppData = { vehicles: [], vehicleDocuments: [], expenses: [], cashflows: [], contracts: [], approvals: [], websiteInquiries: [] };
+const emptyData: AppData = {
+  vehicles: [],
+  vehicleDocuments: [],
+  expenses: [],
+  cashflows: [],
+  contracts: [],
+  approvals: [],
+  websiteInquiries: [],
+  antiqueLedgerDetails: [],
+};
 
 type AppDataContextValue = {
   data: AppData;
@@ -64,6 +76,7 @@ type AppDataContextValue = {
   completeCashflow: (cashflowId: string, processedOn: string) => Promise<void>;
   savePurchaseContract: (input: PurchaseContractInput) => Promise<void>;
   saveSaleContract: (input: SaleContractInput) => Promise<void>;
+  saveAntiqueLedgerDetail: (input: SaveAntiqueLedgerDetailInput) => Promise<void>;
   resetDemoData: () => void;
   refreshData: () => Promise<void>;
 };
@@ -110,6 +123,7 @@ const loadInitialDemoData = (): AppData => {
         kind: cashflow.kind ?? demoCashflowKind(cashflow),
       })),
       websiteInquiries: parsed.websiteInquiries ?? seed.websiteInquiries,
+      antiqueLedgerDetails: parsed.antiqueLedgerDetails ?? seed.antiqueLedgerDetails,
     };
   } catch {
     return cloneSeedData();
@@ -156,7 +170,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     setLoading(true);
     setLoadError(null);
     try {
-      const [vehiclesResult, documentsResult, expensesResult, cashflowsResult, contractsResult, approvalsResult, inquiriesResult] = await Promise.all([
+      const [vehiclesResult, documentsResult, expensesResult, cashflowsResult, contractsResult, approvalsResult, inquiriesResult, ledgerResult] = await Promise.all([
         supabase.from("vehicles").select("*").is("deleted_at", null).order("created_at", { ascending: false }),
         supabase.from("vehicle_documents").select("*").order("created_at", { ascending: true }),
         supabase.from("expenses").select("*").is("deleted_at", null).order("incurred_on", { ascending: false }),
@@ -164,9 +178,10 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         supabase.from("contracts").select("*").is("deleted_at", null).order("updated_at", { ascending: false }),
         supabase.from("approvals").select("*").order("created_at", { ascending: false }),
         supabase.from("website_inquiries").select("*").order("received_at", { ascending: false }),
+        supabase.from("antique_ledger_details").select("*").order("updated_at", { ascending: false }),
       ]);
 
-      const firstError = [vehiclesResult, documentsResult, expensesResult, cashflowsResult, contractsResult, approvalsResult, inquiriesResult]
+      const firstError = [vehiclesResult, documentsResult, expensesResult, cashflowsResult, contractsResult, approvalsResult, inquiriesResult, ledgerResult]
         .find((result) => result.error)?.error;
       if (firstError) throw firstError;
 
@@ -178,6 +193,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         contracts: (contractsResult.data ?? []).map(mapContractFromDb),
         approvals: (approvalsResult.data ?? []).map(mapApprovalFromDb),
         websiteInquiries: (inquiriesResult.data ?? []).map(mapWebsiteInquiryFromDb),
+        antiqueLedgerDetails: (ledgerResult.data ?? []).map(mapAntiqueLedgerDetailFromDb),
       });
     } catch (reason) {
       setLoadError(errorMessage(reason));
@@ -659,6 +675,43 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
           }, ...current.cashflows],
         };
       });
+    },
+    saveAntiqueLedgerDetail: async (input) => {
+      if (input.sellerAge != null && (!Number.isInteger(input.sellerAge) || input.sellerAge < 0 || input.sellerAge > 120)) {
+        throw new Error("年齢は0歳から120歳の整数で入力してください。");
+      }
+      const vehicle = data.vehicles.find((item) => item.id === input.vehicleId);
+      if (!vehicle) throw new Error("対象車両が見つかりません。");
+      const receivedOn = input.receivedOnOverride || vehicle.arrivedAt;
+      const disposedOn = input.disposalOnOverride || vehicle.deliveredAt;
+      if (receivedOn && disposedOn && disposedOn < receivedOn) {
+        throw new Error("払出年月日は受入年月日以降で入力してください。");
+      }
+
+      if (configured && supabase) {
+        const { error } = await supabase
+          .from("antique_ledger_details")
+          .upsert(antiqueLedgerDetailToDb(input), { onConflict: "vehicle_id" });
+        if (error) throw new Error(error.message);
+        await refreshData();
+        return;
+      }
+
+      const existing = data.antiqueLedgerDetails.find((item) => item.vehicleId === input.vehicleId);
+      const now = new Date().toISOString();
+      const saved = {
+        ...input,
+        id: existing?.id ?? crypto.randomUUID(),
+        createdAt: existing?.createdAt ?? now,
+        updatedAt: now,
+      };
+      setData((current) => ({
+        ...current,
+        antiqueLedgerDetails: [
+          saved,
+          ...current.antiqueLedgerDetails.filter((item) => item.vehicleId !== input.vehicleId),
+        ],
+      }));
     },
     resetDemoData: () => {
       if (!configured) setData(cloneSeedData());
