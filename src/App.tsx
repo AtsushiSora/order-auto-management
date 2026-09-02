@@ -7,6 +7,7 @@ import { ExpensesPage } from "./pages/ExpensesPage";
 import { PaymentsPage } from "./pages/PaymentsPage";
 import { ProfitsPage } from "./pages/ProfitsPage";
 import { SettingsPage } from "./pages/SettingsPage";
+import { SiteIntegrationPage } from "./pages/SiteIntegrationPage";
 import { VehiclesPage } from "./pages/VehiclesPage";
 import { useAuth } from "./state/AuthContext";
 import type { PageId } from "./types";
@@ -19,6 +20,7 @@ const pageIds: PageId[] = [
   "expenses",
   "payments",
   "profits",
+  "site-integration",
   "antique-ledger",
   "accounting",
   "settings",
@@ -72,6 +74,8 @@ export default function App() {
         return <PaymentsPage />;
       case "profits":
         return <ProfitsPage />;
+      case "site-integration":
+        return <SiteIntegrationPage />;
       case "antique-ledger":
         return <AccountingPlaceholderPage type="古物台帳" />;
       case "accounting":

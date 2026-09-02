@@ -17,13 +17,16 @@ import {
   mapExpenseFromDb,
   mapVehicleFromDb,
   mapVehicleDocumentFromDb,
+  mapWebsiteInquiryFromDb,
   expenseToRpc,
   newCashflowToDb,
   newVehicleToDb,
   purchaseContractToRpc,
   saleContractToRpc,
   vehiclePatchToDb,
+  vehiclePublicationToRpc,
   vehicleDocumentToDb,
+  websiteInquiryStatusToRpc,
 } from "../lib/supabaseData";
 import type {
   AppData,
@@ -36,17 +39,21 @@ import type {
   Vehicle,
   VehicleDocument,
   VehicleDocumentInput,
+  VehiclePublicationInput,
+  WebsiteInquiryStatus,
 } from "../types";
 import { useAuth } from "./AuthContext";
 
 const STORAGE_KEY = "order-auto-management-demo-v1";
-const emptyData: AppData = { vehicles: [], vehicleDocuments: [], expenses: [], cashflows: [], contracts: [], approvals: [] };
+const emptyData: AppData = { vehicles: [], vehicleDocuments: [], expenses: [], cashflows: [], contracts: [], approvals: [], websiteInquiries: [] };
 
 type AppDataContextValue = {
   data: AppData;
   isDemo: boolean;
   addVehicle: (input: NewVehicleInput) => Promise<Vehicle>;
   updateVehicle: (vehicleId: string, patch: Partial<Vehicle>) => Promise<void>;
+  saveVehiclePublication: (input: VehiclePublicationInput) => Promise<void>;
+  updateWebsiteInquiryStatus: (inquiryId: string, status: WebsiteInquiryStatus) => Promise<void>;
   markVehicleArrived: (vehicleId: string, arrivedOn: string) => Promise<void>;
   markVehicleDelivered: (vehicleId: string, deliveredOn: string) => Promise<void>;
   updateVehicleDocument: (input: VehicleDocumentInput) => Promise<VehicleDocument>;
@@ -65,6 +72,20 @@ const AppDataContext = createContext<AppDataContextValue | null>(null);
 
 const cloneSeedData = (): AppData => structuredClone(seedData);
 
+const publicationDefaults = (vehicle: Pick<Vehicle, "askingPrice">) => ({
+  salesSitePublished: false,
+  soldDisplayMode: "売約済み表示" as const,
+  publicMaker: "",
+  publicGrade: "",
+  publicYear: "",
+  publicMileage: "",
+  publicColor: "",
+  publicInspection: "",
+  publicPrice: vehicle.askingPrice,
+  publicDescription: "",
+  publicImageUrl: "",
+});
+
 const loadInitialDemoData = (): AppData => {
   if (typeof window === "undefined") return cloneSeedData();
   try {
@@ -75,6 +96,10 @@ const loadInitialDemoData = (): AppData => {
     return {
       ...seed,
       ...parsed,
+      vehicles: (parsed.vehicles ?? seed.vehicles).map((vehicle) => ({
+        ...publicationDefaults(vehicle),
+        ...vehicle,
+      })),
       vehicleDocuments: parsed.vehicleDocuments ?? [],
       expenses: (parsed.expenses ?? seed.expenses).map((expense) => ({
         ...expense,
@@ -84,6 +109,7 @@ const loadInitialDemoData = (): AppData => {
         ...cashflow,
         kind: cashflow.kind ?? demoCashflowKind(cashflow),
       })),
+      websiteInquiries: parsed.websiteInquiries ?? seed.websiteInquiries,
     };
   } catch {
     return cloneSeedData();
@@ -130,16 +156,17 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     setLoading(true);
     setLoadError(null);
     try {
-      const [vehiclesResult, documentsResult, expensesResult, cashflowsResult, contractsResult, approvalsResult] = await Promise.all([
+      const [vehiclesResult, documentsResult, expensesResult, cashflowsResult, contractsResult, approvalsResult, inquiriesResult] = await Promise.all([
         supabase.from("vehicles").select("*").is("deleted_at", null).order("created_at", { ascending: false }),
         supabase.from("vehicle_documents").select("*").order("created_at", { ascending: true }),
         supabase.from("expenses").select("*").is("deleted_at", null).order("incurred_on", { ascending: false }),
         supabase.from("cashflows").select("*").is("deleted_at", null).order("scheduled_on", { ascending: false }),
         supabase.from("contracts").select("*").is("deleted_at", null).order("updated_at", { ascending: false }),
         supabase.from("approvals").select("*").order("created_at", { ascending: false }),
+        supabase.from("website_inquiries").select("*").order("received_at", { ascending: false }),
       ]);
 
-      const firstError = [vehiclesResult, documentsResult, expensesResult, cashflowsResult, contractsResult, approvalsResult]
+      const firstError = [vehiclesResult, documentsResult, expensesResult, cashflowsResult, contractsResult, approvalsResult, inquiriesResult]
         .find((result) => result.error)?.error;
       if (firstError) throw firstError;
 
@@ -150,6 +177,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         cashflows: (cashflowsResult.data ?? []).map(mapCashflowFromDb),
         contracts: (contractsResult.data ?? []).map(mapContractFromDb),
         approvals: (approvalsResult.data ?? []).map(mapApprovalFromDb),
+        websiteInquiries: (inquiriesResult.data ?? []).map(mapWebsiteInquiryFromDb),
       });
     } catch (reason) {
       setLoadError(errorMessage(reason));
@@ -264,6 +292,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         arrivedAt: input.status === "入庫予定" ? null : now.slice(0, 10),
         deliveredAt: null,
         documentsComplete: false,
+        ...publicationDefaults(input),
         createdAt: now,
         updatedAt: now,
       };
@@ -292,6 +321,41 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         vehicles: current.vehicles.map((vehicle) => vehicle.id === vehicleId
           ? { ...vehicle, ...patch, updatedAt: new Date().toISOString() }
           : vehicle),
+      }));
+    },
+    saveVehiclePublication: async (input) => {
+      const target = data.vehicles.find((vehicle) => vehicle.id === input.vehicleId);
+      if (!target) throw new Error("対象車両が見つかりません。");
+      if (input.publicPrice < 0) throw new Error("サイト表示価格は0円以上で入力してください。");
+      if (input.salesSitePublished) {
+        if (!["販売中", "売約済み", "納車済み"].includes(target.status)) {
+          throw new Error("販売中・売約済み・納車済みの車両だけ公開できます。");
+        }
+        if (!input.publicMaker.trim()) throw new Error("公開する場合はメーカーを入力してください。");
+      }
+      if (configured && supabase) {
+        const { error } = await supabase.rpc("save_vehicle_publication", vehiclePublicationToRpc(input));
+        if (error) throw new Error(error.message);
+        await refreshData();
+        return;
+      }
+      setData((current) => ({
+        ...current,
+        vehicles: current.vehicles.map((vehicle) => vehicle.id === input.vehicleId
+          ? { ...vehicle, ...input, updatedAt: new Date().toISOString() }
+          : vehicle),
+      }));
+    },
+    updateWebsiteInquiryStatus: async (inquiryId, status) => {
+      if (configured && supabase) {
+        const { error } = await supabase.rpc("update_website_inquiry_status", websiteInquiryStatusToRpc(inquiryId, status));
+        if (error) throw new Error(error.message);
+        await refreshData();
+        return;
+      }
+      setData((current) => ({
+        ...current,
+        websiteInquiries: current.websiteInquiries.map((inquiry) => inquiry.id === inquiryId ? { ...inquiry, status } : inquiry),
       }));
     },
     markVehicleArrived: async (vehicleId, arrivedOn) => {
@@ -510,6 +574,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
           arrivedAt: null,
           deliveredAt: null,
           documentsComplete: false,
+          ...publicationDefaults({ askingPrice: input.askingPrice }),
           createdAt: now,
           updatedAt: now,
         };

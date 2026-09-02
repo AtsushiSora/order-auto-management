@@ -5,12 +5,15 @@ import {
   mapExpenseFromDb,
   mapVehicleFromDb,
   mapVehicleDocumentFromDb,
+  mapWebsiteInquiryFromDb,
   expenseToRpc,
   newCashflowToDb,
   newVehicleToDb,
   purchaseContractToRpc,
   saleContractToRpc,
   vehicleDocumentToDb,
+  vehiclePublicationToRpc,
+  websiteInquiryStatusToRpc,
 } from "./supabaseData";
 
 describe("Supabaseデータ変換", () => {
@@ -55,6 +58,53 @@ describe("Supabaseデータ変換", () => {
     expect(vehicle.acquisitionSource).toBe("一般のお客様");
     expect(vehicle.salePrice).toBe(580000);
     expect(vehicle.chassisNumber).toBe("");
+    expect(vehicle.salesSitePublished).toBe(false);
+    expect(vehicle.soldDisplayMode).toBe("売約済み表示");
+  });
+
+  it("公開用の車両情報だけをRPC引数へ変換する", () => {
+    const input = vehiclePublicationToRpc({
+      vehicleId: "vehicle-id",
+      salesSitePublished: true,
+      soldDisplayMode: "非表示",
+      publicMaker: " メーカー ",
+      publicGrade: " G ",
+      publicYear: "2024年",
+      publicMileage: "10,000km",
+      publicColor: "白",
+      publicInspection: "2028年1月",
+      publicPrice: 880000,
+      publicDescription: " 公開説明 ",
+      publicImageUrl: "https://example.com/car.jpg",
+    });
+
+    expect(input).toMatchObject({
+      p_vehicle_id: "vehicle-id",
+      p_sales_site_published: true,
+      p_sold_display_mode: "hidden",
+      p_public_maker: "メーカー",
+      p_public_price: 880000,
+    });
+    expect(input).not.toHaveProperty("chassis_number");
+    expect(input).not.toHaveProperty("purchase_price");
+  });
+
+  it("サイト問い合わせを社内表示へ変換し、対応状況をRPCへ渡せる", () => {
+    expect(mapWebsiteInquiryFromDb({
+      id: "inquiry-id",
+      source: "scrap_site",
+      customer_name: "確認 お客様",
+      email: "test@example.com",
+      phone: "090-0000-0000",
+      message: "事故車の相談",
+      interested_vehicle_id: null,
+      status: "in_progress",
+      received_at: "2026-09-02T00:00:00Z",
+    })).toMatchObject({ source: "廃車サイト", status: "対応中" });
+    expect(websiteInquiryStatusToRpc("inquiry-id", "完了")).toEqual({
+      p_inquiry_id: "inquiry-id",
+      p_status: "completed",
+    });
   });
 
   it("0円買取は車両に保存でき、支払い行は0円で作らない", () => {

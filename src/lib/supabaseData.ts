@@ -18,10 +18,13 @@ import type {
   SaleContractInput,
   SaveExpenseInput,
   Vehicle,
+  VehiclePublicationInput,
   VehicleDocument,
   VehicleDocumentInput,
   VehicleDocumentType,
   VehicleStatus,
+  WebsiteInquiry,
+  WebsiteInquiryStatus,
 } from "../types";
 
 type DbRow = Record<string, unknown>;
@@ -114,6 +117,28 @@ const approvalStatusFromDb: Record<string, Approval["status"]> = {
   approved: "承認",
   rejected: "却下",
 };
+const soldDisplayModeFromDb: Record<string, Vehicle["soldDisplayMode"]> = {
+  show_sold: "売約済み表示",
+  hidden: "非表示",
+};
+const soldDisplayModeToDb: Record<Vehicle["soldDisplayMode"], string> = {
+  売約済み表示: "show_sold",
+  非表示: "hidden",
+};
+const inquirySourceFromDb: Record<string, WebsiteInquiry["source"]> = {
+  sales_site: "販売サイト",
+  scrap_site: "廃車サイト",
+};
+const inquiryStatusFromDb: Record<string, WebsiteInquiryStatus> = {
+  new: "新着",
+  in_progress: "対応中",
+  completed: "完了",
+};
+const inquiryStatusToDb: Record<WebsiteInquiryStatus, string> = {
+  新着: "new",
+  対応中: "in_progress",
+  完了: "completed",
+};
 
 const stringValue = (row: DbRow, key: string) => String(row[key] ?? "");
 const nullableString = (row: DbRow, key: string) => (row[key] == null ? null : String(row[key]));
@@ -136,10 +161,56 @@ export const mapVehicleFromDb = (source: unknown): Vehicle => {
     arrivedAt: nullableString(row, "arrived_at"),
     deliveredAt: nullableString(row, "delivered_at"),
     documentsComplete: Boolean(row.documents_complete),
+    salesSitePublished: Boolean(row.sales_site_published),
+    soldDisplayMode: soldDisplayModeFromDb[stringValue(row, "sold_display_mode")] ?? "売約済み表示",
+    publicMaker: stringValue(row, "public_maker"),
+    publicGrade: stringValue(row, "public_grade"),
+    publicYear: stringValue(row, "public_year"),
+    publicMileage: stringValue(row, "public_mileage"),
+    publicColor: stringValue(row, "public_color"),
+    publicInspection: stringValue(row, "public_inspection"),
+    publicPrice: numberValue(row, "public_price"),
+    publicDescription: stringValue(row, "public_description"),
+    publicImageUrl: stringValue(row, "public_image_url"),
     createdAt: stringValue(row, "created_at"),
     updatedAt: stringValue(row, "updated_at"),
   };
 };
+
+export const vehiclePublicationToRpc = (input: VehiclePublicationInput) => ({
+  p_vehicle_id: input.vehicleId,
+  p_sales_site_published: input.salesSitePublished,
+  p_sold_display_mode: soldDisplayModeToDb[input.soldDisplayMode],
+  p_public_maker: input.publicMaker.trim(),
+  p_public_grade: input.publicGrade.trim(),
+  p_public_year: input.publicYear.trim(),
+  p_public_mileage: input.publicMileage.trim(),
+  p_public_color: input.publicColor.trim(),
+  p_public_inspection: input.publicInspection.trim(),
+  p_public_price: input.publicPrice,
+  p_public_description: input.publicDescription.trim(),
+  p_public_image_url: input.publicImageUrl.trim(),
+});
+
+export const mapWebsiteInquiryFromDb = (source: unknown): WebsiteInquiry => {
+  const row = source as DbRow;
+  return {
+    id: stringValue(row, "id"),
+    source: inquirySourceFromDb[stringValue(row, "source")] ?? "廃車サイト",
+    customerName: stringValue(row, "customer_name"),
+    email: stringValue(row, "email"),
+    phone: stringValue(row, "phone"),
+    message: stringValue(row, "message"),
+    interestedVehicleId: nullableString(row, "interested_vehicle_id"),
+    status: inquiryStatusFromDb[stringValue(row, "status")] ?? "新着",
+    receivedAt: stringValue(row, "received_at"),
+  };
+};
+
+export const websiteInquiryStatusToRpc = (inquiryId: string, status: WebsiteInquiryStatus) => ({
+  p_inquiry_id: inquiryId,
+  p_status: inquiryStatusToDb[status],
+});
 
 export const newVehicleToDb = (input: NewVehicleInput) => ({
   name: input.name,

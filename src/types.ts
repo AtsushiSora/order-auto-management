@@ -6,6 +6,7 @@ export type PageId =
   | "expenses"
   | "payments"
   | "profits"
+  | "site-integration"
   | "antique-ledger"
   | "accounting"
   | "settings";
@@ -33,6 +34,8 @@ export type AcquisitionSource =
   | "業者"
   | "保険関係";
 
+export type SoldDisplayMode = "売約済み表示" | "非表示";
+
 export type Vehicle = {
   id: string;
   managementNumber: string;
@@ -48,6 +51,17 @@ export type Vehicle = {
   arrivedAt: string | null;
   deliveredAt: string | null;
   documentsComplete: boolean;
+  salesSitePublished: boolean;
+  soldDisplayMode: SoldDisplayMode;
+  publicMaker: string;
+  publicGrade: string;
+  publicYear: string;
+  publicMileage: string;
+  publicColor: string;
+  publicInspection: string;
+  publicPrice: number;
+  publicDescription: string;
+  publicImageUrl: string;
   createdAt: string;
   updatedAt: string;
 };
@@ -139,6 +153,20 @@ export type Approval = {
   status: "承認待ち" | "承認" | "却下";
 };
 
+export type WebsiteInquiryStatus = "新着" | "対応中" | "完了";
+
+export type WebsiteInquiry = {
+  id: string;
+  source: "販売サイト" | "廃車サイト";
+  customerName: string;
+  email: string;
+  phone: string;
+  message: string;
+  interestedVehicleId: string | null;
+  status: WebsiteInquiryStatus;
+  receivedAt: string;
+};
+
 export type AppData = {
   vehicles: Vehicle[];
   vehicleDocuments: VehicleDocument[];
@@ -146,6 +174,7 @@ export type AppData = {
   cashflows: Cashflow[];
   contracts: Contract[];
   approvals: Approval[];
+  websiteInquiries: WebsiteInquiry[];
 };
 
 export type VehicleDocumentInput = Omit<VehicleDocument, "id" | "createdAt" | "updatedAt">;
@@ -161,6 +190,21 @@ export type NewVehicleInput = Pick<
   | "storageLocation"
   | "plannedArrivalDate"
 >;
+
+export type VehiclePublicationInput = Pick<
+  Vehicle,
+  | "salesSitePublished"
+  | "soldDisplayMode"
+  | "publicMaker"
+  | "publicGrade"
+  | "publicYear"
+  | "publicMileage"
+  | "publicColor"
+  | "publicInspection"
+  | "publicPrice"
+  | "publicDescription"
+  | "publicImageUrl"
+> & { vehicleId: string };
 
 export type NewExpenseInput = Omit<Expense, "id" | "createdAt">;
 export type SaveExpenseInput = NewExpenseInput & { expenseId: string | null };

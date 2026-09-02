@@ -4,6 +4,7 @@ import type {
   ExpenseStatus,
   PaymentStatus,
   VehicleStatus,
+  WebsiteInquiryStatus,
 } from "../types";
 
 type BadgeValue =
@@ -12,6 +13,9 @@ type BadgeValue =
   | PaymentStatus
   | CashflowStatus
   | ContractStatus
+  | WebsiteInquiryStatus
+  | "掲載中"
+  | "非公開"
   | "正常"
   | "全体経費";
 
@@ -35,9 +39,12 @@ const toneByValue: Record<BadgeValue, string> = {
   キャンセル済み: "dark",
   正常: "green",
   全体経費: "purple",
+  新着: "red",
+  対応中: "amber",
+  掲載中: "green",
+  非公開: "slate",
 };
 
 export function StatusBadge({ children }: { children: BadgeValue }) {
   return <span className={`status-badge ${toneByValue[children]}`}>{children}</span>;
 }
-

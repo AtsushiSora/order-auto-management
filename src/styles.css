@@ -701,6 +701,23 @@ button.alert-card:hover {
 .status-badge.red { color: var(--red-700); background: var(--red-100); }
 .status-badge.dark { color: #fff; background: #536273; }
 
+.integration-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  margin-bottom: 22px;
+  padding: 18px 20px;
+  color: var(--teal-700);
+  background: linear-gradient(135deg, #fff, var(--teal-100));
+}
+
+.integration-note svg { flex: 0 0 auto; margin-top: 2px; }
+.integration-note strong { display: block; color: var(--slate-900); font-size: 14px; }
+.integration-note p { margin: 5px 0 0; color: var(--slate-600); font-size: 12px; line-height: 1.7; }
+.inquiry-table .inquiry-message { min-width: 260px; max-width: 440px; white-space: normal; line-height: 1.55; }
+.inquiry-table select { min-width: 105px; }
+.page-error { margin-top: 16px; }
+
 .demo-note {
   margin: 17px 0 0;
   color: var(--slate-500);
