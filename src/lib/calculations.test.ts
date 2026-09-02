@@ -15,6 +15,16 @@ describe("calculateVehicleProfit", () => {
     expect(result.plannedExpenses).toBe(180000);
     expect(result.provisionalProfit).toBe(425000);
     expect(result.expectedProfit).toBe(245000);
+    expect(result.isFinal).toBe(false);
+  });
+
+  it("納車済みで予定費用がなければ粗利を確定する", () => {
+    const vehicle = { ...seedData.vehicles[2], status: "納車済み" as const, deliveredAt: "2026-09-02" };
+    const result = calculateVehicleProfit(vehicle, seedData.expenses);
+
+    expect(result.plannedExpenses).toBe(0);
+    expect(result.isFinal).toBe(true);
+    expect(result.provisionalProfit).toBe(312000);
   });
 });
 
@@ -38,4 +48,3 @@ describe("outstandingAmount", () => {
     expect(outstandingAmount(100000, 120000)).toBe(0);
   });
 });
-

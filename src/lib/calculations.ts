@@ -7,6 +7,7 @@ export type VehicleProfit = {
   revenueBasis: number;
   provisionalProfit: number;
   expectedProfit: number;
+  isFinal: boolean;
 };
 
 const sumExpenses = (expenses: Expense[]): number =>
@@ -27,6 +28,7 @@ export const calculateVehicleProfit = (
   const provisionalProfit =
     revenueBasis - vehicle.purchasePrice - confirmedExpenses;
   const expectedProfit = provisionalProfit - plannedExpenses;
+  const isFinal = ["納車済み", "廃車処分"].includes(vehicle.status) && plannedExpenses === 0;
 
   return {
     vehicleId: vehicle.id,
@@ -35,6 +37,7 @@ export const calculateVehicleProfit = (
     revenueBasis,
     provisionalProfit,
     expectedProfit,
+    isFinal,
   };
 };
 
@@ -66,4 +69,3 @@ export const getDashboardCounts = (data: AppData) => ({
 
 export const outstandingAmount = (amount: number, processedAmount: number) =>
   Math.max(0, amount - processedAmount);
-

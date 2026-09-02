@@ -16,6 +16,7 @@ import type {
   PaymentStatus,
   PurchaseContractInput,
   SaleContractInput,
+  SaveExpenseInput,
   Vehicle,
   VehicleDocument,
   VehicleDocumentInput,
@@ -203,6 +204,7 @@ export const mapExpenseFromDb = (source: unknown): Expense => {
     amount: numberValue(row, "amount"),
     expenseStatus: expenseStatusFromDb[stringValue(row, "expense_status")] ?? "確定",
     paymentStatus: paymentStatusFromDb[stringValue(row, "payment_status")] ?? "未払い",
+    paymentMethod: paymentMethodFromDb[stringValue(row, "payment_method")] ?? "振込",
     incurredOn: stringValue(row, "incurred_on"),
     createdAt: stringValue(row, "created_at"),
   };
@@ -215,7 +217,20 @@ export const newExpenseToDb = (input: NewExpenseInput) => ({
   amount: input.amount,
   expense_status: expenseStatusToDb[input.expenseStatus],
   payment_status: paymentStatusToDb[input.paymentStatus],
+  payment_method: paymentMethodToDb[input.paymentMethod],
   incurred_on: input.incurredOn,
+});
+
+export const expenseToRpc = (input: SaveExpenseInput) => ({
+  p_expense_id: input.expenseId,
+  p_vehicle_id: input.vehicleId,
+  p_category: input.category.trim(),
+  p_description: input.description.trim(),
+  p_amount: input.amount,
+  p_expense_status: expenseStatusToDb[input.expenseStatus],
+  p_payment_status: paymentStatusToDb[input.paymentStatus],
+  p_payment_method: paymentMethodToDb[input.paymentMethod],
+  p_incurred_on: input.incurredOn,
 });
 
 const inferCashflowKind = (input: NewCashflowInput): CashflowKind => {
@@ -232,6 +247,7 @@ export const mapCashflowFromDb = (source: unknown): Cashflow => {
   return {
     id: stringValue(row, "id"),
     vehicleId: nullableString(row, "vehicle_id"),
+    expenseId: nullableString(row, "source_expense_id"),
     direction: directionFromDb[stringValue(row, "direction")] ?? "入金",
     kind: cashflowKindFromDb[stringValue(row, "kind")] ?? "その他",
     description: stringValue(row, "description"),

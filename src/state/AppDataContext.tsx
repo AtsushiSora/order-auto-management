@@ -17,8 +17,8 @@ import {
   mapExpenseFromDb,
   mapVehicleFromDb,
   mapVehicleDocumentFromDb,
+  expenseToRpc,
   newCashflowToDb,
-  newExpenseToDb,
   newVehicleToDb,
   purchaseContractToRpc,
   saleContractToRpc,
@@ -32,6 +32,7 @@ import type {
   NewVehicleInput,
   PurchaseContractInput,
   SaleContractInput,
+  SaveExpenseInput,
   Vehicle,
   VehicleDocument,
   VehicleDocumentInput,
@@ -51,6 +52,7 @@ type AppDataContextValue = {
   updateVehicleDocument: (input: VehicleDocumentInput) => Promise<VehicleDocument>;
   archiveVehicle: (vehicleId: string) => Promise<void>;
   addExpense: (input: NewExpenseInput) => Promise<void>;
+  saveExpense: (input: SaveExpenseInput) => Promise<void>;
   addCashflow: (input: NewCashflowInput) => Promise<void>;
   completeCashflow: (cashflowId: string, processedOn: string) => Promise<void>;
   savePurchaseContract: (input: PurchaseContractInput) => Promise<void>;
@@ -74,6 +76,10 @@ const loadInitialDemoData = (): AppData => {
       ...seed,
       ...parsed,
       vehicleDocuments: parsed.vehicleDocuments ?? [],
+      expenses: (parsed.expenses ?? seed.expenses).map((expense) => ({
+        ...expense,
+        paymentMethod: expense.paymentMethod ?? "振込",
+      })),
       cashflows: (parsed.cashflows ?? seed.cashflows).map((cashflow) => ({
         ...cashflow,
         kind: cashflow.kind ?? demoCashflowKind(cashflow),
@@ -155,6 +161,83 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     void refreshData();
   }, [refreshData]);
+
+  const persistExpense = useCallback(async (input: SaveExpenseInput) => {
+    if (!input.category.trim() || !input.description.trim()) throw new Error("費用項目と内容を入力してください。");
+    if (input.amount <= 0) throw new Error("金額は1円以上で入力してください。");
+    if (!input.incurredOn) throw new Error("発生日を入力してください。");
+    if (input.expenseStatus === "予定" && input.paymentStatus === "支払済み") {
+      throw new Error("予定費用を支払済みにはできません。");
+    }
+
+    if (configured && supabase) {
+      const { error } = await supabase.rpc("save_expense", expenseToRpc(input));
+      if (error) throw new Error(error.message);
+      await refreshData();
+      return;
+    }
+
+    const existing = input.expenseId ? data.expenses.find((expense) => expense.id === input.expenseId) : null;
+    if (input.expenseId && !existing) throw new Error("対象の経費が見つかりません。");
+    const linked = input.expenseId
+      ? data.cashflows.find((cashflow) => cashflow.expenseId === input.expenseId && cashflow.kind === "経費支払い")
+      : null;
+    if (input.expenseStatus === "予定" && linked && linked.processedAmount > 0) {
+      throw new Error("支払い処理済みの経費は予定費用へ戻せません。");
+    }
+    if (input.paymentStatus === "未払い" && linked?.status === "完了") {
+      throw new Error("支払済みの取消は入出金の訂正機能から行ってください。");
+    }
+    if (linked && input.amount < linked.processedAmount) {
+      throw new Error("金額を支払い済み額より少なくできません。");
+    }
+
+    const now = new Date().toISOString();
+    const expenseId = existing?.id ?? crypto.randomUUID();
+    const expense = {
+      id: expenseId,
+      vehicleId: input.vehicleId,
+      category: input.category.trim(),
+      description: input.description.trim(),
+      amount: input.amount,
+      expenseStatus: input.expenseStatus,
+      paymentStatus: input.expenseStatus === "予定" ? "未払い" as const : input.paymentStatus,
+      paymentMethod: input.paymentMethod,
+      incurredOn: input.incurredOn,
+      createdAt: existing?.createdAt ?? now,
+    };
+
+    setData((current) => {
+      let cashflows = current.cashflows;
+      if (input.expenseStatus === "予定") {
+        cashflows = linked ? cashflows.filter((cashflow) => cashflow.id !== linked.id) : cashflows;
+      } else {
+        const processedAmount = input.paymentStatus === "支払済み" ? input.amount : linked?.processedAmount ?? 0;
+        const status = processedAmount === 0 ? "未処理" as const : processedAmount >= input.amount ? "完了" as const : "一部" as const;
+        const cashflow = {
+          id: linked?.id ?? crypto.randomUUID(),
+          vehicleId: input.vehicleId,
+          expenseId,
+          direction: "支払い" as const,
+          kind: "経費支払い" as const,
+          description: `経費 ${input.category.trim()}：${input.description.trim()}`,
+          amount: input.amount,
+          processedAmount,
+          status,
+          method: input.paymentMethod,
+          scheduledOn: input.incurredOn,
+          processedOn: status === "完了" ? linked?.processedOn ?? now.slice(0, 10) : linked?.processedOn ?? null,
+          createdAt: linked?.createdAt ?? now,
+        };
+        cashflows = [cashflow, ...cashflows.filter((item) => item.id !== cashflow.id)];
+      }
+      return {
+        ...current,
+        expenses: [expense, ...current.expenses.filter((item) => item.id !== expenseId)],
+        cashflows,
+      };
+    });
+  }, [configured, data.cashflows, data.expenses, refreshData]);
 
   const value = useMemo<AppDataContextValue>(() => ({
     data,
@@ -317,24 +400,8 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         vehicleDocuments: current.vehicleDocuments.filter((document) => document.vehicleId !== vehicleId),
       }));
     },
-    addExpense: async (input) => {
-      if (configured && supabase) {
-        const { data: inserted, error } = await supabase
-          .from("expenses")
-          .insert(newExpenseToDb(input))
-          .select("*")
-          .single();
-        if (error) throw new Error(error.message);
-        const expense = mapExpenseFromDb(inserted);
-        setData((current) => ({ ...current, expenses: [expense, ...current.expenses] }));
-        return;
-      }
-
-      setData((current) => ({
-        ...current,
-        expenses: [{ ...input, id: crypto.randomUUID(), createdAt: new Date().toISOString() }, ...current.expenses],
-      }));
-    },
+    addExpense: async (input) => persistExpense({ ...input, expenseId: null }),
+    saveExpense: persistExpense,
     addCashflow: async (input) => {
       if (configured && supabase) {
         const { data: inserted, error } = await supabase
@@ -380,6 +447,9 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         cashflows: current.cashflows.map((item) => item.id === cashflowId
           ? { ...item, processedAmount: item.amount, status: "完了", processedOn }
           : item),
+        expenses: cashflow.expenseId
+          ? current.expenses.map((expense) => expense.id === cashflow.expenseId ? { ...expense, paymentStatus: "支払済み" } : expense)
+          : current.expenses,
       }));
     },
     savePurchaseContract: async (input) => {
@@ -529,7 +599,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       if (!configured) setData(cloneSeedData());
     },
     refreshData,
-  }), [configured, data, refreshData, session?.user.id]);
+  }), [configured, data, persistExpense, refreshData, session?.user.id]);
 
   if (loading) return <SystemLoading message="共有データを読み込んでいます" />;
   if (loadError) return <DataLoadError message={loadError} onRetry={() => void refreshData()} />;

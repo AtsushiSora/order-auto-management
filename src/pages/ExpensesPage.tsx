@@ -1,11 +1,12 @@
-import { Plus, Search } from "lucide-react";
+import { Pencil, Plus, Search } from "lucide-react";
 import { useMemo, useState, type FormEvent } from "react";
 import { Drawer } from "../components/Drawer";
 import { PageHeader } from "../components/PageHeader";
 import { StatusBadge } from "../components/StatusBadge";
 import { formatCurrency, formatDate } from "../lib/format";
 import { useAppData } from "../state/AppDataContext";
-import type { ExpenseStatus, NewExpenseInput, PaymentStatus } from "../types";
+import { useAuth } from "../state/AuthContext";
+import type { Expense, ExpenseStatus, PaymentMethod, PaymentStatus, SaveExpenseInput } from "../types";
 
 const expenseCategories = [
   "部品代",
@@ -18,22 +19,28 @@ const expenseCategories = [
   "その他",
 ];
 
-const initialExpense = (): NewExpenseInput => ({
+const paymentMethods: PaymentMethod[] = ["現金", "振込", "ローン会社", "カード", "その他"];
+
+const initialExpense = (): SaveExpenseInput => ({
+  expenseId: null,
   vehicleId: null,
   category: "部品代",
   description: "",
   amount: 0,
   expenseStatus: "確定",
   paymentStatus: "未払い",
+  paymentMethod: "振込",
   incurredOn: new Date().toISOString().slice(0, 10),
 });
 
 export function ExpensesPage() {
-  const { data, addExpense } = useAppData();
+  const { data, saveExpense } = useAppData();
+  const { profile } = useAuth();
+  const canEdit = profile?.role === "owner" || profile?.role === "regular" || profile?.role === "accounting";
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [scope, setScope] = useState<"すべて" | "車両" | "事業全体">("すべて");
-  const [form, setForm] = useState<NewExpenseInput>(initialExpense);
+  const [form, setForm] = useState<SaveExpenseInput>(initialExpense);
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
@@ -73,6 +80,22 @@ export function ExpensesPage() {
     setDrawerOpen(true);
   };
 
+  const openEdit = (expense: Expense) => {
+    setForm({
+      expenseId: expense.id,
+      vehicleId: expense.vehicleId,
+      category: expense.category,
+      description: expense.description,
+      amount: expense.amount,
+      expenseStatus: expense.expenseStatus,
+      paymentStatus: expense.paymentStatus,
+      paymentMethod: expense.paymentMethod,
+      incurredOn: expense.incurredOn,
+    });
+    setError("");
+    setDrawerOpen(true);
+  };
+
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!form.description.trim()) {
@@ -85,7 +108,7 @@ export function ExpensesPage() {
     }
     setSubmitting(true);
     try {
-      await addExpense({ ...form, description: form.description.trim() });
+      await saveExpense({ ...form, category: form.category.trim(), description: form.description.trim() });
       setDrawerOpen(false);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "経費を登録できませんでした。");
@@ -99,12 +122,12 @@ export function ExpensesPage() {
       <PageHeader
         title="経費"
         description="車両に直接かかった費用と、事業全体の経費を分けて記録します。"
-        action={
+        action={canEdit ? (
           <button type="button" className="primary-button" onClick={openForm}>
             <Plus size={20} />
             経費を登録
           </button>
-        }
+        ) : undefined}
       />
 
       <section className="mini-summary-grid">
@@ -137,6 +160,7 @@ export function ExpensesPage() {
                 <th>区分</th>
                 <th>支払い</th>
                 <th className="number-cell">金額</th>
+                <th>操作</th>
               </tr>
             </thead>
             <tbody>
@@ -154,6 +178,7 @@ export function ExpensesPage() {
                     <td><StatusBadge>{expense.expenseStatus}</StatusBadge></td>
                     <td><StatusBadge>{expense.paymentStatus}</StatusBadge></td>
                     <td className="number-cell"><strong>{formatCurrency(expense.amount)}</strong></td>
+                    <td>{canEdit ? <button type="button" className="text-button" onClick={() => openEdit(expense)}><Pencil size={15} />修正</button> : null}</td>
                   </tr>
                 );
               })}
@@ -163,7 +188,7 @@ export function ExpensesPage() {
       </section>
 
       {drawerOpen ? (
-        <Drawer title="経費を登録" subtitle="予定費用は予想利益だけに反映されます。" onClose={() => setDrawerOpen(false)}>
+        <Drawer title={form.expenseId ? "経費を修正" : "経費を登録"} subtitle="予定費用は予想利益だけに反映され、確定すると入出金へ連動します。" onClose={() => setDrawerOpen(false)}>
           <form className="form-stack" onSubmit={submit}>
             <div className="form-section">
               <h3>対象と内容</h3>
@@ -203,7 +228,7 @@ export function ExpensesPage() {
               <div className="form-row">
                 <label className="field-label">
                   費用区分
-                  <select value={form.expenseStatus} onChange={(event) => setForm({ ...form, expenseStatus: event.target.value as ExpenseStatus })}>
+                  <select value={form.expenseStatus} onChange={(event) => setForm({ ...form, expenseStatus: event.target.value as ExpenseStatus, paymentStatus: event.target.value === "予定" ? "未払い" : form.paymentStatus })}>
                     <option>確定</option><option>予定</option>
                   </select>
                 </label>
@@ -214,13 +239,20 @@ export function ExpensesPage() {
                   </select>
                 </label>
               </div>
+              <label className="field-label">
+                支払い方法
+                <select value={form.paymentMethod} onChange={(event) => setForm({ ...form, paymentMethod: event.target.value as PaymentMethod })}>
+                  {paymentMethods.map((method) => <option key={method}>{method}</option>)}
+                </select>
+              </label>
               {form.expenseStatus === "予定" ? <p className="form-hint">予定費用は未払い一覧や帳簿には含めません。</p> : null}
+              {form.expenseStatus === "確定" ? <p className="form-hint">確定費用は、同じ金額・支払い方法で入出金の「経費支払い」へ自動連携します。</p> : null}
             </div>
 
             {error ? <p className="form-error">{error}</p> : null}
             <div className="form-actions">
               <button type="button" className="secondary-button" onClick={() => setDrawerOpen(false)}>キャンセル</button>
-              <button type="submit" className="primary-button" disabled={submitting}>{submitting ? "登録中" : "登録する"}</button>
+              <button type="submit" className="primary-button" disabled={submitting}>{submitting ? "保存中" : form.expenseId ? "修正を保存" : "登録する"}</button>
             </div>
           </form>
         </Drawer>

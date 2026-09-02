@@ -28,6 +28,7 @@ import type {
   ExpenseStatus,
   NewExpenseInput,
   NewVehicleInput,
+  PaymentMethod,
   PaymentStatus,
   Vehicle,
   VehicleDocument,
@@ -41,6 +42,7 @@ const acquisitionSources: AcquisitionSource[] = ["一般のお客様", "オー�
 const requiredDocumentTypes: VehicleDocumentType[] = ["車検証", "譲渡証明書", "印鑑証明", "住民票", "申請依頼書", "自賠責保険"];
 const documentTypes: VehicleDocumentType[] = [...requiredDocumentTypes, "その他"];
 const expenseCategories = ["部品代", "外注費", "陸送費", "登録費用", "仕入手数料", "販売手数料", "その他"];
+const expensePaymentMethods: PaymentMethod[] = ["現金", "振込", "ローン会社", "カード", "その他"];
 
 const initialVehicleForm = (): NewVehicleInput => ({
   name: "",
@@ -60,6 +62,7 @@ const initialExpense = (vehicleId: string): NewExpenseInput => ({
   amount: 0,
   expenseStatus: "確定",
   paymentStatus: "未払い",
+  paymentMethod: "振込",
   incurredOn: new Date().toISOString().slice(0, 10),
 });
 
@@ -445,13 +448,14 @@ function VehicleDetailDrawer({
             <label className="field-label">内容 <span className="required">必須</span><input value={expenseForm.description} onChange={(event) => setExpenseForm({ ...expenseForm, description: event.target.value })} placeholder="例：タイヤ交換" /></label>
             <label className="field-label">金額（税込） <span className="required">必須</span><input type="number" min="1" value={expenseForm.amount} onChange={(event) => setExpenseForm({ ...expenseForm, amount: Number(event.target.value) })} /></label>
             <div className="form-row"><label className="field-label">費用区分<select value={expenseForm.expenseStatus} onChange={(event) => setExpenseForm({ ...expenseForm, expenseStatus: event.target.value as ExpenseStatus, paymentStatus: event.target.value === "予定" ? "未払い" : expenseForm.paymentStatus })}><option>確定</option><option>予定</option></select></label><label className="field-label">支払い<select value={expenseForm.paymentStatus} disabled={expenseForm.expenseStatus === "予定"} onChange={(event) => setExpenseForm({ ...expenseForm, paymentStatus: event.target.value as PaymentStatus })}><option>未払い</option><option>支払済み</option></select></label></div>
+            <label className="field-label">支払い方法<select value={expenseForm.paymentMethod} onChange={(event) => setExpenseForm({ ...expenseForm, paymentMethod: event.target.value as PaymentMethod })}>{expensePaymentMethods.map((method) => <option key={method}>{method}</option>)}</select></label>
             <button type="submit" className="primary-button full-button" disabled={busy}>経費を登録</button>
           </form>
         ) : null}
         {vehicleExpenses.length ? <div className="compact-expense-list">{vehicleExpenses.slice(0, 5).map((expense) => <div key={expense.id}><span><strong>{expense.category}</strong><small>{expense.description}</small></span><span><strong>{formatCurrency(expense.amount)}</strong><small>{expense.expenseStatus}・{expense.paymentStatus}</small></span></div>)}</div> : <p className="section-note">登録済みの車両経費はありません。</p>}
       </section>
 
-      <section className="detail-section"><h3>利益の確認</h3><dl className="amount-summary"><div><dt>販売価格</dt><dd>{formatCurrency(profit.revenueBasis)}</dd></div><div><dt>仕入額</dt><dd>− {formatCurrency(vehicle.purchasePrice)}</dd></div><div><dt>確定費用</dt><dd>− {formatCurrency(profit.confirmedExpenses)}</dd></div><div><dt>予定費用</dt><dd>− {formatCurrency(profit.plannedExpenses)}</dd></div><div className="total"><dt>予想利益</dt><dd className={profit.expectedProfit < 0 ? "negative" : "positive"}>{formatCurrency(profit.expectedProfit)}</dd></div></dl></section>
+      <section className="detail-section"><h3>利益の確認</h3><dl className="amount-summary"><div><dt>販売価格</dt><dd>{formatCurrency(profit.revenueBasis)}</dd></div><div><dt>仕入額</dt><dd>− {formatCurrency(vehicle.purchasePrice)}</dd></div><div><dt>確定費用</dt><dd>− {formatCurrency(profit.confirmedExpenses)}</dd></div><div><dt>予定費用</dt><dd>− {formatCurrency(profit.plannedExpenses)}</dd></div><div className="total"><dt>{profit.isFinal ? "確定粗利" : "予想利益"}</dt><dd className={profit.expectedProfit < 0 ? "negative" : "positive"}>{formatCurrency(profit.isFinal ? profit.provisionalProfit : profit.expectedProfit)}</dd></div></dl>{vehicle.status === "納車済み" && !profit.isFinal ? <p className="form-hint">予定費用を確定または取り消すと、粗利が確定します。</p> : null}</section>
 
       {updateError ? <p className="form-error drawer-error">{updateError}</p> : null}
       {isOwner ? <section className="detail-section vehicle-delete-zone"><h3>車両を削除</h3><p>売約済みは履歴を残します。登録自体を取り消す場合だけ削除してください。監査記録は安全のため残ります。</p><button type="button" className="danger-button" disabled={busy} onClick={() => void archive()}><Trash2 size={16} />管理一覧から削除</button></section> : null}

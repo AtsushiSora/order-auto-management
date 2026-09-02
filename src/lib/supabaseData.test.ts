@@ -5,6 +5,7 @@ import {
   mapExpenseFromDb,
   mapVehicleFromDb,
   mapVehicleDocumentFromDb,
+  expenseToRpc,
   newCashflowToDb,
   newVehicleToDb,
   purchaseContractToRpc,
@@ -134,6 +135,29 @@ describe("Supabaseデータ変換", () => {
       p_status: "contracted",
       p_amount: 880000,
       p_payment_method: "loan_company",
+    });
+  });
+
+  it("確定経費を支払い連動RPCの引数へ変換する", () => {
+    const input = expenseToRpc({
+      expenseId: "expense-id",
+      vehicleId: "vehicle-id",
+      category: " 販売手数料 ",
+      description: " オークション出品料 ",
+      amount: 33000,
+      expenseStatus: "確定",
+      paymentStatus: "未払い",
+      paymentMethod: "振込",
+      incurredOn: "2026-09-02",
+    });
+
+    expect(input).toMatchObject({
+      p_expense_id: "expense-id",
+      p_category: "販売手数料",
+      p_amount: 33000,
+      p_expense_status: "confirmed",
+      p_payment_status: "unpaid",
+      p_payment_method: "bank_transfer",
     });
   });
 
