@@ -3527,7 +3527,20 @@ button.mini-summary-card:hover {
     padding: 7px;
     color: #000 !important;
     font-size: 9px;
+    vertical-align: top;
   }
+
+  .ledger-print-detail {
+    display: block;
+    margin-top: 2px;
+    color: #000;
+    font-size: 8px;
+    line-height: 1.35;
+  }
+}
+
+.ledger-print-detail {
+  display: none;
 }
 
 @media (prefers-reduced-motion: reduce) {

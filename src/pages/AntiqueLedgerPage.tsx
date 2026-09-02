@@ -186,15 +186,25 @@ export function AntiqueLedgerPage() {
                   <td>
                     <strong>{entry.managementNumber}　{entry.itemName}</strong>
                     <span className="cell-note">車台番号：{entry.chassisNumber || "未登録"}</span>
+                    <span className="ledger-print-detail">登録番号・車両番号：{entry.detail.registrationNumber || "未登録"}</span>
+                    <span className="ledger-print-detail">車検証上の所有者：{entry.detail.registeredOwnerName || "未登録"}</span>
+                    <span className="ledger-print-detail">その他の特徴：{entry.detail.itemFeatures || "なし"}</span>
                   </td>
                   <td>
                     <strong>{entry.detail.intakeType}・{entry.acquisitionSource}</strong>
                     <span className="cell-note">{entry.sellerName || "相手方未登録"}</span>
+                    <span className="ledger-print-detail">相手方区分：{entry.detail.counterpartyType}</span>
+                    <span className="ledger-print-detail">住所：{entry.detail.sellerAddress || "未登録"}</span>
+                    <span className="ledger-print-detail">職業・業種：{entry.detail.sellerOccupation || "未登録"}</span>
+                    <span className="ledger-print-detail">年齢：{entry.detail.counterpartyType === "個人" ? entry.detail.sellerAge ?? "未登録" : "対象外"}</span>
+                    <span className="ledger-print-detail">本人確認方法：{entry.detail.identityVerificationMethod || "未登録"}</span>
+                    <span className="ledger-print-detail">確認方法の詳細：{entry.detail.identityVerificationNote || "なし"}</span>
                   </td>
                   <td className="number-cell">{formatCurrency(entry.purchaseAmount)}</td>
                   <td>
                     <strong>{entry.dispositionType}</strong>
                     <span className="cell-note">{formatDate(entry.disposedOn)}{entry.buyerName ? `　${entry.buyerName}` : ""}</span>
+                    <span className="ledger-print-detail">備考：{entry.detail.note || "なし"}</span>
                   </td>
                   <td>
                     <span className={`status-badge ${statusTone[entry.status]}`}>{entry.status}</span>
@@ -283,4 +293,3 @@ export function AntiqueLedgerPage() {
     </>
   );
 }
-
