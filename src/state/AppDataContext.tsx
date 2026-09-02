@@ -730,7 +730,19 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
           .single();
         if (error) throw new Error(error.message);
         const document = mapVehicleDocumentFromDb(updated);
-        await refreshData();
+        setData((current) => {
+          const nextVehicleDocuments = [
+            ...current.vehicleDocuments.filter((item) => !(item.vehicleId === document.vehicleId && item.documentType === document.documentType)),
+            document,
+          ];
+          return {
+            ...current,
+            vehicleDocuments: nextVehicleDocuments,
+            vehicles: current.vehicles.map((vehicle) => vehicle.id === document.vehicleId
+              ? { ...vehicle, documentsComplete: isVehicleReceiptChecklistComplete(nextVehicleDocuments.filter((item) => item.vehicleId === document.vehicleId)) }
+              : vehicle),
+          };
+        });
         return document;
       }
 
