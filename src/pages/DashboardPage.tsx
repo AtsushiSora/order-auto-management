@@ -7,6 +7,7 @@ import {
   ClipboardCheck,
   FileWarning,
   Handshake,
+  HardDrive,
   Plus,
   WalletCards,
 } from "lucide-react";
@@ -32,6 +33,8 @@ export function DashboardPage({
   const recentVehicles = [...data.vehicles]
     .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
     .slice(0, 5);
+  const latestBackup = data.systemBackups[0];
+  const backupDue = !latestBackup || Date.now() - new Date(latestBackup.createdAt).getTime() >= 30 * 24 * 60 * 60 * 1000;
 
   const summaryCards = [
     {
@@ -156,10 +159,10 @@ export function DashboardPage({
               </button>
             );
           })}
-          <div className="alert-card success" aria-label="バックアップ状態 正常">
-            <span className="alert-icon"><CheckCircle2 size={24} /></span>
-            <span><small>バックアップ</small><strong className="status-word">正常</strong></span>
-          </div>
+          {profile?.role === "owner" ? <button type="button" className={`alert-card ${backupDue ? "warning" : "success"}`} aria-label={`バックアップ状態 ${backupDue ? "要作成" : "正常"}`} onClick={() => onNavigate("settings")}>
+            <span className="alert-icon">{backupDue ? <HardDrive size={24} /> : <CheckCircle2 size={24} />}</span>
+            <span><small>バックアップ</small><strong className="status-word">{backupDue ? "要作成" : "正常"}</strong></span>
+          </button> : null}
         </div>
       </section>
 

@@ -31,6 +31,7 @@ import {
   mapJournalCandidateReviewFromDb,
   mapJournalExportFromDb,
   mapMonthlyBalanceCheckFromDb,
+  mapSystemBackupFromDb,
   mapIssuedDocumentFromDb,
   mapStaffProfileFromDb,
   mapStaffSettlementFromDb,
@@ -87,11 +88,14 @@ import type {
   MonthlyBalanceCheck,
   SaveMonthlyBalanceCheckInput,
   UpdateStaffProfileInput,
+  BackupRestoreMode,
+  SystemBackup,
 } from "../types";
 import { useAuth } from "./AuthContext";
 
 const STORAGE_KEY = "order-auto-management-demo-v1";
 const demoEvidenceUrls = new Map<string, string>();
+const demoBackupPayloads = new Map<string, AppData>();
 const emptyData: AppData = {
   staffProfiles: [],
   spotAssignments: [],
@@ -106,6 +110,7 @@ const emptyData: AppData = {
   cashflowOffsets: [],
   cashflowEvents: [],
   monthlyBalanceChecks: [],
+  systemBackups: [],
   contracts: [],
   approvals: [],
   websiteInquiries: [],
@@ -152,6 +157,10 @@ type AppDataContextValue = {
   applyCashflowOffset: (saleCashflowId: string, purchaseCashflowId: string, amount: number, offsetOn: string, note: string) => Promise<CashflowOffset>;
   voidCashflowOffset: (offsetId: string) => Promise<void>;
   saveMonthlyBalanceCheck: (input: SaveMonthlyBalanceCheckInput) => Promise<MonthlyBalanceCheck>;
+  createSystemBackup: () => Promise<SystemBackup>;
+  downloadSystemBackup: (backupId: string) => Promise<Blob>;
+  restoreSystemBackup: (backupId: string, mode: BackupRestoreMode) => Promise<void>;
+  deleteSystemBackup: (backupId: string) => Promise<void>;
   savePurchaseContract: (input: PurchaseContractInput) => Promise<string>;
   saveSaleContract: (input: SaleContractInput) => Promise<string>;
   saveAntiqueLedgerDetail: (input: SaveAntiqueLedgerDetailInput) => Promise<void>;
@@ -165,6 +174,21 @@ type AppDataContextValue = {
 const AppDataContext = createContext<AppDataContextValue | null>(null);
 
 const cloneSeedData = (): AppData => structuredClone(seedData);
+
+const mergeDemoBackup = (current: AppData, backup: AppData): AppData => {
+  const merged = { ...current } as AppData;
+  for (const key of Object.keys(current) as (keyof AppData)[]) {
+    if (key === "systemBackups") continue;
+    const currentRows = current[key];
+    const backupRows = backup[key];
+    const existingIds = new Set(currentRows.map((row) => row.id));
+    (merged[key] as typeof currentRows) = [
+      ...currentRows,
+      ...backupRows.filter((row) => !existingIds.has(row.id)),
+    ] as typeof currentRows;
+  }
+  return merged;
+};
 
 const publicationDefaults = (vehicle: Pick<Vehicle, "askingPrice">) => ({
   salesSitePublished: false,
@@ -212,6 +236,7 @@ const loadInitialDemoData = (): AppData => {
       cashflowOffsets: parsed.cashflowOffsets ?? [],
       cashflowEvents: parsed.cashflowEvents ?? seed.cashflowEvents,
       monthlyBalanceChecks: parsed.monthlyBalanceChecks ?? [],
+      systemBackups: [],
       websiteInquiries: parsed.websiteInquiries ?? seed.websiteInquiries,
       antiqueLedgerDetails: parsed.antiqueLedgerDetails ?? seed.antiqueLedgerDetails,
       journalCandidateReviews: parsed.journalCandidateReviews ?? seed.journalCandidateReviews,
@@ -300,6 +325,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         client.from("cashflow_offsets").select("*").order("created_at", { ascending: false }),
         client.from("cashflow_events").select("*").order("processed_on", { ascending: false }),
         client.from("monthly_balance_checks").select("*").order("target_month", { ascending: false }),
+        client.from("system_backups").select("id, backup_kind, row_count, created_at").order("created_at", { ascending: false }),
         client.from("contracts").select("*").is("deleted_at", null).order("updated_at", { ascending: false }),
         client.from("approvals").select("*").order("created_at", { ascending: false }),
         client.from("website_inquiries").select("*").order("received_at", { ascending: false }),
@@ -321,7 +347,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
 
       if (!requestIsCurrent()) return;
 
-      const [staffResult, spotAssignmentsResult, contractHandoffsResult, vehiclesResult, documentsResult, expensesResult, attachmentsResult, issuedDocumentsResult, staffSettlementsResult, cashflowsResult, cashflowOffsetsResult, cashflowEventsResult, monthlyBalanceChecksResult, contractsResult, approvalsResult, inquiriesResult, ledgerResult, journalReviewsResult, journalExportsResult] = results;
+      const [staffResult, spotAssignmentsResult, contractHandoffsResult, vehiclesResult, documentsResult, expensesResult, attachmentsResult, issuedDocumentsResult, staffSettlementsResult, cashflowsResult, cashflowOffsetsResult, cashflowEventsResult, monthlyBalanceChecksResult, systemBackupsResult, contractsResult, approvalsResult, inquiriesResult, ledgerResult, journalReviewsResult, journalExportsResult] = results;
 
       setData({
         staffProfiles: (staffResult.data ?? []).map(mapStaffProfileFromDb),
@@ -337,6 +363,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         cashflowOffsets: (cashflowOffsetsResult.data ?? []).map(mapCashflowOffsetFromDb),
         cashflowEvents: (cashflowEventsResult.data ?? []).map(mapCashflowEventFromDb),
         monthlyBalanceChecks: (monthlyBalanceChecksResult.data ?? []).map(mapMonthlyBalanceCheckFromDb),
+        systemBackups: (systemBackupsResult.data ?? []).map(mapSystemBackupFromDb),
         contracts: (contractsResult.data ?? []).map(mapContractFromDb),
         approvals: (approvalsResult.data ?? []).map(mapApprovalFromDb),
         websiteInquiries: (inquiriesResult.data ?? []).map(mapWebsiteInquiryFromDb),
@@ -1238,6 +1265,77 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         monthlyBalanceChecks: [saved, ...current.monthlyBalanceChecks.filter((item) => item.targetMonth !== input.targetMonth)],
       }));
       return saved;
+    },
+    createSystemBackup: async () => {
+      if (profile?.role !== "owner" || !profile.isActive) throw new Error("バックアップを作成できるのは事業主だけです。");
+      if (configured && supabase) {
+        const { data: saved, error } = await supabase.rpc("create_system_backup");
+        if (error) throw new Error(error.message);
+        const backup = mapSystemBackupFromDb(Array.isArray(saved) ? saved[0] : saved);
+        await refreshData();
+        return backup;
+      }
+      const now = new Date().toISOString();
+      const backup: SystemBackup = {
+        id: crypto.randomUUID(),
+        kind: "手動",
+        rowCount: Object.entries(data).filter(([key]) => key !== "systemBackups").reduce((sum, [, rows]) => sum + rows.length, 0),
+        createdAt: now,
+      };
+      demoBackupPayloads.set(backup.id, structuredClone({ ...data, systemBackups: [] }));
+      setData((current) => ({ ...current, systemBackups: [backup, ...current.systemBackups] }));
+      return backup;
+    },
+    downloadSystemBackup: async (backupId) => {
+      if (profile?.role !== "owner" || !profile.isActive) throw new Error("バックアップを取得できるのは事業主だけです。");
+      if (configured && supabase) {
+        const { data: row, error } = await supabase
+          .from("system_backups")
+          .select("id, backup_kind, row_count, created_at, payload")
+          .eq("id", backupId)
+          .single();
+        if (error) throw new Error(error.message);
+        return new Blob([JSON.stringify({
+          format: "order-auto-system-backup",
+          version: 1,
+          id: row.id,
+          createdAt: row.created_at,
+          rowCount: row.row_count,
+          payload: row.payload,
+        }, null, 2)], { type: "application/json" });
+      }
+      const payload = demoBackupPayloads.get(backupId);
+      const backup = data.systemBackups.find((item) => item.id === backupId);
+      if (!payload || !backup) throw new Error("バックアップが見つかりません。");
+      return new Blob([JSON.stringify({ format: "order-auto-system-backup", version: 1, ...backup, payload }, null, 2)], { type: "application/json" });
+    },
+    restoreSystemBackup: async (backupId, mode) => {
+      if (profile?.role !== "owner" || !profile.isActive) throw new Error("復元できるのは事業主だけです。");
+      if (configured && supabase) {
+        const { error } = await supabase.rpc("restore_system_backup", {
+          p_backup_id: backupId,
+          p_mode: mode === "全上書き" ? "replace" : "merge",
+        });
+        if (error) throw new Error(error.message);
+        await refreshData();
+        return;
+      }
+      const payload = demoBackupPayloads.get(backupId);
+      if (!payload) throw new Error("バックアップが見つかりません。");
+      setData((current) => mode === "全上書き"
+        ? { ...structuredClone(payload), systemBackups: current.systemBackups }
+        : mergeDemoBackup(current, payload));
+    },
+    deleteSystemBackup: async (backupId) => {
+      if (profile?.role !== "owner" || !profile.isActive) throw new Error("バックアップを削除できるのは事業主だけです。");
+      if (configured && supabase) {
+        const { error } = await supabase.rpc("delete_system_backup", { p_backup_id: backupId });
+        if (error) throw new Error(error.message);
+        await refreshData();
+        return;
+      }
+      demoBackupPayloads.delete(backupId);
+      setData((current) => ({ ...current, systemBackups: current.systemBackups.filter((item) => item.id !== backupId) }));
     },
     savePurchaseContract: async (input) => {
       if (configured && supabase) {

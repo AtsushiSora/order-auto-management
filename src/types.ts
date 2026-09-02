@@ -328,6 +328,16 @@ export type SaveMonthlyBalanceCheckInput = {
   confirm: boolean;
 };
 
+export type SystemBackupKind = "手動";
+export type BackupRestoreMode = "追加" | "全上書き";
+
+export type SystemBackup = {
+  id: string;
+  kind: SystemBackupKind;
+  rowCount: number;
+  createdAt: string;
+};
+
 export type ContractStatus = "下書き" | "署名待ち" | "契約済み" | "キャンセル済み";
 
 export type Contract = {
@@ -470,6 +480,7 @@ export type AppData = {
   cashflowOffsets: CashflowOffset[];
   cashflowEvents: CashflowEvent[];
   monthlyBalanceChecks: MonthlyBalanceCheck[];
+  systemBackups: SystemBackup[];
   contracts: Contract[];
   approvals: Approval[];
   websiteInquiries: WebsiteInquiry[];

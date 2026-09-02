@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
-import { Database, HardDrive, KeyRound, MailPlus, RotateCcw, ShieldCheck, UserCog } from "lucide-react";
+import { Database, Download, HardDrive, KeyRound, MailPlus, Plus, RotateCcw, ShieldCheck, Trash2, UserCog } from "lucide-react";
 import { PageHeader } from "../components/PageHeader";
+import { formatDateTime } from "../lib/format";
 import { staffRoleLabels, validateStaffInvitationInput } from "../lib/staffProfiles";
 import { useAuth } from "../state/AuthContext";
 import { useAppData } from "../state/AppDataContext";
-import type { StaffProfile, StaffRole } from "../types";
+import type { BackupRestoreMode, StaffProfile, StaffRole } from "../types";
 
 const staffRoles = Object.keys(staffRoleLabels) as StaffRole[];
 const inviteRoles = ["accounting", "regular", "spot"] as const;
@@ -172,6 +173,103 @@ function StaffProfileEditor({ staff, currentUserId }: { staff: StaffProfile; cur
   );
 }
 
+function BackupPanel({ isDemo }: { isDemo: boolean }) {
+  const { data, createSystemBackup, downloadSystemBackup, restoreSystemBackup, deleteSystemBackup } = useAppData();
+  const [busy, setBusy] = useState("");
+  const [message, setMessage] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [restoreId, setRestoreId] = useState<string | null>(null);
+  const [restoreMode, setRestoreMode] = useState<BackupRestoreMode>("追加");
+  const latest = data.systemBackups[0];
+  const due = !latest || Date.now() - new Date(latest.createdAt).getTime() >= 30 * 24 * 60 * 60 * 1000;
+
+  const run = async (key: string, task: () => Promise<void>) => {
+    setBusy(key);
+    setMessage(null);
+    setError(null);
+    try {
+      await task();
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "バックアップ処理に失敗しました。");
+    } finally {
+      setBusy("");
+    }
+  };
+
+  const create = () => run("create", async () => {
+    const saved = await createSystemBackup();
+    setMessage(`${formatDateTime(saved.createdAt)}のバックアップを作成しました。`);
+  });
+
+  const download = (backupId: string, createdAt: string) => run(`download-${backupId}`, async () => {
+    const blob = await downloadSystemBackup(backupId);
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `order-auto-backup_${createdAt.slice(0, 10)}_${backupId.slice(0, 8)}.json`;
+    anchor.click();
+    URL.revokeObjectURL(url);
+    setMessage("バックアップファイルをダウンロードしました。Google Driveへ保存できます。");
+  });
+
+  const restore = () => {
+    if (!restoreId) return;
+    const warning = restoreMode === "全上書き"
+      ? "現在の業務データをバックアップ時点の内容へ全上書きします。ログイン利用者と監査履歴は残ります。実行しますか？"
+      : "現在のデータを残し、バックアップにしかないデータを追加します。実行しますか？";
+    if (!window.confirm(warning)) return;
+    void run(`restore-${restoreId}`, async () => {
+      await restoreSystemBackup(restoreId, restoreMode);
+      setRestoreId(null);
+      setMessage(`${restoreMode}で復元しました。`);
+    });
+  };
+
+  const remove = (backupId: string) => {
+    if (!window.confirm("このバックアップ記録を削除しますか？削除後は元に戻せません。")) return;
+    void run(`delete-${backupId}`, async () => {
+      await deleteSystemBackup(backupId);
+      setMessage("バックアップを削除しました。");
+    });
+  };
+
+  return (
+    <section className="panel backup-panel">
+      <div className="section-heading backup-heading">
+        <div><span className="section-kicker"><HardDrive size={16} />バックアップ</span><h2>業務データの保全</h2><p>30日ごとにTOPで作成を案内します。作成したデータは端末へダウンロードできます。</p></div>
+        <button type="button" className="primary-button" disabled={Boolean(busy)} onClick={() => void create()}><Plus size={18} />今すぐ作成</button>
+      </div>
+
+      <div className={`backup-status-banner ${due ? "due" : "current"}`}>
+        {due ? <><HardDrive size={22} /><span><strong>バックアップの作成が必要です</strong><small>{latest ? `最終作成：${formatDateTime(latest.createdAt)}` : "まだバックアップがありません"}</small></span></> : <><ShieldCheck size={22} /><span><strong>バックアップは正常です</strong><small>最終作成：{formatDateTime(latest.createdAt)}</small></span></>}
+      </div>
+
+      <p className="backup-scope-note">対象：車両・契約・経費・入出金・古物台帳・仕訳・月次残高など。ログインアカウント、監査履歴、添付ファイル本体は対象外です。添付ファイルの登録情報は含まれます。</p>
+      {isDemo ? <p className="form-warning">テストモードのバックアップは、この画面を開いている間だけ復元できます。</p> : null}
+      {error ? <p className="inline-error">{error}</p> : null}
+      {message ? <p className="inline-success">{message}</p> : null}
+
+      <div className="backup-list">
+        {data.systemBackups.map((backup) => <article className="backup-row" key={backup.id}>
+          <div><strong>{formatDateTime(backup.createdAt)}</strong><span>{backup.rowCount}件・手動バックアップ</span></div>
+          <div className="backup-row-actions">
+            <button type="button" className="table-action-button" disabled={Boolean(busy)} onClick={() => void download(backup.id, backup.createdAt)}><Download size={16} />保存</button>
+            <button type="button" className="table-action-button" disabled={Boolean(busy)} onClick={() => { setRestoreId(backup.id); setRestoreMode("追加"); setMessage(null); setError(null); }}><RotateCcw size={16} />復元</button>
+            <button type="button" className="table-action-button danger-table-button" disabled={Boolean(busy)} onClick={() => remove(backup.id)}><Trash2 size={16} />削除</button>
+          </div>
+        </article>)}
+        {!data.systemBackups.length ? <div className="empty-state compact"><HardDrive size={28} /><h2>バックアップはありません</h2><p>「今すぐ作成」から最初のバックアップを作成してください。</p></div> : null}
+      </div>
+
+      {restoreId ? <div className="backup-restore-box">
+        <div><strong>復元方法を選択</strong><p>「追加」は現在のデータを残します。「全上書き」はバックアップ時点へ戻します。</p></div>
+        <select aria-label="復元方法" value={restoreMode} onChange={(event) => setRestoreMode(event.target.value as BackupRestoreMode)}><option>追加</option><option>全上書き</option></select>
+        <div className="backup-restore-actions"><button type="button" className="secondary-button" onClick={() => setRestoreId(null)}>キャンセル</button><button type="button" className={restoreMode === "全上書き" ? "danger-button" : "primary-button"} disabled={Boolean(busy)} onClick={restore}>この方法で復元</button></div>
+      </div> : null}
+    </section>
+  );
+}
+
 export function SettingsPage() {
   const { profile } = useAuth();
   const { data, isDemo, resetDemoData } = useAppData();
@@ -208,14 +306,12 @@ export function SettingsPage() {
           <div><h2>共通ログイン</h2><p>事業主・経理担当・通常スタッフ・スポットスタッフを1つの認証で管理します。</p><span className={`setting-status ${isDemo ? "pending" : "planned"}`}>{isDemo ? "接続前" : "認証中"}</span></div>
         </article>
         <article className="setting-card panel">
-          <span className="setting-icon"><HardDrive size={25} /></span>
-          <div><h2>バックアップ</h2><p>SupabaseとGoogle WorkspaceのGoogle Driveへ保存する予定です。</p><span className="setting-status pending">接続前</span></div>
-        </article>
-        <article className="setting-card panel">
           <span className="setting-icon"><ShieldCheck size={25} /></span>
           <div><h2>アクセス制御</h2><p>画面とデータベースの両方で利用者権限を確認します。</p><span className="setting-status planned">実装済み</span></div>
         </article>
       </section>
+
+      <BackupPanel isDemo={isDemo} />
 
       {isDemo ? <section className="panel danger-zone">
         <div><h2>初期デモデータ</h2><p>この端末で追加・変更した架空データを、最初の状態へ戻します。</p></div>

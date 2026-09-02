@@ -17,6 +17,7 @@ import type {
   JournalCandidateReview,
   JournalExport,
   MonthlyBalanceCheck,
+  SystemBackup,
   IssuedDocument,
   IssueDocumentInput,
   SaveStaffSettlementInput,
@@ -325,6 +326,16 @@ export const mapMonthlyBalanceCheckFromDb = (source: unknown): MonthlyBalanceChe
     confirmedAt: nullableString(row, "confirmed_at"),
     createdAt: stringValue(row, "created_at"),
     updatedAt: stringValue(row, "updated_at"),
+  };
+};
+
+export const mapSystemBackupFromDb = (source: unknown): SystemBackup => {
+  const row = source as DbRow;
+  return {
+    id: stringValue(row, "id"),
+    kind: "手動",
+    rowCount: numberValue(row, "row_count"),
+    createdAt: stringValue(row, "created_at"),
   };
 };
 

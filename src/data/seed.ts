@@ -205,6 +205,7 @@ export const seedData: AppData = {
     },
   ],
   monthlyBalanceChecks: [],
+  systemBackups: [],
   cashflows: [
     {
       id: "cashflow-001",
