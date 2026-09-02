@@ -10,6 +10,7 @@ import { IssuedDocumentsPage } from "./pages/IssuedDocumentsPage";
 import { ProfitsPage } from "./pages/ProfitsPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { SiteIntegrationPage } from "./pages/SiteIntegrationPage";
+import { StaffSettlementsPage } from "./pages/StaffSettlementsPage";
 import { VehiclesPage } from "./pages/VehiclesPage";
 import { useAuth } from "./state/AuthContext";
 import type { PageId } from "./types";
@@ -26,6 +27,7 @@ const pageIds: PageId[] = [
   "antique-ledger",
   "accounting",
   "issued-documents",
+  "staff-settlements",
   "settings",
 ];
 
@@ -87,6 +89,8 @@ export default function App() {
         return <AccountingPage />;
       case "issued-documents":
         return <IssuedDocumentsPage />;
+      case "staff-settlements":
+        return <StaffSettlementsPage />;
       case "settings":
         return <SettingsPage />;
       default:

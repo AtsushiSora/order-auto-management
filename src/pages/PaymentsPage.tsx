@@ -32,6 +32,7 @@ export function PaymentsPage() {
   const { data, addCashflow, completeCashflow } = useAppData();
   const { profile } = useAuth();
   const canManage = profile?.role === "owner" || profile?.role === "regular" || profile?.role === "accounting";
+  const canSettleStaff = profile?.role === "owner" || profile?.role === "accounting";
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [directionFilter, setDirectionFilter] = useState<"すべて" | CashflowDirection>("すべて");
   const [statusFilter, setStatusFilter] = useState<"すべて" | "未完了" | "完了">("未完了");
@@ -194,7 +195,7 @@ export function PaymentsPage() {
                     <td className="number-cell">{formatCurrency(cashflow.amount)}</td>
                     <td className={`number-cell ${remaining > 0 ? "remaining-value" : ""}`}><strong>{formatCurrency(remaining)}</strong></td>
                     <td className="cashflow-action-cell">
-                      {cashflow.status === "完了" ? <span className="completed-label"><CheckCircle2 size={16} />完了</span> : cashflow.kind === "買取代金" && vehicle?.status === "入庫予定" ? <span className="locked-label"><LockKeyhole size={15} />入庫待ち</span> : canManage ? <button type="button" className="small-action-button" disabled={processingId === cashflow.id} onClick={() => void markCompleted(cashflow.id)}>{processingId === cashflow.id ? "処理中" : cashflow.direction === "支払い" ? "支払済みにする" : "入金済みにする"}</button> : <span className="muted-cell">閲覧のみ</span>}
+                      {cashflow.status === "完了" ? <span className="completed-label"><CheckCircle2 size={16} />完了</span> : cashflow.kind === "買取代金" && vehicle?.status === "入庫予定" ? <span className="locked-label"><LockKeyhole size={15} />入庫待ち</span> : cashflow.staffSettlementId && !canSettleStaff ? <span className="locked-label"><LockKeyhole size={15} />事業主・経理のみ</span> : canManage ? <button type="button" className="small-action-button" disabled={processingId === cashflow.id} onClick={() => void markCompleted(cashflow.id)}>{processingId === cashflow.id ? "処理中" : cashflow.direction === "支払い" ? "支払済みにする" : "入金済みにする"}</button> : <span className="muted-cell">閲覧のみ</span>}
                     </td>
                   </tr>
                 );

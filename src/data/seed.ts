@@ -1,6 +1,12 @@
 import type { AppData } from "../types";
 
 export const seedData: AppData = {
+  staffProfiles: [
+    { id: "demo-owner", displayName: "事業主", role: "owner", isActive: true },
+    { id: "demo-accounting", displayName: "妻・税務担当", role: "accounting", isActive: true },
+    { id: "demo-regular", displayName: "通常スタッフ", role: "regular", isActive: true },
+    { id: "demo-spot", displayName: "スポットスタッフ", role: "spot", isActive: true },
+  ],
   vehicles: [
     {
       id: "vehicle-26-0001",
@@ -122,6 +128,7 @@ export const seedData: AppData = {
   vehicleDocuments: [],
   attachments: [],
   issuedDocuments: [],
+  staffSettlements: [],
   expenses: [
     {
       id: "expense-001",

@@ -8,6 +8,7 @@ import {
   mapJournalCandidateReviewFromDb,
   mapJournalExportFromDb,
   mapIssuedDocumentFromDb,
+  mapStaffSettlementFromDb,
   mapVehicleFromDb,
   mapVehicleDocumentFromDb,
   mapWebsiteInquiryFromDb,
@@ -22,6 +23,7 @@ import {
   vehiclePublicationToRpc,
   websiteInquiryStatusToRpc,
   issueDocumentToRpc,
+  staffSettlementToRpc,
 } from "./supabaseData";
 
 describe("Supabaseデータ変換", () => {
@@ -434,6 +436,65 @@ describe("Supabaseデータ変換", () => {
       p_delivery_method: "electronic",
       p_stamp_duty_amount: 0,
       p_note: "備考",
+    });
+  });
+
+  it("スタッフ精算の条件をスナップショットとして変換する", () => {
+    expect(mapStaffSettlementFromDb({
+      id: "settlement-id",
+      staff_id: "staff-id",
+      vehicle_id: "vehicle-id",
+      contract_id: null,
+      direction: "pay_staff",
+      engagement_type: "referral_only",
+      business_type: "sale",
+      calculation_method: "gross_profit_rate",
+      gross_profit_basis: 333333,
+      rate_percent: 7.5,
+      planned_amount: 24999,
+      confirmed_amount: null,
+      payment_method: "bank_transfer",
+      status: "planned",
+      agreement_confirmed: false,
+      agreement_note: null,
+      note: null,
+      confirmed_at: null,
+      settled_at: null,
+      created_at: "2026-09-02T00:00:00Z",
+      updated_at: "2026-09-02T00:00:00Z",
+    })).toMatchObject({
+      direction: "スタッフへ支給",
+      calculationMethod: "粗利率",
+      grossProfitBasis: 333333,
+      ratePercent: 7.5,
+      plannedAmount: 24999,
+      status: "予定",
+    });
+
+    expect(staffSettlementToRpc({
+      settlementId: null,
+      staffId: "staff-id",
+      vehicleId: "vehicle-id",
+      contractId: null,
+      direction: "スタッフへ請求",
+      engagementType: "契約から全て担当",
+      businessType: "廃車",
+      calculationMethod: "固定額",
+      grossProfitBasis: 0,
+      ratePercent: null,
+      manualAmount: 12000,
+      paymentMethod: "現金",
+      agreementConfirmed: true,
+      agreementNote: " 双方合意済み ",
+      note: " 社内メモ ",
+    })).toMatchObject({
+      p_direction: "charge_staff",
+      p_engagement_type: "full_service",
+      p_business_type: "scrap",
+      p_calculation_method: "fixed",
+      p_manual_amount: 12000,
+      p_payment_method: "cash",
+      p_agreement_note: "双方合意済み",
     });
   });
 });

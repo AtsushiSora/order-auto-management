@@ -12,6 +12,7 @@ import { seedData } from "../data/seed";
 import { buildAntiqueLedgerEntries } from "../lib/antiqueLedger";
 import { buildExpenseEvidencePath, PRIVATE_BUCKET, validateEvidenceFile } from "../lib/evidence";
 import { canIssueDocument, findCompletedSaleReceipt, includedTaxAmount, nextDemoDocumentNumber } from "../lib/issuedDocuments";
+import { calculateStaffPlannedAmount } from "../lib/staffSettlements";
 import { supabase } from "../lib/supabase";
 import {
   antiqueLedgerDetailToDb,
@@ -24,6 +25,8 @@ import {
   mapJournalCandidateReviewFromDb,
   mapJournalExportFromDb,
   mapIssuedDocumentFromDb,
+  mapStaffProfileFromDb,
+  mapStaffSettlementFromDb,
   mapVehicleFromDb,
   mapVehicleDocumentFromDb,
   mapWebsiteInquiryFromDb,
@@ -39,6 +42,7 @@ import {
   vehicleDocumentToDb,
   websiteInquiryStatusToRpc,
   issueDocumentToRpc,
+  staffSettlementToRpc,
 } from "../lib/supabaseData";
 import type {
   AppData,
@@ -46,6 +50,8 @@ import type {
   AttachmentCategory,
   IssuedDocument,
   IssueDocumentInput,
+  SaveStaffSettlementInput,
+  StaffSettlement,
   NewCashflowInput,
   NewExpenseInput,
   NewVehicleInput,
@@ -66,11 +72,13 @@ import { useAuth } from "./AuthContext";
 const STORAGE_KEY = "order-auto-management-demo-v1";
 const demoEvidenceUrls = new Map<string, string>();
 const emptyData: AppData = {
+  staffProfiles: [],
   vehicles: [],
   vehicleDocuments: [],
   expenses: [],
   attachments: [],
   issuedDocuments: [],
+  staffSettlements: [],
   cashflows: [],
   contracts: [],
   approvals: [],
@@ -98,6 +106,10 @@ type AppDataContextValue = {
   deleteAttachment: (attachmentId: string) => Promise<void>;
   issueDocument: (input: IssueDocumentInput) => Promise<IssuedDocument>;
   voidIssuedDocument: (documentId: string) => Promise<void>;
+  saveStaffSettlement: (input: SaveStaffSettlementInput) => Promise<StaffSettlement>;
+  confirmStaffSettlement: (settlementId: string, confirmedAmount: number, confirmedOn: string) => Promise<void>;
+  settleStaffSettlement: (settlementId: string, settledOn: string) => Promise<void>;
+  cancelStaffSettlement: (settlementId: string) => Promise<void>;
   addCashflow: (input: NewCashflowInput) => Promise<void>;
   completeCashflow: (cashflowId: string, processedOn: string) => Promise<void>;
   savePurchaseContract: (input: PurchaseContractInput) => Promise<void>;
@@ -138,6 +150,7 @@ const loadInitialDemoData = (): AppData => {
     return {
       ...seed,
       ...parsed,
+      staffProfiles: parsed.staffProfiles ?? seed.staffProfiles,
       vehicles: (parsed.vehicles ?? seed.vehicles).map((vehicle) => ({
         ...publicationDefaults(vehicle),
         ...vehicle,
@@ -149,6 +162,7 @@ const loadInitialDemoData = (): AppData => {
       })),
       attachments: parsed.attachments ?? [],
       issuedDocuments: parsed.issuedDocuments ?? [],
+      staffSettlements: parsed.staffSettlements ?? [],
       cashflows: (parsed.cashflows ?? seed.cashflows).map((cashflow) => ({
         ...cashflow,
         kind: cashflow.kind ?? demoCashflowKind(cashflow),
@@ -203,12 +217,14 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     setLoading(true);
     setLoadError(null);
     try {
-      const [vehiclesResult, documentsResult, expensesResult, attachmentsResult, issuedDocumentsResult, cashflowsResult, contractsResult, approvalsResult, inquiriesResult, ledgerResult, journalReviewsResult, journalExportsResult] = await Promise.all([
+      const [staffResult, vehiclesResult, documentsResult, expensesResult, attachmentsResult, issuedDocumentsResult, staffSettlementsResult, cashflowsResult, contractsResult, approvalsResult, inquiriesResult, ledgerResult, journalReviewsResult, journalExportsResult] = await Promise.all([
+        supabase.from("staff_profiles").select("*").eq("is_active", true).order("display_name", { ascending: true }),
         supabase.from("vehicles").select("*").is("deleted_at", null).order("created_at", { ascending: false }),
         supabase.from("vehicle_documents").select("*").order("created_at", { ascending: true }),
         supabase.from("expenses").select("*").is("deleted_at", null).order("incurred_on", { ascending: false }),
         supabase.from("attachments").select("*").order("created_at", { ascending: false }),
         supabase.from("issued_documents").select("*").order("issued_on", { ascending: false }).order("created_at", { ascending: false }),
+        supabase.from("staff_settlements").select("*").order("created_at", { ascending: false }),
         supabase.from("cashflows").select("*").is("deleted_at", null).order("scheduled_on", { ascending: false }),
         supabase.from("contracts").select("*").is("deleted_at", null).order("updated_at", { ascending: false }),
         supabase.from("approvals").select("*").order("created_at", { ascending: false }),
@@ -218,16 +234,18 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         supabase.from("journal_exports").select("*").order("created_at", { ascending: false }),
       ]);
 
-      const firstError = [vehiclesResult, documentsResult, expensesResult, attachmentsResult, issuedDocumentsResult, cashflowsResult, contractsResult, approvalsResult, inquiriesResult, ledgerResult, journalReviewsResult, journalExportsResult]
+      const firstError = [staffResult, vehiclesResult, documentsResult, expensesResult, attachmentsResult, issuedDocumentsResult, staffSettlementsResult, cashflowsResult, contractsResult, approvalsResult, inquiriesResult, ledgerResult, journalReviewsResult, journalExportsResult]
         .find((result) => result.error)?.error;
       if (firstError) throw firstError;
 
       setData({
+        staffProfiles: (staffResult.data ?? []).map(mapStaffProfileFromDb),
         vehicles: (vehiclesResult.data ?? []).map(mapVehicleFromDb),
         vehicleDocuments: (documentsResult.data ?? []).map(mapVehicleDocumentFromDb),
         expenses: (expensesResult.data ?? []).map(mapExpenseFromDb),
         attachments: (attachmentsResult.data ?? []).map(mapAttachmentFromDb),
         issuedDocuments: (issuedDocumentsResult.data ?? []).map(mapIssuedDocumentFromDb),
+        staffSettlements: (staffSettlementsResult.data ?? []).map(mapStaffSettlementFromDb),
         cashflows: (cashflowsResult.data ?? []).map(mapCashflowFromDb),
         contracts: (contractsResult.data ?? []).map(mapContractFromDb),
         approvals: (approvalsResult.data ?? []).map(mapApprovalFromDb),
@@ -659,6 +677,116 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         issuedDocuments: current.issuedDocuments.map((document) => document.id === documentId ? { ...document, status: "無効" } : document),
       }));
     },
+    saveStaffSettlement: async (input) => {
+      const staff = data.staffProfiles.find((profile) => profile.id === input.staffId && profile.isActive && ["regular", "spot"].includes(profile.role));
+      if (!staff) throw new Error("有効な通常スタッフまたはスポットスタッフを選択してください。");
+      const vehicle = data.vehicles.find((item) => item.id === input.vehicleId);
+      if (!vehicle) throw new Error("対象車両が見つかりません。");
+      if (input.contractId && !data.contracts.some((contract) => contract.id === input.contractId && contract.vehicleId === input.vehicleId)) {
+        throw new Error("対象車両に紐づく契約を選択してください。");
+      }
+      if (input.direction === "スタッフへ請求" && (!input.agreementConfirmed || !input.agreementNote.trim())) {
+        throw new Error("スタッフへの請求は双方合意の確認と合意内容が必要です。");
+      }
+      const plannedAmount = calculateStaffPlannedAmount(input.calculationMethod, input.grossProfitBasis, input.ratePercent ?? 0, input.manualAmount);
+      if (plannedAmount <= 0) throw new Error("予定額は1円以上になるよう入力してください。");
+
+      if (configured && supabase) {
+        const { data: saved, error } = await supabase.rpc("save_staff_settlement", staffSettlementToRpc(input));
+        if (error) throw new Error(error.message);
+        const settlement = mapStaffSettlementFromDb(Array.isArray(saved) ? saved[0] : saved);
+        setData((current) => ({
+          ...current,
+          staffSettlements: [settlement, ...current.staffSettlements.filter((item) => item.id !== settlement.id)],
+        }));
+        return settlement;
+      }
+
+      const existing = input.settlementId ? data.staffSettlements.find((item) => item.id === input.settlementId) : null;
+      if (existing && existing.status !== "予定") throw new Error("予定状態の精算だけ修正できます。");
+      const now = new Date().toISOString();
+      const settlement: StaffSettlement = {
+        id: existing?.id ?? crypto.randomUUID(),
+        staffId: input.staffId,
+        vehicleId: input.vehicleId,
+        contractId: input.contractId,
+        direction: input.direction,
+        engagementType: input.engagementType,
+        businessType: input.businessType,
+        calculationMethod: input.calculationMethod,
+        grossProfitBasis: input.grossProfitBasis,
+        ratePercent: input.calculationMethod === "粗利率" ? input.ratePercent : null,
+        plannedAmount,
+        confirmedAmount: null,
+        paymentMethod: input.paymentMethod,
+        status: "予定",
+        agreementConfirmed: input.agreementConfirmed,
+        agreementNote: input.agreementNote.trim(),
+        note: input.note.trim(),
+        confirmedAt: null,
+        settledAt: null,
+        createdAt: existing?.createdAt ?? now,
+        updatedAt: now,
+      };
+      setData((current) => ({ ...current, staffSettlements: [settlement, ...current.staffSettlements.filter((item) => item.id !== settlement.id)] }));
+      return settlement;
+    },
+    confirmStaffSettlement: async (settlementId, confirmedAmount, confirmedOn) => {
+      if (confirmedAmount <= 0) throw new Error("確定額は1円以上で入力してください。");
+      if (!confirmedOn || confirmedOn > new Date().toISOString().slice(0, 10)) throw new Error("確定日は今日以前で入力してください。");
+      const target = data.staffSettlements.find((item) => item.id === settlementId && item.status === "予定");
+      if (!target) throw new Error("予定状態の精算が見つかりません。");
+      if (configured && supabase) {
+        const { error } = await supabase.rpc("confirm_staff_settlement", { p_settlement_id: settlementId, p_confirmed_amount: confirmedAmount, p_confirmed_on: confirmedOn });
+        if (error) throw new Error(error.message);
+        await refreshData();
+        return;
+      }
+      const staffName = data.staffProfiles.find((profile) => profile.id === target.staffId)?.displayName ?? "スタッフ";
+      const cashflowId = crypto.randomUUID();
+      setData((current) => ({
+        ...current,
+        staffSettlements: current.staffSettlements.map((item) => item.id === settlementId ? { ...item, status: "確定", confirmedAmount, confirmedAt: new Date().toISOString(), updatedAt: new Date().toISOString() } : item),
+        cashflows: [{
+          id: cashflowId, vehicleId: target.vehicleId, staffSettlementId: settlementId,
+          direction: target.direction === "スタッフへ支給" ? "支払い" : "入金", kind: "その他",
+          description: `${target.direction === "スタッフへ支給" ? "スタッフ紹介料・成果報酬" : "スタッフへの合意済み請求"} ${staffName}`,
+          amount: confirmedAmount, processedAmount: 0, status: "未処理", method: target.paymentMethod,
+          scheduledOn: confirmedOn, processedOn: null, createdAt: new Date().toISOString(),
+        }, ...current.cashflows],
+      }));
+    },
+    settleStaffSettlement: async (settlementId, settledOn) => {
+      if (!settledOn || settledOn > new Date().toISOString().slice(0, 10)) throw new Error("精算日は今日以前で入力してください。");
+      const target = data.staffSettlements.find((item) => item.id === settlementId && item.status === "確定");
+      if (!target) throw new Error("確定済みの精算が見つかりません。");
+      if (configured && supabase) {
+        const { error } = await supabase.rpc("settle_staff_settlement", { p_settlement_id: settlementId, p_settled_on: settledOn });
+        if (error) throw new Error(error.message);
+        await refreshData();
+        return;
+      }
+      setData((current) => ({
+        ...current,
+        staffSettlements: current.staffSettlements.map((item) => item.id === settlementId ? { ...item, status: "精算済み", settledAt: new Date().toISOString(), updatedAt: new Date().toISOString() } : item),
+        cashflows: current.cashflows.map((cashflow) => cashflow.staffSettlementId === settlementId ? { ...cashflow, processedAmount: cashflow.amount, status: "完了", processedOn: settledOn } : cashflow),
+      }));
+    },
+    cancelStaffSettlement: async (settlementId) => {
+      const target = data.staffSettlements.find((item) => item.id === settlementId && ["予定", "確定"].includes(item.status));
+      if (!target) throw new Error("予定または確定状態の精算が見つかりません。");
+      if (configured && supabase) {
+        const { error } = await supabase.rpc("cancel_staff_settlement", { p_settlement_id: settlementId });
+        if (error) throw new Error(error.message);
+        await refreshData();
+        return;
+      }
+      setData((current) => ({
+        ...current,
+        staffSettlements: current.staffSettlements.map((item) => item.id === settlementId ? { ...item, status: "取消", updatedAt: new Date().toISOString() } : item),
+        cashflows: current.cashflows.filter((cashflow) => cashflow.staffSettlementId !== settlementId),
+      }));
+    },
     addCashflow: async (input) => {
       if (configured && supabase) {
         const { data: inserted, error } = await supabase
@@ -682,7 +810,18 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       if (processedOn > new Date().toISOString().slice(0, 10)) {
         throw new Error("処理日に未来の日付は指定できません。");
       }
+      const cashflow = data.cashflows.find((item) => item.id === cashflowId);
+      if (!cashflow) throw new Error("対象の入出金が見つかりません。");
       if (configured && supabase) {
+        if (cashflow.staffSettlementId) {
+          const { error } = await supabase.rpc("settle_staff_settlement", {
+            p_settlement_id: cashflow.staffSettlementId,
+            p_settled_on: processedOn,
+          });
+          if (error) throw new Error(error.message);
+          await refreshData();
+          return;
+        }
         const { error } = await supabase.rpc("complete_cashflow", {
           p_cashflow_id: cashflowId,
           p_processed_on: processedOn,
@@ -692,8 +831,6 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         return;
       }
 
-      const cashflow = data.cashflows.find((item) => item.id === cashflowId);
-      if (!cashflow) throw new Error("対象の入出金が見つかりません。");
       if (cashflow.kind === "買取代金") {
         const vehicle = data.vehicles.find((item) => item.id === cashflow.vehicleId);
         if (!vehicle) throw new Error("対象車両が見つかりません。");
@@ -707,6 +844,11 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         expenses: cashflow.expenseId
           ? current.expenses.map((expense) => expense.id === cashflow.expenseId ? { ...expense, paymentStatus: "支払済み" } : expense)
           : current.expenses,
+        staffSettlements: cashflow.staffSettlementId
+          ? current.staffSettlements.map((settlement) => settlement.id === cashflow.staffSettlementId
+            ? { ...settlement, status: "精算済み", settledAt: new Date().toISOString(), updatedAt: new Date().toISOString() }
+            : settlement)
+          : current.staffSettlements,
       }));
     },
     savePurchaseContract: async (input) => {

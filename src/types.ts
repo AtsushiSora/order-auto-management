@@ -10,6 +10,7 @@ export type PageId =
   | "antique-ledger"
   | "accounting"
   | "issued-documents"
+  | "staff-settlements"
   | "settings";
 
 export type StaffRole = "owner" | "accounting" | "regular" | "spot";
@@ -20,6 +21,41 @@ export type StaffProfile = {
   role: StaffRole;
   isActive: boolean;
 };
+
+export type StaffSettlementDirection = "スタッフへ支給" | "スタッフへ請求";
+export type StaffEngagementType = "紹介のみ" | "契約から全て担当";
+export type StaffBusinessType = "販売" | "買取・オークション" | "廃車";
+export type StaffCalculationMethod = "固定額" | "粗利率" | "手入力";
+export type StaffSettlementStatus = "予定" | "確定" | "精算済み" | "取消";
+
+export type StaffSettlement = {
+  id: string;
+  staffId: string;
+  vehicleId: string;
+  contractId: string | null;
+  direction: StaffSettlementDirection;
+  engagementType: StaffEngagementType;
+  businessType: StaffBusinessType;
+  calculationMethod: StaffCalculationMethod;
+  grossProfitBasis: number;
+  ratePercent: number | null;
+  plannedAmount: number;
+  confirmedAmount: number | null;
+  paymentMethod: PaymentMethod;
+  status: StaffSettlementStatus;
+  agreementConfirmed: boolean;
+  agreementNote: string;
+  note: string;
+  confirmedAt: string | null;
+  settledAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type SaveStaffSettlementInput = Omit<
+  StaffSettlement,
+  "id" | "plannedAmount" | "confirmedAmount" | "status" | "confirmedAt" | "settledAt" | "createdAt" | "updatedAt"
+> & { settlementId: string | null; manualAmount: number };
 
 export type VehicleStatus =
   | "入庫予定"
@@ -167,6 +203,7 @@ export type Cashflow = {
   id: string;
   vehicleId: string | null;
   expenseId?: string | null;
+  staffSettlementId?: string | null;
   direction: CashflowDirection;
   kind: CashflowKind;
   description: string;
@@ -308,11 +345,13 @@ export type AntiqueLedgerEntry = {
 };
 
 export type AppData = {
+  staffProfiles: StaffProfile[];
   vehicles: Vehicle[];
   vehicleDocuments: VehicleDocument[];
   expenses: Expense[];
   attachments: Attachment[];
   issuedDocuments: IssuedDocument[];
+  staffSettlements: StaffSettlement[];
   cashflows: Cashflow[];
   contracts: Contract[];
   approvals: Approval[];

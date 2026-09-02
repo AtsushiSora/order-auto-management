@@ -15,6 +15,9 @@ import type {
   JournalExport,
   IssuedDocument,
   IssueDocumentInput,
+  SaveStaffSettlementInput,
+  StaffProfile,
+  StaffSettlement,
   NewCashflowInput,
   NewExpenseInput,
   NewVehicleInput,
@@ -208,6 +211,28 @@ const taxTreatmentFromDb: Record<string, TaxTreatment> = {
 const taxTreatmentToDb = Object.fromEntries(
   Object.entries(taxTreatmentFromDb).map(([value, label]) => [label, value]),
 ) as Record<TaxTreatment, string>;
+const staffRoleFromDb: Record<string, StaffProfile["role"]> = {
+  owner: "owner", accounting: "accounting", regular: "regular", spot: "spot",
+};
+const staffSettlementDirectionFromDb: Record<string, StaffSettlement["direction"]> = {
+  pay_staff: "スタッフへ支給", charge_staff: "スタッフへ請求",
+};
+const staffSettlementDirectionToDb = Object.fromEntries(Object.entries(staffSettlementDirectionFromDb).map(([key, value]) => [value, key])) as Record<StaffSettlement["direction"], string>;
+const staffEngagementFromDb: Record<string, StaffSettlement["engagementType"]> = {
+  referral_only: "紹介のみ", full_service: "契約から全て担当",
+};
+const staffEngagementToDb = Object.fromEntries(Object.entries(staffEngagementFromDb).map(([key, value]) => [value, key])) as Record<StaffSettlement["engagementType"], string>;
+const staffBusinessFromDb: Record<string, StaffSettlement["businessType"]> = {
+  sale: "販売", purchase_auction: "買取・オークション", scrap: "廃車",
+};
+const staffBusinessToDb = Object.fromEntries(Object.entries(staffBusinessFromDb).map(([key, value]) => [value, key])) as Record<StaffSettlement["businessType"], string>;
+const staffCalculationFromDb: Record<string, StaffSettlement["calculationMethod"]> = {
+  fixed: "固定額", gross_profit_rate: "粗利率", manual: "手入力",
+};
+const staffCalculationToDb = Object.fromEntries(Object.entries(staffCalculationFromDb).map(([key, value]) => [value, key])) as Record<StaffSettlement["calculationMethod"], string>;
+const staffSettlementStatusFromDb: Record<string, StaffSettlement["status"]> = {
+  planned: "予定", confirmed: "確定", settled: "精算済み", cancelled: "取消",
+};
 
 const stringValue = (row: DbRow, key: string) => String(row[key] ?? "");
 const nullableString = (row: DbRow, key: string) => (row[key] == null ? null : String(row[key]));
@@ -243,6 +268,16 @@ export const mapVehicleFromDb = (source: unknown): Vehicle => {
     publicImageUrl: stringValue(row, "public_image_url"),
     createdAt: stringValue(row, "created_at"),
     updatedAt: stringValue(row, "updated_at"),
+  };
+};
+
+export const mapStaffProfileFromDb = (source: unknown): StaffProfile => {
+  const row = source as DbRow;
+  return {
+    id: stringValue(row, "id"),
+    displayName: stringValue(row, "display_name"),
+    role: staffRoleFromDb[stringValue(row, "role")] ?? "regular",
+    isActive: Boolean(row.is_active),
   };
 };
 
@@ -502,6 +537,51 @@ export const issueDocumentToRpc = (input: IssueDocumentInput) => ({
   p_note: input.note.trim(),
 });
 
+export const mapStaffSettlementFromDb = (source: unknown): StaffSettlement => {
+  const row = source as DbRow;
+  return {
+    id: stringValue(row, "id"),
+    staffId: stringValue(row, "staff_id"),
+    vehicleId: stringValue(row, "vehicle_id"),
+    contractId: nullableString(row, "contract_id"),
+    direction: staffSettlementDirectionFromDb[stringValue(row, "direction")] ?? "スタッフへ支給",
+    engagementType: staffEngagementFromDb[stringValue(row, "engagement_type")] ?? "紹介のみ",
+    businessType: staffBusinessFromDb[stringValue(row, "business_type")] ?? "販売",
+    calculationMethod: staffCalculationFromDb[stringValue(row, "calculation_method")] ?? "手入力",
+    grossProfitBasis: numberValue(row, "gross_profit_basis"),
+    ratePercent: row.rate_percent == null ? null : numberValue(row, "rate_percent"),
+    plannedAmount: numberValue(row, "planned_amount"),
+    confirmedAmount: row.confirmed_amount == null ? null : numberValue(row, "confirmed_amount"),
+    paymentMethod: paymentMethodFromDb[stringValue(row, "payment_method")] ?? "振込",
+    status: staffSettlementStatusFromDb[stringValue(row, "status")] ?? "予定",
+    agreementConfirmed: Boolean(row.agreement_confirmed),
+    agreementNote: stringValue(row, "agreement_note"),
+    note: stringValue(row, "note"),
+    confirmedAt: nullableString(row, "confirmed_at"),
+    settledAt: nullableString(row, "settled_at"),
+    createdAt: stringValue(row, "created_at"),
+    updatedAt: stringValue(row, "updated_at"),
+  };
+};
+
+export const staffSettlementToRpc = (input: SaveStaffSettlementInput) => ({
+  p_settlement_id: input.settlementId,
+  p_staff_id: input.staffId,
+  p_vehicle_id: input.vehicleId,
+  p_contract_id: input.contractId,
+  p_direction: staffSettlementDirectionToDb[input.direction],
+  p_engagement_type: staffEngagementToDb[input.engagementType],
+  p_business_type: staffBusinessToDb[input.businessType],
+  p_calculation_method: staffCalculationToDb[input.calculationMethod],
+  p_gross_profit_basis: input.grossProfitBasis,
+  p_rate_percent: input.calculationMethod === "粗利率" ? input.ratePercent : null,
+  p_manual_amount: input.manualAmount,
+  p_payment_method: paymentMethodToDb[input.paymentMethod],
+  p_agreement_confirmed: input.agreementConfirmed,
+  p_agreement_note: input.agreementNote.trim(),
+  p_note: input.note.trim(),
+});
+
 export const newExpenseToDb = (input: NewExpenseInput) => ({
   vehicle_id: input.vehicleId,
   category: input.category,
@@ -540,6 +620,7 @@ export const mapCashflowFromDb = (source: unknown): Cashflow => {
     id: stringValue(row, "id"),
     vehicleId: nullableString(row, "vehicle_id"),
     expenseId: nullableString(row, "source_expense_id"),
+    staffSettlementId: nullableString(row, "source_staff_settlement_id"),
     direction: directionFromDb[stringValue(row, "direction")] ?? "入金",
     kind: cashflowKindFromDb[stringValue(row, "kind")] ?? "その他",
     description: stringValue(row, "description"),
