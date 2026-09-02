@@ -6,6 +6,7 @@ import {
   ChevronDown,
   FileSignature,
   History,
+  ListChecks,
   FileOutput,
   Home,
   Globe2,
@@ -46,6 +47,7 @@ const navItems: Array<{
   { id: "site-integration", label: "サイト連携", icon: Globe2 },
   { id: "antique-ledger", label: "古物台帳", icon: BookOpen, hiddenForSpot: true },
   { id: "accounting", label: "経理・仕訳候補", icon: ReceiptJapaneseYen },
+  { id: "production-readiness", label: "本番前チェック", icon: ListChecks, ownerOnly: true },
   { id: "settings", label: "設定", icon: Settings, ownerOnly: true },
 ];
 

@@ -15,6 +15,7 @@ import { PageHeader } from "../components/PageHeader";
 import { StatusBadge } from "../components/StatusBadge";
 import { calculateVehicleProfit, getDashboardCounts } from "../lib/calculations";
 import { formatCurrency, formatDateTime } from "../lib/format";
+import { readinessProgress } from "../lib/productionReadiness";
 import { useAppData } from "../state/AppDataContext";
 import { useAuth } from "../state/AuthContext";
 import type { PageId } from "../types";
@@ -26,7 +27,7 @@ export function DashboardPage({
   onNavigate: (page: PageId) => void;
   onCreateVehicle: () => void;
 }) {
-  const { data, isDemo } = useAppData();
+  const { data, isDemo, productionReadiness } = useAppData();
   const { profile } = useAuth();
   const canCreateVehicle = profile?.role === "owner" || profile?.role === "regular";
   const counts = getDashboardCounts(data);
@@ -35,6 +36,7 @@ export function DashboardPage({
     .slice(0, 5);
   const latestBackup = data.systemBackups[0];
   const backupDue = !latestBackup || Date.now() - new Date(latestBackup.createdAt).getTime() >= 30 * 24 * 60 * 60 * 1000;
+  const readiness = readinessProgress(productionReadiness);
 
   const summaryCards = [
     {
@@ -162,6 +164,10 @@ export function DashboardPage({
           {profile?.role === "owner" ? <button type="button" className={`alert-card ${backupDue ? "warning" : "success"}`} aria-label={`バックアップ状態 ${backupDue ? "要作成" : "正常"}`} onClick={() => onNavigate("settings")}>
             <span className="alert-icon">{backupDue ? <HardDrive size={24} /> : <CheckCircle2 size={24} />}</span>
             <span><small>バックアップ</small><strong className="status-word">{backupDue ? "要作成" : "正常"}</strong></span>
+          </button> : null}
+          {profile?.role === "owner" ? <button type="button" className={`alert-card ${productionReadiness.approvedAt ? "success" : "warning"}`} aria-label={`本番前チェック ${productionReadiness.approvedAt ? "承認済み" : `${readiness.confirmed}/${readiness.total}`}`} onClick={() => onNavigate("production-readiness")}>
+            <span className="alert-icon">{productionReadiness.approvedAt ? <CheckCircle2 size={24} /> : <ClipboardCheck size={24} />}</span>
+            <span><small>本番前チェック</small><strong className="status-word">{productionReadiness.approvedAt ? "承認済み" : `${readiness.confirmed}/${readiness.total}`}</strong></span>
           </button> : null}
         </div>
       </section>

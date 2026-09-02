@@ -9,6 +9,7 @@ import { ExpensesPage } from "./pages/ExpensesPage";
 import { PaymentsPage } from "./pages/PaymentsPage";
 import { IssuedDocumentsPage } from "./pages/IssuedDocumentsPage";
 import { ProfitsPage } from "./pages/ProfitsPage";
+import { ProductionReadinessPage } from "./pages/ProductionReadinessPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { SiteIntegrationPage } from "./pages/SiteIntegrationPage";
 import { StaffSettlementsPage } from "./pages/StaffSettlementsPage";
@@ -32,6 +33,7 @@ const pageIds: PageId[] = [
   "staff-settlements",
   "contract-handoffs",
   "spot-workspace",
+  "production-readiness",
   "settings",
 ];
 
@@ -55,7 +57,7 @@ export default function App() {
     const spotAllowed = page === "spot-workspace" || page === "staff-settlements";
     const restrictedForSpot = profile?.role === "spot" && !spotAllowed;
     const restrictedForOthers = profile?.role !== "spot" && page === "spot-workspace";
-    const restrictedOwnerPage = ["settings", "contract-handoffs"].includes(page) && profile?.role !== "owner";
+    const restrictedOwnerPage = ["settings", "contract-handoffs", "production-readiness"].includes(page) && profile?.role !== "owner";
     if (restrictedForSpot || restrictedForOthers || restrictedOwnerPage) {
       const fallback: PageId = profile?.role === "spot" ? "spot-workspace" : "dashboard";
       window.location.hash = `#/${fallback}`;
@@ -104,6 +106,8 @@ export default function App() {
         return <SpotWorkspacePage />;
       case "settings":
         return <SettingsPage />;
+      case "production-readiness":
+        return <ProductionReadinessPage />;
       default:
         return (
           <DashboardPage

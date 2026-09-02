@@ -16,6 +16,7 @@ import { canIssueDocument, findCompletedSaleReceipt, includedTaxAmount, nextDemo
 import { calculateStaffPlannedAmount } from "../lib/staffSettlements";
 import { validateStaffInvitationInput, validateStaffProfileUpdate } from "../lib/staffProfiles";
 import { calculateMonthlyBalance, calculateMonthlyMovement } from "../lib/monthlyBalance";
+import { emptyProductionReadiness, normalizeProductionReadiness, statusToDb } from "../lib/productionReadiness";
 import { supabase } from "../lib/supabase";
 import {
   antiqueLedgerDetailToDb,
@@ -90,10 +91,14 @@ import type {
   UpdateStaffProfileInput,
   BackupRestoreMode,
   SystemBackup,
+  ProductionReadiness,
+  ProductionReadinessCheckKey,
+  ReadinessCheckStatus,
 } from "../types";
 import { useAuth } from "./AuthContext";
 
 const STORAGE_KEY = "order-auto-management-demo-v1";
+const READINESS_STORAGE_KEY = "order-auto-management-readiness-v1";
 const demoEvidenceUrls = new Map<string, string>();
 const demoBackupPayloads = new Map<string, AppData>();
 
@@ -134,6 +139,7 @@ const emptyData: AppData = {
 type AppDataContextValue = {
   data: AppData;
   isDemo: boolean;
+  productionReadiness: ProductionReadiness;
   inviteStaffProfile: (input: InviteStaffProfileInput) => Promise<void>;
   updateStaffProfile: (input: UpdateStaffProfileInput) => Promise<void>;
   addVehicle: (input: NewVehicleInput) => Promise<Vehicle>;
@@ -174,6 +180,8 @@ type AppDataContextValue = {
   saveSystemBackupToDrive: (backupId: string, googleAccessToken: string) => Promise<{ folderUrl: string }>;
   restoreSystemBackup: (backupId: string, mode: BackupRestoreMode) => Promise<void>;
   deleteSystemBackup: (backupId: string) => Promise<void>;
+  saveProductionReadinessCheck: (checkKey: ProductionReadinessCheckKey, status: ReadinessCheckStatus, note: string) => Promise<void>;
+  setProductionApproved: (approved: boolean) => Promise<void>;
   savePurchaseContract: (input: PurchaseContractInput) => Promise<string>;
   saveSaleContract: (input: SaleContractInput) => Promise<string>;
   saveAntiqueLedgerDetail: (input: SaveAntiqueLedgerDetailInput) => Promise<void>;
@@ -260,6 +268,16 @@ const loadInitialDemoData = (): AppData => {
   }
 };
 
+const loadInitialDemoReadiness = (): ProductionReadiness => {
+  if (typeof window === "undefined") return emptyProductionReadiness();
+  try {
+    const stored = window.localStorage.getItem(READINESS_STORAGE_KEY);
+    return stored ? normalizeProductionReadiness(JSON.parse(stored)) : emptyProductionReadiness();
+  } catch {
+    return emptyProductionReadiness();
+  }
+};
+
 const nextManagementNumber = (vehicles: Vehicle[]): string => {
   const year = String(new Date().getFullYear()).slice(-2);
   const currentNumbers = vehicles
@@ -298,6 +316,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   const { configured, session, profile, refreshProfile, signOut, testSignIn } = useAuth();
   const testLoginEnabled = import.meta.env.DEV || import.meta.env.VITE_ENABLE_TEST_LOGIN === "true";
   const [data, setData] = useState<AppData>(() => configured ? emptyData : loadInitialDemoData());
+  const [productionReadiness, setProductionReadiness] = useState<ProductionReadiness>(() => configured ? emptyProductionReadiness() : loadInitialDemoReadiness());
   const [loading, setLoading] = useState(configured);
   const [loadError, setLoadError] = useState<string | null>(null);
   const configuredRef = useRef(configured);
@@ -309,9 +328,14 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   }, [configured, data]);
 
   useEffect(() => {
+    if (!configured) window.localStorage.setItem(READINESS_STORAGE_KEY, JSON.stringify(productionReadiness));
+  }, [configured, productionReadiness]);
+
+  useEffect(() => {
     if (configured) return;
     refreshRequestId.current += 1;
     setData(loadInitialDemoData());
+    setProductionReadiness(loadInitialDemoReadiness());
     setLoading(false);
     setLoadError(null);
   }, [configured]);
@@ -345,6 +369,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         client.from("antique_ledger_details").select("*").order("updated_at", { ascending: false }),
         client.from("journal_candidate_reviews").select("*").order("candidate_date", { ascending: false }),
         client.from("journal_exports").select("*").order("created_at", { ascending: false }),
+        client.from("app_settings").select("value, updated_at").eq("key", "production_readiness").maybeSingle(),
       ] as const);
 
       let results = await fetchResults();
@@ -360,7 +385,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
 
       if (!requestIsCurrent()) return;
 
-      const [staffResult, spotAssignmentsResult, contractHandoffsResult, vehiclesResult, documentsResult, expensesResult, attachmentsResult, issuedDocumentsResult, staffSettlementsResult, cashflowsResult, cashflowOffsetsResult, cashflowEventsResult, monthlyBalanceChecksResult, systemBackupsResult, contractsResult, approvalsResult, inquiriesResult, ledgerResult, journalReviewsResult, journalExportsResult] = results;
+      const [staffResult, spotAssignmentsResult, contractHandoffsResult, vehiclesResult, documentsResult, expensesResult, attachmentsResult, issuedDocumentsResult, staffSettlementsResult, cashflowsResult, cashflowOffsetsResult, cashflowEventsResult, monthlyBalanceChecksResult, systemBackupsResult, contractsResult, approvalsResult, inquiriesResult, ledgerResult, journalReviewsResult, journalExportsResult, readinessResult] = results;
 
       setData({
         staffProfiles: (staffResult.data ?? []).map(mapStaffProfileFromDb),
@@ -384,6 +409,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         journalCandidateReviews: (journalReviewsResult.data ?? []).map(mapJournalCandidateReviewFromDb),
         journalExports: (journalExportsResult.data ?? []).map(mapJournalExportFromDb),
       });
+      setProductionReadiness(normalizeProductionReadiness(readinessResult.data?.value, readinessResult.data?.updated_at));
     } catch (reason) {
       if (requestIsCurrent()) setLoadError(errorMessage(reason));
     } finally {
@@ -488,6 +514,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   const value = useMemo<AppDataContextValue>(() => ({
     data,
     isDemo: !configured,
+    productionReadiness,
     inviteStaffProfile: async (input) => {
       if (profile?.role !== "owner" || !profile.isActive) {
         throw new Error("利用者を招待できるのは事業主だけです。");
@@ -1378,6 +1405,41 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       demoBackupPayloads.delete(backupId);
       setData((current) => ({ ...current, systemBackups: current.systemBackups.filter((item) => item.id !== backupId) }));
     },
+    saveProductionReadinessCheck: async (checkKey, status, note) => {
+      if (profile?.role !== "owner" || !profile.isActive) throw new Error("本番前チェックを変更できるのは事業主だけです。");
+      if (note.length > 1000) throw new Error("確認メモは1000文字以内で入力してください。");
+      if (configured && supabase) {
+        const { error } = await supabase.rpc("save_production_readiness_check", {
+          p_check_key: checkKey,
+          p_status: statusToDb(status),
+          p_note: note.trim(),
+        });
+        if (error) throw new Error(error.message);
+        await refreshData();
+        return;
+      }
+      const now = new Date().toISOString();
+      setProductionReadiness((current) => ({
+        ...current,
+        checks: { ...current.checks, [checkKey]: { status, note: note.trim(), checkedAt: status === "未確認" ? null : now } },
+        approvedAt: null,
+        approvedBy: null,
+        updatedAt: now,
+      }));
+    },
+    setProductionApproved: async (approved) => {
+      if (profile?.role !== "owner" || !profile.isActive) throw new Error("本番利用を承認できるのは事業主だけです。");
+      if (configured && supabase) {
+        const { error } = await supabase.rpc("set_production_readiness_approval", { p_approved: approved });
+        if (error) throw new Error(error.message);
+        await refreshData();
+        return;
+      }
+      const now = new Date().toISOString();
+      const allConfirmed = Object.values(productionReadiness.checks).filter((check) => check.status === "確認済み").length === 14;
+      if (approved && !allConfirmed) throw new Error("すべての確認項目を確認済みにしてから承認してください。");
+      setProductionReadiness((current) => ({ ...current, approvedAt: approved ? now : null, approvedBy: approved ? profile.id : null, updatedAt: now }));
+    },
     savePurchaseContract: async (input) => {
       if (configured && supabase) {
         const { data: savedId, error } = await supabase.rpc("save_purchase_contract", purchaseContractToRpc(input));
@@ -1660,10 +1722,13 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       }));
     },
     resetDemoData: () => {
-      if (!configured) setData(cloneSeedData());
+      if (!configured) {
+        setData(cloneSeedData());
+        setProductionReadiness(emptyProductionReadiness());
+      }
     },
     refreshData,
-  }), [configured, data, persistExpense, profile, refreshData, refreshProfile, session?.user.id]);
+  }), [configured, data, persistExpense, productionReadiness, profile, refreshData, refreshProfile, session?.user.id]);
 
   if (loading) return <SystemLoading message="共有データを読み込んでいます" />;
   if (loadError) return (

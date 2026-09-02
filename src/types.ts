@@ -13,6 +13,7 @@ export type PageId =
   | "staff-settlements"
   | "contract-handoffs"
   | "spot-workspace"
+  | "production-readiness"
   | "settings";
 
 export type StaffRole = "owner" | "accounting" | "regular" | "spot";
@@ -342,6 +343,36 @@ export type SystemBackup = {
   driveFolderUrl: string | null;
   driveSavedAt: string | null;
   createdAt: string;
+};
+
+export type ReadinessCheckStatus = "未確認" | "確認済み" | "要修正";
+export type ProductionReadinessCheckKey =
+  | "purchase_standard"
+  | "purchase_zero"
+  | "sale_delivery"
+  | "trade_in"
+  | "auction_scrap"
+  | "cashflow"
+  | "expenses_profit"
+  | "antique_ledger"
+  | "documents_accounting"
+  | "staff_settlement"
+  | "permissions"
+  | "contract_site_links"
+  | "real_devices"
+  | "backup_restore";
+
+export type ProductionReadinessCheck = {
+  status: ReadinessCheckStatus;
+  note: string;
+  checkedAt: string | null;
+};
+
+export type ProductionReadiness = {
+  checks: Partial<Record<ProductionReadinessCheckKey, ProductionReadinessCheck>>;
+  approvedAt: string | null;
+  approvedBy: string | null;
+  updatedAt: string | null;
 };
 
 export type ContractStatus = "下書き" | "署名待ち" | "契約済み" | "キャンセル済み";
