@@ -4,6 +4,7 @@ import type {
   Attachment,
   Approval,
   Cashflow,
+  CashflowEvent,
   CashflowOffset,
   CashflowDirection,
   CashflowKind,
@@ -15,6 +16,7 @@ import type {
   ExpenseStatus,
   JournalCandidateReview,
   JournalExport,
+  MonthlyBalanceCheck,
   IssuedDocument,
   IssueDocumentInput,
   SaveStaffSettlementInput,
@@ -288,6 +290,41 @@ export const mapStaffProfileFromDb = (source: unknown): StaffProfile => {
     displayName: stringValue(row, "display_name"),
     role: staffRoleFromDb[stringValue(row, "role")] ?? "regular",
     isActive: Boolean(row.is_active),
+  };
+};
+
+export const mapCashflowEventFromDb = (source: unknown): CashflowEvent => {
+  const row = source as DbRow;
+  return {
+    id: stringValue(row, "id"),
+    cashflowId: stringValue(row, "cashflow_id"),
+    amount: numberValue(row, "amount"),
+    method: paymentMethodFromDb[stringValue(row, "method")] ?? "その他",
+    processedOn: stringValue(row, "processed_on"),
+    createdAt: stringValue(row, "created_at"),
+  };
+};
+
+export const mapMonthlyBalanceCheckFromDb = (source: unknown): MonthlyBalanceCheck => {
+  const row = source as DbRow;
+  return {
+    id: stringValue(row, "id"),
+    targetMonth: stringValue(row, "target_month").slice(0, 7),
+    openingCashBalance: numberValue(row, "opening_cash_balance"),
+    openingBankBalance: numberValue(row, "opening_bank_balance"),
+    cashMovement: numberValue(row, "cash_movement"),
+    bankMovement: numberValue(row, "bank_movement"),
+    systemCashBalance: numberValue(row, "system_cash_balance"),
+    systemBankBalance: numberValue(row, "system_bank_balance"),
+    actualCashBalance: numberValue(row, "actual_cash_balance"),
+    actualBankBalance: numberValue(row, "actual_bank_balance"),
+    cashDifference: numberValue(row, "cash_difference"),
+    bankDifference: numberValue(row, "bank_difference"),
+    status: stringValue(row, "status") === "confirmed" ? "確定" : "確認中",
+    note: stringValue(row, "note"),
+    confirmedAt: nullableString(row, "confirmed_at"),
+    createdAt: stringValue(row, "created_at"),
+    updatedAt: stringValue(row, "updated_at"),
   };
 };
 

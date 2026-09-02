@@ -2972,6 +2972,123 @@ button.mini-summary-card:hover {
   font-size: 11px;
 }
 
+.monthly-balance-panel {
+  margin-bottom: 18px;
+  padding: 20px;
+}
+
+.monthly-balance-heading,
+.balance-channel-title,
+.balance-difference,
+.confirmed-lock {
+  display: flex;
+  align-items: center;
+}
+
+.monthly-balance-heading {
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.monthly-balance-heading h2 {
+  margin: 3px 0 2px;
+  color: var(--navy-900);
+  font-size: 18px;
+}
+
+.monthly-balance-heading p,
+.balance-helper {
+  margin: 0;
+  color: var(--slate-500);
+  font-size: 11px;
+}
+
+.monthly-balance-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.balance-channel-card {
+  padding: 16px;
+  border: 1px solid var(--slate-200);
+  border-radius: 12px;
+  background: var(--slate-100);
+}
+
+.balance-channel-title {
+  gap: 8px;
+  margin-bottom: 14px;
+  color: var(--blue-600);
+}
+
+.balance-calculation {
+  margin: 10px 0;
+  padding: 10px 0;
+  border-top: 1px solid var(--slate-200);
+  border-bottom: 1px solid var(--slate-200);
+}
+
+.balance-calculation div,
+.balance-difference {
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.balance-calculation div {
+  display: flex;
+  padding: 4px 0;
+}
+
+.balance-calculation dt,
+.balance-difference span {
+  color: var(--slate-500);
+  font-size: 11px;
+}
+
+.balance-calculation dd {
+  margin: 0;
+  color: var(--slate-800);
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.balance-difference {
+  margin-top: 10px;
+  padding: 10px 12px;
+  border-radius: 8px;
+}
+
+.balance-difference.matched {
+  color: var(--green-700);
+  background: var(--green-100);
+}
+
+.balance-difference.unmatched {
+  color: var(--red-700);
+  background: var(--red-100);
+}
+
+.monthly-balance-note {
+  margin-top: 14px;
+}
+
+.balance-helper {
+  margin-top: 10px;
+}
+
+.monthly-balance-actions {
+  margin-top: 14px;
+}
+
+.confirmed-lock {
+  gap: 7px;
+  color: var(--green-700);
+  font-size: 12px;
+  font-weight: 750;
+}
+
 .page-message {
   margin: -4px 0 14px;
 }
@@ -3019,6 +3136,28 @@ button.mini-summary-card:hover {
 @media (max-width: 680px) {
   .accounting-summary-grid {
     grid-template-columns: 1fr;
+  }
+
+  .monthly-balance-panel {
+    padding: 15px;
+  }
+
+  .monthly-balance-heading {
+    align-items: flex-start;
+  }
+
+  .monthly-balance-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .monthly-balance-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .monthly-balance-actions button {
+    width: 100%;
+    justify-content: center;
   }
 }
 

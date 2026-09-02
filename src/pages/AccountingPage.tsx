@@ -4,13 +4,17 @@ import {
   CheckCircle2,
   Clock3,
   Download,
+  Landmark,
+  LockKeyhole,
   Save,
+  WalletCards,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Drawer } from "../components/Drawer";
 import { PageHeader } from "../components/PageHeader";
 import { buildJournalCandidates, createJournalCsv, taxTreatmentLabels } from "../lib/accounting";
 import { formatCurrency, formatDate } from "../lib/format";
+import { calculateMonthlyBalance, calculateMonthlyMovement } from "../lib/monthlyBalance";
 import { useAppData } from "../state/AppDataContext";
 import { useAuth } from "../state/AuthContext";
 import type {
@@ -18,6 +22,7 @@ import type {
   JournalCandidateStatus,
   JournalReviewStatus,
   SaveJournalCandidateReviewInput,
+  SaveMonthlyBalanceCheckInput,
   TaxTreatment,
 } from "../types";
 
@@ -42,9 +47,10 @@ const formFromCandidate = (candidate: JournalCandidate): SaveJournalCandidateRev
 });
 
 export function AccountingPage() {
-  const { data, saveJournalCandidateReview, recordJournalExport } = useAppData();
+  const { data, saveJournalCandidateReview, recordJournalExport, saveMonthlyBalanceCheck } = useAppData();
   const { profile } = useAuth();
   const canReview = profile?.role === "owner" || profile?.role === "accounting";
+  const canSaveBalance = canReview || profile?.role === "regular";
   const candidates = useMemo(() => buildJournalCandidates(data), [data]);
   const [targetMonth, setTargetMonth] = useState(new Date().toISOString().slice(0, 7));
   const [statusFilter, setStatusFilter] = useState<"すべて" | "未確認" | "確認済み">("すべて");
@@ -53,6 +59,15 @@ export function AccountingPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [pageMessage, setPageMessage] = useState("");
+  const [balanceBusy, setBalanceBusy] = useState(false);
+  const [balanceMessage, setBalanceMessage] = useState("");
+  const [balanceForm, setBalanceForm] = useState<Omit<SaveMonthlyBalanceCheckInput, "targetMonth" | "confirm">>({
+    openingCashBalance: 0,
+    openingBankBalance: 0,
+    actualCashBalance: 0,
+    actualBankBalance: 0,
+    note: "",
+  });
 
   const monthly = candidates.filter((candidate) => candidate.candidateDate.startsWith(targetMonth));
   const filtered = monthly.filter((candidate) => {
@@ -63,6 +78,40 @@ export function AccountingPage() {
   const confirmed = monthly.filter((candidate) => candidate.status === "確認済み");
   const pending = monthly.length - confirmed.length;
   const exportsForMonth = data.journalExports.filter((item) => item.targetMonth === targetMonth);
+  const balanceCheck = data.monthlyBalanceChecks.find((item) => item.targetMonth === targetMonth);
+  const previousCheck = [...data.monthlyBalanceChecks]
+    .filter((item) => item.targetMonth < targetMonth && item.status === "確定")
+    .sort((left, right) => right.targetMonth.localeCompare(left.targetMonth))[0];
+  const movement = useMemo(
+    () => calculateMonthlyMovement(data.cashflows, data.cashflowEvents, targetMonth),
+    [data.cashflows, data.cashflowEvents, targetMonth],
+  );
+  const balancePreview = useMemo(() => {
+    try {
+      return calculateMonthlyBalance({ ...balanceForm, targetMonth, confirm: false }, movement);
+    } catch {
+      return null;
+    }
+  }, [balanceForm, movement, targetMonth]);
+
+  useEffect(() => {
+    const previousCash = previousCheck?.actualCashBalance ?? 0;
+    const previousBank = previousCheck?.actualBankBalance ?? 0;
+    setBalanceForm(balanceCheck ? {
+      openingCashBalance: balanceCheck.openingCashBalance,
+      openingBankBalance: balanceCheck.openingBankBalance,
+      actualCashBalance: balanceCheck.actualCashBalance,
+      actualBankBalance: balanceCheck.actualBankBalance,
+      note: balanceCheck.note,
+    } : {
+      openingCashBalance: previousCash,
+      openingBankBalance: previousBank,
+      actualCashBalance: previousCash + movement.cash,
+      actualBankBalance: previousBank + movement.bank,
+      note: "",
+    });
+    setBalanceMessage("");
+  }, [balanceCheck, movement.bank, movement.cash, previousCheck?.actualBankBalance, previousCheck?.actualCashBalance, targetMonth]);
 
   const openCandidate = (candidate: JournalCandidate) => {
     setSelected(candidate);
@@ -92,6 +141,10 @@ export function AccountingPage() {
 
   const downloadCsv = async () => {
     if (!confirmed.length) return;
+    if (balanceCheck?.status !== "確定") {
+      setPageMessage("月次残高を確定してからCSVを出力してください。");
+      return;
+    }
     if (exportsForMonth.length > 0 && !window.confirm(`${targetMonth}はすでに${exportsForMonth.length}回出力されています。もう一度出力しますか？`)) return;
     setBusy(true);
     setPageMessage("");
@@ -112,12 +165,25 @@ export function AccountingPage() {
     }
   };
 
+  const saveBalance = async (confirm: boolean) => {
+    setBalanceBusy(true);
+    setBalanceMessage("");
+    try {
+      await saveMonthlyBalanceCheck({ ...balanceForm, targetMonth, confirm });
+      setBalanceMessage(confirm ? `${targetMonth}の月次残高を確定しました。` : "月次残高を確認中として保存しました。");
+    } catch (reason) {
+      setBalanceMessage(reason instanceof Error ? reason.message : "月次残高を保存できませんでした。");
+    } finally {
+      setBalanceBusy(false);
+    }
+  };
+
   return (
     <>
       <PageHeader
         title="経理・仕訳候補"
         description="元取引から候補を作り、確認済みのものだけ月別CSVへ出力します。"
-        action={canReview ? <button type="button" className="primary-button" disabled={busy || !confirmed.length} onClick={() => void downloadCsv()}><Download size={18} />確認済みをCSV出力</button> : undefined}
+        action={canReview ? <button type="button" className="primary-button" disabled={busy || !confirmed.length || balanceCheck?.status !== "確定"} onClick={() => void downloadCsv()}><Download size={18} />確認済みをCSV出力</button> : undefined}
       />
 
       <section className="integration-note panel accounting-note">
@@ -128,7 +194,7 @@ export function AccountingPage() {
       <section className="mini-summary-grid accounting-summary-grid">
         <button type="button" className="mini-summary-card blue" onClick={() => setStatusFilter("すべて")}><Calculator size={22} /><small>候補合計</small><strong>{monthly.length}件</strong></button>
         <button type="button" className="mini-summary-card amber" onClick={() => setStatusFilter("未確認")}><AlertTriangle size={22} /><small>未確認・再確認</small><strong>{pending}件</strong></button>
-        <button type="button" className="mini-summary-card teal" onClick={() => setStatusFilter("確認済み")}><CheckCircle2 size={22} /><small>CSV出力可能</small><strong>{confirmed.length}件</strong></button>
+        <button type="button" className="mini-summary-card teal" onClick={() => setStatusFilter("確認済み")}><CheckCircle2 size={22} /><small>仕訳確認済み</small><strong>{confirmed.length}件</strong></button>
       </section>
 
       <div className="filter-bar panel accounting-filter-bar">
@@ -138,6 +204,43 @@ export function AccountingPage() {
         </div>
         <div className="result-count">{filtered.length}件</div>
       </div>
+
+      <section className="panel monthly-balance-panel">
+        <div className="monthly-balance-heading">
+          <div><span className="eyebrow">月次残高確認</span><h2>{targetMonth} 現金・事業用口座</h2><p>相殺は含めず、実際に動いたお金だけを照合します。</p></div>
+          <span className={`status-badge ${balanceCheck?.status === "確定" ? "green" : "amber"}`}>{balanceCheck?.status ?? "未保存"}</span>
+        </div>
+
+        <div className="monthly-balance-grid">
+          {([
+            { key: "Cash" as const, icon: WalletCards, label: "現金", movement: movement.cash },
+            { key: "Bank" as const, icon: Landmark, label: "事業用口座", movement: movement.bank },
+          ]).map(({ key, icon: Icon, label, movement: channelMovement }) => {
+            const openingKey = `opening${key}Balance` as "openingCashBalance" | "openingBankBalance";
+            const actualKey = `actual${key}Balance` as "actualCashBalance" | "actualBankBalance";
+            const systemBalance = key === "Cash" ? balancePreview?.systemCashBalance : balancePreview?.systemBankBalance;
+            const difference = key === "Cash" ? balancePreview?.cashDifference : balancePreview?.bankDifference;
+            return <article className="balance-channel-card" key={key}>
+              <div className="balance-channel-title"><Icon size={21} /><strong>{label}</strong></div>
+              <label className="field-label">月初残高<input type="number" min="0" step="1" value={balanceForm[openingKey]} disabled={!canSaveBalance || balanceCheck?.status === "確定"} onChange={(event) => setBalanceForm({ ...balanceForm, [openingKey]: Number(event.target.value) })} /></label>
+              <dl className="balance-calculation"><div><dt>当月の増減</dt><dd>{formatCurrency(channelMovement)}</dd></div><div><dt>システム上の月末残高</dt><dd>{systemBalance == null ? "—" : formatCurrency(systemBalance)}</dd></div></dl>
+              <label className="field-label">実際の月末残高<input type="number" min="0" step="1" value={balanceForm[actualKey]} disabled={!canSaveBalance || balanceCheck?.status === "確定"} onChange={(event) => setBalanceForm({ ...balanceForm, [actualKey]: Number(event.target.value) })} /></label>
+              <div className={`balance-difference ${difference === 0 ? "matched" : "unmatched"}`}><span>差額</span><strong>{difference == null ? "—" : formatCurrency(difference)}</strong></div>
+            </article>;
+          })}
+        </div>
+
+        {movement.excluded > 0 ? <p className="form-warning">ローン・カード・その他の入出金 {formatCurrency(movement.excluded)} は、現金・口座残高の照合対象外です。</p> : null}
+        <label className="field-label monthly-balance-note">確認メモ<textarea rows={2} value={balanceForm.note} disabled={!canSaveBalance || balanceCheck?.status === "確定"} onChange={(event) => setBalanceForm({ ...balanceForm, note: event.target.value })} placeholder="差額の確認内容など" /></label>
+        {previousCheck ? <p className="balance-helper">直近の確定月（{previousCheck.targetMonth}）の月末残高を初期値にしています。</p> : <p className="balance-helper">初回は通帳・現金を確認し、対象月の月初残高を入力してください。</p>}
+        {balanceMessage ? <p className={balanceMessage.includes("できません") || balanceMessage.includes("ください") ? "form-error" : "form-success"}>{balanceMessage}</p> : null}
+        <div className="form-actions monthly-balance-actions">
+          {balanceCheck?.status === "確定" ? <span className="confirmed-lock"><LockKeyhole size={17} />確定済みのため変更できません</span> : canSaveBalance ? <>
+            <button type="button" className="secondary-button" disabled={balanceBusy} onClick={() => void saveBalance(false)}><Save size={17} />確認中で保存</button>
+            {canReview ? <button type="button" className="primary-button" disabled={balanceBusy || !balancePreview || balancePreview.cashDifference !== 0 || balancePreview.bankDifference !== 0} onClick={() => void saveBalance(true)}><LockKeyhole size={17} />差額0円で月次確定</button> : null}
+          </> : null}
+        </div>
+      </section>
 
       {exportsForMonth.length ? <p className="accounting-export-history"><Clock3 size={16} />この月は{exportsForMonth.length}回出力済み・最終 {formatDate(exportsForMonth[0].createdAt)}</p> : null}
       {pageMessage ? <p className="form-success page-message">{pageMessage}</p> : null}

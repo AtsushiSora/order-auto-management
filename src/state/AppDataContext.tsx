@@ -15,6 +15,7 @@ import { buildExpenseEvidencePath, PRIVATE_BUCKET, validateEvidenceFile } from "
 import { canIssueDocument, findCompletedSaleReceipt, includedTaxAmount, nextDemoDocumentNumber } from "../lib/issuedDocuments";
 import { calculateStaffPlannedAmount } from "../lib/staffSettlements";
 import { validateStaffInvitationInput, validateStaffProfileUpdate } from "../lib/staffProfiles";
+import { calculateMonthlyBalance, calculateMonthlyMovement } from "../lib/monthlyBalance";
 import { supabase } from "../lib/supabase";
 import {
   antiqueLedgerDetailToDb,
@@ -22,12 +23,14 @@ import {
   mapAttachmentFromDb,
   mapAntiqueLedgerDetailFromDb,
   mapCashflowFromDb,
+  mapCashflowEventFromDb,
   mapCashflowOffsetFromDb,
   mapContractFromDb,
   mapContractHandoffFromDb,
   mapExpenseFromDb,
   mapJournalCandidateReviewFromDb,
   mapJournalExportFromDb,
+  mapMonthlyBalanceCheckFromDb,
   mapIssuedDocumentFromDb,
   mapStaffProfileFromDb,
   mapStaffSettlementFromDb,
@@ -79,7 +82,10 @@ import type {
   VehiclePublicationInput,
   WebsiteInquiryStatus,
   CashflowOffset,
+  CashflowEvent,
   InviteStaffProfileInput,
+  MonthlyBalanceCheck,
+  SaveMonthlyBalanceCheckInput,
   UpdateStaffProfileInput,
 } from "../types";
 import { useAuth } from "./AuthContext";
@@ -98,6 +104,8 @@ const emptyData: AppData = {
   staffSettlements: [],
   cashflows: [],
   cashflowOffsets: [],
+  cashflowEvents: [],
+  monthlyBalanceChecks: [],
   contracts: [],
   approvals: [],
   websiteInquiries: [],
@@ -143,6 +151,7 @@ type AppDataContextValue = {
   completeCashflow: (cashflowId: string, processedOn: string) => Promise<void>;
   applyCashflowOffset: (saleCashflowId: string, purchaseCashflowId: string, amount: number, offsetOn: string, note: string) => Promise<CashflowOffset>;
   voidCashflowOffset: (offsetId: string) => Promise<void>;
+  saveMonthlyBalanceCheck: (input: SaveMonthlyBalanceCheckInput) => Promise<MonthlyBalanceCheck>;
   savePurchaseContract: (input: PurchaseContractInput) => Promise<string>;
   saveSaleContract: (input: SaleContractInput) => Promise<string>;
   saveAntiqueLedgerDetail: (input: SaveAntiqueLedgerDetailInput) => Promise<void>;
@@ -201,6 +210,8 @@ const loadInitialDemoData = (): AppData => {
         kind: cashflow.kind ?? demoCashflowKind(cashflow),
       })),
       cashflowOffsets: parsed.cashflowOffsets ?? [],
+      cashflowEvents: parsed.cashflowEvents ?? seed.cashflowEvents,
+      monthlyBalanceChecks: parsed.monthlyBalanceChecks ?? [],
       websiteInquiries: parsed.websiteInquiries ?? seed.websiteInquiries,
       antiqueLedgerDetails: parsed.antiqueLedgerDetails ?? seed.antiqueLedgerDetails,
       journalCandidateReviews: parsed.journalCandidateReviews ?? seed.journalCandidateReviews,
@@ -287,6 +298,8 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         client.from("staff_settlements").select("*").order("created_at", { ascending: false }),
         client.from("cashflows").select("*").is("deleted_at", null).order("scheduled_on", { ascending: false }),
         client.from("cashflow_offsets").select("*").order("created_at", { ascending: false }),
+        client.from("cashflow_events").select("*").order("processed_on", { ascending: false }),
+        client.from("monthly_balance_checks").select("*").order("target_month", { ascending: false }),
         client.from("contracts").select("*").is("deleted_at", null).order("updated_at", { ascending: false }),
         client.from("approvals").select("*").order("created_at", { ascending: false }),
         client.from("website_inquiries").select("*").order("received_at", { ascending: false }),
@@ -308,7 +321,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
 
       if (!requestIsCurrent()) return;
 
-      const [staffResult, spotAssignmentsResult, contractHandoffsResult, vehiclesResult, documentsResult, expensesResult, attachmentsResult, issuedDocumentsResult, staffSettlementsResult, cashflowsResult, cashflowOffsetsResult, contractsResult, approvalsResult, inquiriesResult, ledgerResult, journalReviewsResult, journalExportsResult] = results;
+      const [staffResult, spotAssignmentsResult, contractHandoffsResult, vehiclesResult, documentsResult, expensesResult, attachmentsResult, issuedDocumentsResult, staffSettlementsResult, cashflowsResult, cashflowOffsetsResult, cashflowEventsResult, monthlyBalanceChecksResult, contractsResult, approvalsResult, inquiriesResult, ledgerResult, journalReviewsResult, journalExportsResult] = results;
 
       setData({
         staffProfiles: (staffResult.data ?? []).map(mapStaffProfileFromDb),
@@ -322,6 +335,8 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         staffSettlements: (staffSettlementsResult.data ?? []).map(mapStaffSettlementFromDb),
         cashflows: (cashflowsResult.data ?? []).map(mapCashflowFromDb),
         cashflowOffsets: (cashflowOffsetsResult.data ?? []).map(mapCashflowOffsetFromDb),
+        cashflowEvents: (cashflowEventsResult.data ?? []).map(mapCashflowEventFromDb),
+        monthlyBalanceChecks: (monthlyBalanceChecksResult.data ?? []).map(mapMonthlyBalanceCheckFromDb),
         contracts: (contractsResult.data ?? []).map(mapContractFromDb),
         approvals: (approvalsResult.data ?? []).map(mapApprovalFromDb),
         websiteInquiries: (inquiriesResult.data ?? []).map(mapWebsiteInquiryFromDb),
@@ -387,6 +402,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
 
     setData((current) => {
       let cashflows = current.cashflows;
+      let cashflowEvents = current.cashflowEvents;
       if (input.expenseStatus === "予定") {
         cashflows = linked ? cashflows.filter((cashflow) => cashflow.id !== linked.id) : cashflows;
       } else {
@@ -408,11 +424,23 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
           createdAt: linked?.createdAt ?? now,
         };
         cashflows = [cashflow, ...cashflows.filter((item) => item.id !== cashflow.id)];
+        const newlyProcessed = processedAmount - (linked?.processedAmount ?? 0);
+        if (newlyProcessed > 0) {
+          cashflowEvents = [{
+            id: crypto.randomUUID(),
+            cashflowId: cashflow.id,
+            amount: newlyProcessed,
+            method: input.paymentMethod,
+            processedOn: cashflow.processedOn ?? now.slice(0, 10),
+            createdAt: now,
+          }, ...cashflowEvents];
+        }
       }
       return {
         ...current,
         expenses: [expense, ...current.expenses.filter((item) => item.id !== expenseId)],
         cashflows,
+        cashflowEvents,
       };
     });
   }, [configured, data.cashflows, data.expenses, refreshData]);
@@ -1035,9 +1063,17 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         return;
       }
 
+      const id = crypto.randomUUID();
+      const createdAt = new Date().toISOString();
+      const cashflow = { ...input, kind: demoCashflowKind(input), id, createdAt };
+      const event: CashflowEvent | null = input.processedAmount > 0 && input.processedOn ? {
+        id: crypto.randomUUID(), cashflowId: id, amount: input.processedAmount,
+        method: input.method, processedOn: input.processedOn, createdAt,
+      } : null;
       setData((current) => ({
         ...current,
-        cashflows: [{ ...input, kind: demoCashflowKind(input), id: crypto.randomUUID(), createdAt: new Date().toISOString() }, ...current.cashflows],
+        cashflows: [cashflow, ...current.cashflows],
+        cashflowEvents: event ? [event, ...current.cashflowEvents] : current.cashflowEvents,
       }));
     },
     completeCashflow: async (cashflowId, processedOn) => {
@@ -1071,17 +1107,23 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         if (!vehicle) throw new Error("対象車両が見つかりません。");
         if (vehicle.status === "入庫予定") throw new Error("買取代金は車両の入庫後に支払ってください。");
       }
+      const remaining = cashflow.amount - cashflow.processedAmount;
+      const now = new Date().toISOString();
       setData((current) => ({
         ...current,
         cashflows: current.cashflows.map((item) => item.id === cashflowId
           ? { ...item, processedAmount: item.amount, status: "完了", processedOn }
           : item),
+        cashflowEvents: remaining > 0 ? [{
+          id: crypto.randomUUID(), cashflowId, amount: remaining,
+          method: cashflow.method, processedOn, createdAt: now,
+        }, ...current.cashflowEvents] : current.cashflowEvents,
         expenses: cashflow.expenseId
           ? current.expenses.map((expense) => expense.id === cashflow.expenseId ? { ...expense, paymentStatus: "支払済み" } : expense)
           : current.expenses,
         staffSettlements: cashflow.staffSettlementId
           ? current.staffSettlements.map((settlement) => settlement.id === cashflow.staffSettlementId
-            ? { ...settlement, status: "精算済み", settledAt: new Date().toISOString(), updatedAt: new Date().toISOString() }
+            ? { ...settlement, status: "精算済み", settledAt: now, updatedAt: now }
             : settlement)
           : current.staffSettlements,
       }));
@@ -1144,6 +1186,58 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
           return { ...item, processedAmount, status: processedAmount === 0 ? "未処理" : processedAmount === item.amount ? "完了" : "一部", processedOn: processedAmount === 0 ? null : item.processedOn };
         }),
       }));
+    },
+    saveMonthlyBalanceCheck: async (input) => {
+      const canSave = profile?.role === "owner" || profile?.role === "accounting" || profile?.role === "regular";
+      const canConfirm = profile?.role === "owner" || profile?.role === "accounting";
+      if (!canSave) throw new Error("月次残高を保存する権限がありません。");
+      if (input.confirm && !canConfirm) throw new Error("月次確定は事業主または経理担当だけができます。");
+      const existing = data.monthlyBalanceChecks.find((item) => item.targetMonth === input.targetMonth);
+      if (existing?.status === "確定") throw new Error("確定済みの月は変更できません。");
+      const movement = calculateMonthlyMovement(data.cashflows, data.cashflowEvents, input.targetMonth);
+      const calculated = calculateMonthlyBalance(input, movement);
+
+      if (configured && supabase) {
+        const { data: saved, error } = await supabase.rpc("save_monthly_balance_check", {
+          p_target_month: `${input.targetMonth}-01`,
+          p_opening_cash_balance: input.openingCashBalance,
+          p_opening_bank_balance: input.openingBankBalance,
+          p_actual_cash_balance: input.actualCashBalance,
+          p_actual_bank_balance: input.actualBankBalance,
+          p_note: input.note.trim(),
+          p_confirm: input.confirm,
+        });
+        if (error) throw new Error(error.message);
+        const result = mapMonthlyBalanceCheckFromDb(Array.isArray(saved) ? saved[0] : saved);
+        await refreshData();
+        return result;
+      }
+
+      const now = new Date().toISOString();
+      const saved: MonthlyBalanceCheck = {
+        id: existing?.id ?? crypto.randomUUID(),
+        targetMonth: input.targetMonth,
+        openingCashBalance: input.openingCashBalance,
+        openingBankBalance: input.openingBankBalance,
+        cashMovement: movement.cash,
+        bankMovement: movement.bank,
+        systemCashBalance: calculated.systemCashBalance,
+        systemBankBalance: calculated.systemBankBalance,
+        actualCashBalance: input.actualCashBalance,
+        actualBankBalance: input.actualBankBalance,
+        cashDifference: calculated.cashDifference,
+        bankDifference: calculated.bankDifference,
+        status: input.confirm ? "確定" : "確認中",
+        note: input.note.trim(),
+        confirmedAt: input.confirm ? now : null,
+        createdAt: existing?.createdAt ?? now,
+        updatedAt: now,
+      };
+      setData((current) => ({
+        ...current,
+        monthlyBalanceChecks: [saved, ...current.monthlyBalanceChecks.filter((item) => item.targetMonth !== input.targetMonth)],
+      }));
+      return saved;
     },
     savePurchaseContract: async (input) => {
       if (configured && supabase) {

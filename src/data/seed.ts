@@ -194,6 +194,17 @@ export const seedData: AppData = {
     },
   ],
   cashflowOffsets: [],
+  cashflowEvents: [
+    {
+      id: "cashflow-event-001",
+      cashflowId: "cashflow-001",
+      amount: 500000,
+      method: "振込",
+      processedOn: "2026-08-31",
+      createdAt: "2026-08-31T16:30:00+09:00",
+    },
+  ],
+  monthlyBalanceChecks: [],
   cashflows: [
     {
       id: "cashflow-001",

@@ -287,6 +287,47 @@ export type CashflowOffset = {
   createdAt: string;
 };
 
+export type CashflowEvent = {
+  id: string;
+  cashflowId: string;
+  amount: number;
+  method: PaymentMethod;
+  processedOn: string;
+  createdAt: string;
+};
+
+export type MonthlyBalanceStatus = "確認中" | "確定";
+
+export type MonthlyBalanceCheck = {
+  id: string;
+  targetMonth: string;
+  openingCashBalance: number;
+  openingBankBalance: number;
+  cashMovement: number;
+  bankMovement: number;
+  systemCashBalance: number;
+  systemBankBalance: number;
+  actualCashBalance: number;
+  actualBankBalance: number;
+  cashDifference: number;
+  bankDifference: number;
+  status: MonthlyBalanceStatus;
+  note: string;
+  confirmedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type SaveMonthlyBalanceCheckInput = {
+  targetMonth: string;
+  openingCashBalance: number;
+  openingBankBalance: number;
+  actualCashBalance: number;
+  actualBankBalance: number;
+  note: string;
+  confirm: boolean;
+};
+
 export type ContractStatus = "下書き" | "署名待ち" | "契約済み" | "キャンセル済み";
 
 export type Contract = {
@@ -427,6 +468,8 @@ export type AppData = {
   staffSettlements: StaffSettlement[];
   cashflows: Cashflow[];
   cashflowOffsets: CashflowOffset[];
+  cashflowEvents: CashflowEvent[];
+  monthlyBalanceChecks: MonthlyBalanceCheck[];
   contracts: Contract[];
   approvals: Approval[];
   websiteInquiries: WebsiteInquiry[];
