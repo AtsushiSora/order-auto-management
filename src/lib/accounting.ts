@@ -60,7 +60,7 @@ const withReview = (
 };
 
 export const buildJournalCandidates = (
-  data: Pick<AppData, "vehicles" | "contracts" | "expenses" | "cashflows" | "journalCandidateReviews">,
+  data: Pick<AppData, "vehicles" | "contracts" | "expenses" | "cashflows" | "cashflowOffsets" | "journalCandidateReviews">,
 ): JournalCandidate[] => {
   const vehicleName = (vehicleId: string | null) => {
     if (!vehicleId) return "事業全体";
@@ -134,8 +134,13 @@ export const buildJournalCandidates = (
       });
     });
 
+  const activeOffsets = data.cashflowOffsets.filter((offset) => !offset.voidedAt);
+  const offsetAmountFor = (cashflowId: string) => activeOffsets
+    .filter((offset) => offset.saleCashflowId === cashflowId || offset.purchaseCashflowId === cashflowId)
+    .reduce((total, offset) => total + offset.amount, 0);
+
   data.cashflows
-    .filter((cashflow) => cashflow.processedAmount > 0 && cashflow.processedOn)
+    .filter((cashflow) => cashflow.processedAmount - offsetAmountFor(cashflow.id) > 0 && cashflow.processedOn)
     .forEach((cashflow) => {
       const incoming = cashflow.direction === "入金";
       const settlementAccount = cashflow.kind === "販売代金"
@@ -150,11 +155,28 @@ export const buildJournalCandidates = (
         candidateDate: cashflow.processedOn!,
         description: `${cashflow.description} / ${label}`,
         vehicleLabel: label,
-        amount: cashflow.processedAmount,
+        amount: cashflow.processedAmount - offsetAmountFor(cashflow.id),
         suggestedDebitAccount: incoming ? paymentAccount(cashflow) : settlementAccount,
         suggestedCreditAccount: incoming ? settlementAccount : paymentAccount(cashflow),
       });
     });
+
+  activeOffsets.forEach((offset) => {
+    const sale = data.cashflows.find((cashflow) => cashflow.id === offset.saleCashflowId);
+    const purchase = data.cashflows.find((cashflow) => cashflow.id === offset.purchaseCashflowId);
+    const saleLabel = vehicleName(sale?.vehicleId ?? null);
+    const purchaseLabel = vehicleName(purchase?.vehicleId ?? null);
+    candidates.push({
+      sourceKey: `offset:${offset.id}`,
+      sourceType: "支払い",
+      candidateDate: offset.offsetOn,
+      description: `販売代金・買取代金の相殺 / 販売 ${saleLabel} / 買取 ${purchaseLabel}`,
+      vehicleLabel: `${saleLabel} ⇄ ${purchaseLabel}`,
+      amount: offset.amount,
+      suggestedDebitAccount: "未払金",
+      suggestedCreditAccount: "売掛金",
+    });
+  });
 
   return candidates
     .map((candidate) => withReview(candidate, data.journalCandidateReviews))

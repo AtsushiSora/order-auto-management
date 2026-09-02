@@ -40,4 +40,20 @@ describe("accounting candidates", () => {
     expect(csv).toContain('"借方科目"');
     expect(csv).toContain('"テスト,""摘要"""');
   });
+
+  it("records an offset without treating it as a bank deposit or withdrawal", () => {
+    const candidates = buildJournalCandidates({
+      ...seedData,
+      cashflows: [
+        { id: "sale-flow", vehicleId: "vehicle-26-0001", direction: "入金", kind: "販売代金", description: "販売代金", amount: 300000, processedAmount: 100000, status: "一部", method: "振込", scheduledOn: "2026-09-02", processedOn: "2026-09-02", createdAt: "2026-09-02T00:00:00Z" },
+        { id: "purchase-flow", vehicleId: "vehicle-26-0002", direction: "支払い", kind: "買取代金", description: "買取代金", amount: 100000, processedAmount: 100000, status: "完了", method: "振込", scheduledOn: "2026-09-02", processedOn: "2026-09-02", createdAt: "2026-09-02T00:00:00Z" },
+      ],
+      cashflowOffsets: [{ id: "offset-1", saleCashflowId: "sale-flow", purchaseCashflowId: "purchase-flow", amount: 100000, offsetOn: "2026-09-02", note: "下取り", voidedAt: null, createdAt: "2026-09-02T00:00:00Z" }],
+      journalCandidateReviews: [],
+    });
+    const offset = candidates.find((candidate) => candidate.sourceKey === "offset:offset-1");
+    expect(offset).toMatchObject({ amount: 100000, suggestedDebitAccount: "未払金", suggestedCreditAccount: "売掛金" });
+    expect(candidates.some((candidate) => candidate.sourceKey === "cashflow:purchase-flow:settlement")).toBe(false);
+    expect(candidates.some((candidate) => candidate.sourceKey === "cashflow:sale-flow:settlement")).toBe(false);
+  });
 });

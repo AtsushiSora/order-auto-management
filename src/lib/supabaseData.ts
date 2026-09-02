@@ -4,6 +4,7 @@ import type {
   Attachment,
   Approval,
   Cashflow,
+  CashflowOffset,
   CashflowDirection,
   CashflowKind,
   CashflowStatus,
@@ -707,6 +708,20 @@ export const mapCashflowFromDb = (source: unknown): Cashflow => {
     method: paymentMethodFromDb[stringValue(row, "method")] ?? "その他",
     scheduledOn: stringValue(row, "scheduled_on"),
     processedOn: nullableString(row, "processed_on"),
+    createdAt: stringValue(row, "created_at"),
+  };
+};
+
+export const mapCashflowOffsetFromDb = (source: unknown): CashflowOffset => {
+  const row = source as DbRow;
+  return {
+    id: stringValue(row, "id"),
+    saleCashflowId: stringValue(row, "sale_cashflow_id"),
+    purchaseCashflowId: stringValue(row, "purchase_cashflow_id"),
+    amount: numberValue(row, "amount"),
+    offsetOn: stringValue(row, "offset_on"),
+    note: stringValue(row, "note"),
+    voidedAt: nullableString(row, "voided_at"),
     createdAt: stringValue(row, "created_at"),
   };
 };

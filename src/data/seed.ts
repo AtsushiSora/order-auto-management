@@ -193,6 +193,7 @@ export const seedData: AppData = {
       createdAt: "2026-08-26T12:00:00+09:00",
     },
   ],
+  cashflowOffsets: [],
   cashflows: [
     {
       id: "cashflow-001",

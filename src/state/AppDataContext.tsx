@@ -21,6 +21,7 @@ import {
   mapAttachmentFromDb,
   mapAntiqueLedgerDetailFromDb,
   mapCashflowFromDb,
+  mapCashflowOffsetFromDb,
   mapContractFromDb,
   mapContractHandoffFromDb,
   mapExpenseFromDb,
@@ -76,6 +77,7 @@ import type {
   VehicleDocumentInput,
   VehiclePublicationInput,
   WebsiteInquiryStatus,
+  CashflowOffset,
 } from "../types";
 import { useAuth } from "./AuthContext";
 
@@ -92,6 +94,7 @@ const emptyData: AppData = {
   issuedDocuments: [],
   staffSettlements: [],
   cashflows: [],
+  cashflowOffsets: [],
   contracts: [],
   approvals: [],
   websiteInquiries: [],
@@ -133,6 +136,8 @@ type AppDataContextValue = {
   retryContractHandoff: (handoffId: string) => Promise<void>;
   addCashflow: (input: NewCashflowInput) => Promise<void>;
   completeCashflow: (cashflowId: string, processedOn: string) => Promise<void>;
+  applyCashflowOffset: (saleCashflowId: string, purchaseCashflowId: string, amount: number, offsetOn: string, note: string) => Promise<CashflowOffset>;
+  voidCashflowOffset: (offsetId: string) => Promise<void>;
   savePurchaseContract: (input: PurchaseContractInput) => Promise<string>;
   saveSaleContract: (input: SaleContractInput) => Promise<string>;
   saveAntiqueLedgerDetail: (input: SaveAntiqueLedgerDetailInput) => Promise<void>;
@@ -190,6 +195,7 @@ const loadInitialDemoData = (): AppData => {
         ...cashflow,
         kind: cashflow.kind ?? demoCashflowKind(cashflow),
       })),
+      cashflowOffsets: parsed.cashflowOffsets ?? [],
       websiteInquiries: parsed.websiteInquiries ?? seed.websiteInquiries,
       antiqueLedgerDetails: parsed.antiqueLedgerDetails ?? seed.antiqueLedgerDetails,
       journalCandidateReviews: parsed.journalCandidateReviews ?? seed.journalCandidateReviews,
@@ -275,6 +281,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         client.from("issued_documents").select("*").order("issued_on", { ascending: false }).order("created_at", { ascending: false }),
         client.from("staff_settlements").select("*").order("created_at", { ascending: false }),
         client.from("cashflows").select("*").is("deleted_at", null).order("scheduled_on", { ascending: false }),
+        client.from("cashflow_offsets").select("*").order("created_at", { ascending: false }),
         client.from("contracts").select("*").is("deleted_at", null).order("updated_at", { ascending: false }),
         client.from("approvals").select("*").order("created_at", { ascending: false }),
         client.from("website_inquiries").select("*").order("received_at", { ascending: false }),
@@ -296,7 +303,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
 
       if (!requestIsCurrent()) return;
 
-      const [staffResult, spotAssignmentsResult, contractHandoffsResult, vehiclesResult, documentsResult, expensesResult, attachmentsResult, issuedDocumentsResult, staffSettlementsResult, cashflowsResult, contractsResult, approvalsResult, inquiriesResult, ledgerResult, journalReviewsResult, journalExportsResult] = results;
+      const [staffResult, spotAssignmentsResult, contractHandoffsResult, vehiclesResult, documentsResult, expensesResult, attachmentsResult, issuedDocumentsResult, staffSettlementsResult, cashflowsResult, cashflowOffsetsResult, contractsResult, approvalsResult, inquiriesResult, ledgerResult, journalReviewsResult, journalExportsResult] = results;
 
       setData({
         staffProfiles: (staffResult.data ?? []).map(mapStaffProfileFromDb),
@@ -309,6 +316,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         issuedDocuments: (issuedDocumentsResult.data ?? []).map(mapIssuedDocumentFromDb),
         staffSettlements: (staffSettlementsResult.data ?? []).map(mapStaffSettlementFromDb),
         cashflows: (cashflowsResult.data ?? []).map(mapCashflowFromDb),
+        cashflowOffsets: (cashflowOffsetsResult.data ?? []).map(mapCashflowOffsetFromDb),
         contracts: (contractsResult.data ?? []).map(mapContractFromDb),
         approvals: (approvalsResult.data ?? []).map(mapApprovalFromDb),
         websiteInquiries: (inquiriesResult.data ?? []).map(mapWebsiteInquiryFromDb),
@@ -1010,6 +1018,65 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
             ? { ...settlement, status: "精算済み", settledAt: new Date().toISOString(), updatedAt: new Date().toISOString() }
             : settlement)
           : current.staffSettlements,
+      }));
+    },
+    applyCashflowOffset: async (saleCashflowId, purchaseCashflowId, amount, offsetOn, note) => {
+      if (!offsetOn || offsetOn > new Date().toISOString().slice(0, 10)) throw new Error("相殺日は今日以前で入力してください。");
+      if (!Number.isInteger(amount) || amount <= 0) throw new Error("相殺額は1円以上の整数で入力してください。");
+      const sale = data.cashflows.find((item) => item.id === saleCashflowId && item.kind === "販売代金" && item.direction === "入金");
+      const purchase = data.cashflows.find((item) => item.id === purchaseCashflowId && item.kind === "買取代金" && item.direction === "支払い");
+      if (!sale || !purchase) throw new Error("対象の販売代金または買取代金が見つかりません。");
+      const purchaseVehicle = data.vehicles.find((item) => item.id === purchase.vehicleId);
+      if (!purchaseVehicle?.arrivedAt || purchaseVehicle.status === "入庫予定") throw new Error("買取車両の入庫を確定してから相殺してください。");
+      const maximum = Math.min(sale.amount - sale.processedAmount, purchase.amount - purchase.processedAmount);
+      if (amount > maximum) throw new Error("相殺額が販売代金または買取代金の残額を超えています。");
+      if (configured && supabase) {
+        const { data: saved, error } = await supabase.rpc("apply_cashflow_offset", {
+          p_sale_cashflow_id: saleCashflowId,
+          p_purchase_cashflow_id: purchaseCashflowId,
+          p_amount: amount,
+          p_offset_on: offsetOn,
+          p_note: note.trim(),
+        });
+        if (error) throw new Error(error.message);
+        await refreshData();
+        return mapCashflowOffsetFromDb(Array.isArray(saved) ? saved[0] : saved);
+      }
+      const now = new Date().toISOString();
+      const offset: CashflowOffset = {
+        id: crypto.randomUUID(), saleCashflowId, purchaseCashflowId, amount, offsetOn,
+        note: note.trim(), voidedAt: null, createdAt: now,
+      };
+      setData((current) => ({
+        ...current,
+        cashflowOffsets: [offset, ...current.cashflowOffsets],
+        cashflows: current.cashflows.map((item) => {
+          if (item.id !== saleCashflowId && item.id !== purchaseCashflowId) return item;
+          const processedAmount = item.processedAmount + amount;
+          return { ...item, processedAmount, status: processedAmount === item.amount ? "完了" : "一部", processedOn: offsetOn };
+        }),
+      }));
+      return offset;
+    },
+    voidCashflowOffset: async (offsetId) => {
+      if (profile?.role !== "owner") throw new Error("相殺の取消は事業主だけができます。");
+      const target = data.cashflowOffsets.find((item) => item.id === offsetId && !item.voidedAt);
+      if (!target) throw new Error("有効な相殺記録が見つかりません。");
+      if (configured && supabase) {
+        const { error } = await supabase.rpc("void_cashflow_offset", { p_offset_id: offsetId });
+        if (error) throw new Error(error.message);
+        await refreshData();
+        return;
+      }
+      const now = new Date().toISOString();
+      setData((current) => ({
+        ...current,
+        cashflowOffsets: current.cashflowOffsets.map((item) => item.id === offsetId ? { ...item, voidedAt: now } : item),
+        cashflows: current.cashflows.map((item) => {
+          if (item.id !== target.saleCashflowId && item.id !== target.purchaseCashflowId) return item;
+          const processedAmount = Math.max(0, item.processedAmount - target.amount);
+          return { ...item, processedAmount, status: processedAmount === 0 ? "未処理" : processedAmount === item.amount ? "完了" : "一部", processedOn: processedAmount === 0 ? null : item.processedOn };
+        }),
       }));
     },
     savePurchaseContract: async (input) => {

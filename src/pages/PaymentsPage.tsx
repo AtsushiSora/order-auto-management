@@ -1,4 +1,4 @@
-import { ArrowDownLeft, ArrowUpRight, CheckCircle2, LockKeyhole, Plus, WalletCards } from "lucide-react";
+import { ArrowDownLeft, ArrowUpRight, Ban, CheckCircle2, LockKeyhole, Plus, Scale, WalletCards } from "lucide-react";
 import { useState, type FormEvent } from "react";
 import { Drawer } from "../components/Drawer";
 import { PageHeader } from "../components/PageHeader";
@@ -29,7 +29,7 @@ const initialCashflow = (): NewCashflowInput => ({
 const methods: PaymentMethod[] = ["現金", "振込", "ローン会社", "カード", "その他"];
 
 export function PaymentsPage() {
-  const { data, addCashflow, completeCashflow } = useAppData();
+  const { data, addCashflow, completeCashflow, applyCashflowOffset, voidCashflowOffset } = useAppData();
   const { profile } = useAuth();
   const canManage = profile?.role === "owner" || profile?.role === "regular" || profile?.role === "accounting";
   const canSettleStaff = profile?.role === "owner" || profile?.role === "accounting";
@@ -42,6 +42,15 @@ export function PaymentsPage() {
   const [processingId, setProcessingId] = useState<string | null>(null);
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
   const [listError, setListError] = useState("");
+  const [offsetDrawerOpen, setOffsetDrawerOpen] = useState(false);
+  const [offsetMode, setOffsetMode] = useState<"相殺する" | "相殺しない">("相殺する");
+  const [saleCashflowId, setSaleCashflowId] = useState("");
+  const [purchaseCashflowId, setPurchaseCashflowId] = useState("");
+  const [offsetAmount, setOffsetAmount] = useState(0);
+  const [offsetOn, setOffsetOn] = useState(new Date().toISOString().slice(0, 10));
+  const [offsetNote, setOffsetNote] = useState("");
+  const [offsetError, setOffsetError] = useState("");
+  const [offsetSubmitting, setOffsetSubmitting] = useState(false);
 
   const filtered = data.cashflows.filter((cashflow) => {
     const matchesDirection = directionFilter === "すべて" || cashflow.direction === directionFilter;
@@ -61,6 +70,91 @@ export function PaymentsPage() {
     },
     { incoming: 0, outgoing: 0 },
   );
+
+  const saleCandidates = data.cashflows.filter((cashflow) =>
+    cashflow.kind === "販売代金" && cashflow.direction === "入金" && outstandingAmount(cashflow.amount, cashflow.processedAmount) > 0,
+  );
+  const purchaseCandidates = data.cashflows.filter((cashflow) =>
+    cashflow.kind === "買取代金" && cashflow.direction === "支払い" && outstandingAmount(cashflow.amount, cashflow.processedAmount) > 0,
+  );
+  const selectedSale = data.cashflows.find((item) => item.id === saleCashflowId) ?? null;
+  const selectedPurchase = data.cashflows.find((item) => item.id === purchaseCashflowId) ?? null;
+  const customerFor = (cashflowId: string, type: "買取" | "販売") => {
+    const cashflow = data.cashflows.find((item) => item.id === cashflowId);
+    const matches = data.contracts
+      .filter((contract) => contract.type === type && contract.status === "契約済み" && contract.vehicleId === cashflow?.vehicleId)
+      .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
+    return matches[0]?.customerLabel.trim() ?? "";
+  };
+  const selectedSaleCustomer = customerFor(saleCashflowId, "販売");
+  const selectedPurchaseCustomer = customerFor(purchaseCashflowId, "買取");
+  const sameCustomer = Boolean(selectedSaleCustomer && selectedPurchaseCustomer && selectedSaleCustomer === selectedPurchaseCustomer);
+  const selectedPurchaseVehicle = data.vehicles.find((item) => item.id === selectedPurchase?.vehicleId) ?? null;
+  const purchaseArrived = Boolean(selectedPurchaseVehicle?.arrivedAt && selectedPurchaseVehicle.status !== "入庫予定");
+  const maximumOffset = selectedSale && selectedPurchase
+    ? Math.min(
+      outstandingAmount(selectedSale.amount, selectedSale.processedAmount),
+      outstandingAmount(selectedPurchase.amount, selectedPurchase.processedAmount),
+    )
+    : 0;
+
+  const cashflowLabel = (cashflowId: string) => {
+    const cashflow = data.cashflows.find((item) => item.id === cashflowId);
+    const vehicle = data.vehicles.find((item) => item.id === cashflow?.vehicleId);
+    return vehicle ? `${vehicle.managementNumber} ${vehicle.name}` : cashflow?.description ?? "不明";
+  };
+
+  const openOffsetForm = () => {
+    const sale = saleCandidates[0];
+    const purchase = purchaseCandidates[0];
+    setOffsetMode("相殺する");
+    setSaleCashflowId(sale?.id ?? "");
+    setPurchaseCashflowId(purchase?.id ?? "");
+    setOffsetAmount(sale && purchase ? Math.min(outstandingAmount(sale.amount, sale.processedAmount), outstandingAmount(purchase.amount, purchase.processedAmount)) : 0);
+    setOffsetOn(new Date().toISOString().slice(0, 10));
+    setOffsetNote("");
+    setOffsetError("");
+    setOffsetDrawerOpen(true);
+  };
+
+  const selectOffsetPair = (nextSaleId: string, nextPurchaseId: string) => {
+    setSaleCashflowId(nextSaleId);
+    setPurchaseCashflowId(nextPurchaseId);
+    const sale = data.cashflows.find((item) => item.id === nextSaleId);
+    const purchase = data.cashflows.find((item) => item.id === nextPurchaseId);
+    setOffsetAmount(sale && purchase ? Math.min(outstandingAmount(sale.amount, sale.processedAmount), outstandingAmount(purchase.amount, purchase.processedAmount)) : 0);
+    setOffsetError("");
+  };
+
+  const submitOffset = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (offsetMode === "相殺しない") {
+      setOffsetDrawerOpen(false);
+      setListError("");
+      return;
+    }
+    if (!selectedSale || !selectedPurchase) return setOffsetError("販売代金と買取代金を選択してください。");
+    if (!sameCustomer) return setOffsetError("同じお客様の販売契約と買取契約を選択してください。");
+    if (!purchaseArrived) return setOffsetError("買取車両の入庫を確定してから相殺してください。");
+    if (!Number.isInteger(offsetAmount) || offsetAmount <= 0 || offsetAmount > maximumOffset) return setOffsetError(`相殺額は1円から${maximumOffset.toLocaleString("ja-JP")}円の範囲で入力してください。`);
+    setOffsetSubmitting(true);
+    setOffsetError("");
+    try {
+      await applyCashflowOffset(saleCashflowId, purchaseCashflowId, offsetAmount, offsetOn, offsetNote);
+      setOffsetDrawerOpen(false);
+    } catch (reason) {
+      setOffsetError(reason instanceof Error ? reason.message : "相殺を登録できませんでした。");
+    } finally {
+      setOffsetSubmitting(false);
+    }
+  };
+
+  const voidOffset = async (offsetId: string) => {
+    if (!window.confirm("この相殺を取り消しますか？入金・支払いの残額が元に戻ります。")) return;
+    setListError("");
+    try { await voidCashflowOffset(offsetId); }
+    catch (reason) { setListError(reason instanceof Error ? reason.message : "相殺を取り消せませんでした。"); }
+  };
 
   const openForm = () => {
     setForm(initialCashflow());
@@ -144,10 +238,10 @@ export function PaymentsPage() {
         title="入出金"
         description="販売代金の入金と、買取・経費の支払いを残額まで管理します。"
         action={canManage ? (
-          <button type="button" className="primary-button" onClick={openForm}>
-            <Plus size={20} />
-            入出金を登録
-          </button>
+          <div className="header-actions">
+            <button type="button" className="secondary-button" onClick={openOffsetForm}><Scale size={20} />買取・販売を相殺</button>
+            <button type="button" className="primary-button" onClick={openForm}><Plus size={20} />入出金を登録</button>
+          </div>
         ) : undefined}
       />
 
@@ -224,6 +318,24 @@ export function PaymentsPage() {
         <div className="empty-state panel"><WalletCards size={34} /><h2>該当する入出金はありません</h2><p>表示条件を変更してください。</p></div>
       ) : null}
 
+      <section className="panel table-panel">
+        <div className="section-heading"><div><h2>相殺履歴</h2><p>販売代金と買取代金を差し引いた記録です。</p></div></div>
+        <div className="table-scroll">
+          <table className="data-table">
+            <thead><tr><th>相殺日</th><th>販売</th><th>買取</th><th className="number-cell">相殺額</th><th>状態</th><th>操作</th></tr></thead>
+            <tbody>{data.cashflowOffsets.map((offset) => <tr key={offset.id}>
+              <td>{formatDate(offset.offsetOn)}</td>
+              <td><strong>{cashflowLabel(offset.saleCashflowId)}</strong></td>
+              <td><strong>{cashflowLabel(offset.purchaseCashflowId)}</strong>{offset.note ? <span className="cell-note">{offset.note}</span> : null}</td>
+              <td className="number-cell"><strong>{formatCurrency(offset.amount)}</strong></td>
+              <td><StatusBadge children={offset.voidedAt ? "取消" : "有効"} /></td>
+              <td>{!offset.voidedAt && profile?.role === "owner" ? <button type="button" className="table-action-button danger-table-button" onClick={() => void voidOffset(offset.id)}><Ban size={14} />取消</button> : <span className="muted-cell">—</span>}</td>
+            </tr>)}</tbody>
+          </table>
+        </div>
+        {!data.cashflowOffsets.length ? <div className="table-empty"><Scale size={27} /><p>相殺記録はまだありません。</p></div> : null}
+      </section>
+
       {drawerOpen ? (
         <Drawer title="入出金を登録" subtitle="未処理や一部入金も残額として管理できます。" onClose={() => setDrawerOpen(false)}>
           <form className="form-stack" onSubmit={submit}>
@@ -278,6 +390,57 @@ export function PaymentsPage() {
             <div className="form-actions">
               <button type="button" className="secondary-button" onClick={() => setDrawerOpen(false)}>キャンセル</button>
               <button type="submit" className="primary-button" disabled={submitting}>{submitting ? "登録中" : "登録する"}</button>
+            </div>
+          </form>
+        </Drawer>
+      ) : null}
+
+
+      {offsetDrawerOpen ? (
+        <Drawer title="買取・販売の相殺" subtitle="相殺する場合も、買取車両の入庫確認が先です。" onClose={() => setOffsetDrawerOpen(false)}>
+          <form className="form-stack" onSubmit={submitOffset}>
+            <div className="form-section">
+              <h3>処理方法</h3>
+              <div className="segmented-control large">
+                {(["相殺する", "相殺しない"] as const).map((item) => <button key={item} type="button" className={offsetMode === item ? "active" : ""} onClick={() => { setOffsetMode(item); setOffsetError(""); }}>{item}</button>)}
+              </div>
+              {offsetMode === "相殺しない" ? <p className="form-hint">販売代金の入金と買取代金の支払いを、一覧からそれぞれ個別に完了してください。相殺記録は作成しません。</p> : null}
+            </div>
+            {offsetMode === "相殺する" ? <>
+              <div className="form-section">
+                <h3>対象の契約</h3>
+                <label className="field-label">販売代金
+                  <select value={saleCashflowId} onChange={(event) => selectOffsetPair(event.target.value, purchaseCashflowId)}>
+                    <option value="">選択してください</option>
+                    {saleCandidates.map((cashflow) => <option key={cashflow.id} value={cashflow.id}>{cashflowLabel(cashflow.id)} / {customerFor(cashflow.id, "販売")} / 残 {formatCurrency(outstandingAmount(cashflow.amount, cashflow.processedAmount))}</option>)}
+                  </select>
+                </label>
+                <label className="field-label">買取代金
+                  <select value={purchaseCashflowId} onChange={(event) => selectOffsetPair(saleCashflowId, event.target.value)}>
+                    <option value="">選択してください</option>
+                    {purchaseCandidates.map((cashflow) => {
+                      const vehicle = data.vehicles.find((item) => item.id === cashflow.vehicleId);
+                      const waiting = !vehicle?.arrivedAt || vehicle.status === "入庫予定";
+                      return <option key={cashflow.id} value={cashflow.id}>{cashflowLabel(cashflow.id)} / {customerFor(cashflow.id, "買取")} / 残 {formatCurrency(outstandingAmount(cashflow.amount, cashflow.processedAmount))}{waiting ? "（入庫待ち）" : ""}</option>;
+                    })}
+                  </select>
+                </label>
+                {selectedSale && selectedPurchase ? <div className="settlement-preview"><span>お客様</span><strong>{sameCustomer ? selectedSaleCustomer : "契約者が一致しません"}</strong><small>{purchaseArrived ? "買取車両は入庫済みです" : "買取車両は入庫待ちです"}</small></div> : null}
+              </div>
+              <div className="form-section">
+                <h3>金額・日付</h3>
+                <div className="form-row">
+                  <label className="field-label">相殺額<input type="number" min="1" max={maximumOffset || undefined} step="1" value={offsetAmount} onChange={(event) => setOffsetAmount(Number(event.target.value))} /></label>
+                  <label className="field-label">相殺日<input type="date" max={new Date().toISOString().slice(0, 10)} value={offsetOn} onChange={(event) => setOffsetOn(event.target.value)} /></label>
+                </div>
+                <label className="field-label">メモ（任意）<input value={offsetNote} onChange={(event) => setOffsetNote(event.target.value)} placeholder="例：下取り車との相殺" /></label>
+                <p className="form-hint">相殺後の販売代金残額：{formatCurrency(selectedSale ? outstandingAmount(selectedSale.amount, selectedSale.processedAmount) - offsetAmount : 0)} ／ 買取代金残額：{formatCurrency(selectedPurchase ? outstandingAmount(selectedPurchase.amount, selectedPurchase.processedAmount) - offsetAmount : 0)}</p>
+              </div>
+            </> : null}
+            {offsetError ? <p className="form-error">{offsetError}</p> : null}
+            <div className="form-actions">
+              <button type="button" className="secondary-button" onClick={() => setOffsetDrawerOpen(false)}>キャンセル</button>
+              <button type="submit" className="primary-button" disabled={offsetSubmitting}>{offsetSubmitting ? "処理中" : offsetMode === "相殺する" ? "相殺を登録" : "別々に管理する"}</button>
             </div>
           </form>
         </Drawer>

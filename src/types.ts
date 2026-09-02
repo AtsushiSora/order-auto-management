@@ -263,6 +263,17 @@ export type Cashflow = {
   createdAt: string;
 };
 
+export type CashflowOffset = {
+  id: string;
+  saleCashflowId: string;
+  purchaseCashflowId: string;
+  amount: number;
+  offsetOn: string;
+  note: string;
+  voidedAt: string | null;
+  createdAt: string;
+};
+
 export type ContractStatus = "下書き" | "署名待ち" | "契約済み" | "キャンセル済み";
 
 export type Contract = {
@@ -402,6 +413,7 @@ export type AppData = {
   issuedDocuments: IssuedDocument[];
   staffSettlements: StaffSettlement[];
   cashflows: Cashflow[];
+  cashflowOffsets: CashflowOffset[];
   contracts: Contract[];
   approvals: Approval[];
   websiteInquiries: WebsiteInquiry[];
