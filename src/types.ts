@@ -85,7 +85,7 @@ export type ContractHandoffErrorCode =
 
 export type ContractHandoff = {
   id: string;
-  assignmentId: string;
+  assignmentId: string | null;
   contractId: string;
   contractType: "買取" | "販売";
   status: ContractHandoffStatus;

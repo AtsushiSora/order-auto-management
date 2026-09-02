@@ -311,7 +311,7 @@ export const mapContractHandoffFromDb = (source: unknown): ContractHandoff => {
   const row = source as DbRow;
   return {
     id: stringValue(row, "id"),
-    assignmentId: stringValue(row, "assignment_id"),
+    assignmentId: nullableString(row, "assignment_id"),
     contractId: stringValue(row, "contract_id"),
     contractType: stringValue(row, "contract_type") === "sale" ? "販売" : "買取",
     status: contractHandoffStatusFromDb[stringValue(row, "status")] ?? "無効",

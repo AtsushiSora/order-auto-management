@@ -129,11 +129,12 @@ type AppDataContextValue = {
   saveSpotPurchaseContract: (assignmentId: string, input: PurchaseContractInput) => Promise<void>;
   saveSpotSaleContract: (assignmentId: string, input: SaleContractInput) => Promise<void>;
   issueContractHandoff: (assignmentId: string) => Promise<{ completionToken: string; expiresAt: string }>;
+  issueDirectContractHandoff: (contractId: string) => Promise<{ completionToken: string; expiresAt: string }>;
   retryContractHandoff: (handoffId: string) => Promise<void>;
   addCashflow: (input: NewCashflowInput) => Promise<void>;
   completeCashflow: (cashflowId: string, processedOn: string) => Promise<void>;
-  savePurchaseContract: (input: PurchaseContractInput) => Promise<void>;
-  saveSaleContract: (input: SaleContractInput) => Promise<void>;
+  savePurchaseContract: (input: PurchaseContractInput) => Promise<string>;
+  saveSaleContract: (input: SaleContractInput) => Promise<string>;
   saveAntiqueLedgerDetail: (input: SaveAntiqueLedgerDetailInput) => Promise<void>;
   applyVehicleInspectionImport: (input: VehicleInspectionImportInput) => Promise<void>;
   saveJournalCandidateReview: (input: SaveJournalCandidateReviewInput) => Promise<void>;
@@ -929,6 +930,16 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       if (!/^[0-9a-f]{64}$/.test(completionToken) || !expiresAt) throw new Error("契約完了連携を発行できませんでした。");
       return { completionToken, expiresAt };
     },
+    issueDirectContractHandoff: async (contractId) => {
+      if (!configured || !supabase) throw new Error("共有データ接続時だけ契約完了連携を発行できます。");
+      const { data: issued, error } = await supabase.rpc("issue_direct_contract_handoff", { p_contract_id: contractId });
+      if (error) throw new Error(error.message);
+      const row = Array.isArray(issued) ? issued[0] : issued;
+      const completionToken = String(row?.completion_token ?? "");
+      const expiresAt = String(row?.expires_at ?? "");
+      if (!/^[0-9a-f]{64}$/.test(completionToken) || !expiresAt) throw new Error("契約完了連携を発行できませんでした。");
+      return { completionToken, expiresAt };
+    },
     retryContractHandoff: async (handoffId) => {
       if (!configured || !supabase || profile?.role !== "owner") throw new Error("事業主だけが契約連携を再試行できます。");
       const { data: result, error } = await supabase.rpc("retry_contract_handoff", { p_handoff_id: handoffId });
@@ -1003,10 +1014,10 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     },
     savePurchaseContract: async (input) => {
       if (configured && supabase) {
-        const { error } = await supabase.rpc("save_purchase_contract", purchaseContractToRpc(input));
+        const { data: savedId, error } = await supabase.rpc("save_purchase_contract", purchaseContractToRpc(input));
         if (error) throw new Error(error.message);
         await refreshData();
-        return;
+        return String(savedId);
       }
 
       const existing = input.contractId
@@ -1082,13 +1093,14 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
           }, ...current.cashflows],
         };
       });
+      return contractId;
     },
     saveSaleContract: async (input) => {
       if (configured && supabase) {
-        const { error } = await supabase.rpc("save_sale_contract", saleContractToRpc(input));
+        const { data: savedId, error } = await supabase.rpc("save_sale_contract", saleContractToRpc(input));
         if (error) throw new Error(error.message);
         await refreshData();
-        return;
+        return String(savedId);
       }
 
       const existing = input.contractId
@@ -1144,6 +1156,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
           }, ...current.cashflows],
         };
       });
+      return contractId;
     },
     saveAntiqueLedgerDetail: async (input) => {
       if (input.sellerAge != null && (!Number.isInteger(input.sellerAge) || input.sellerAge < 0 || input.sellerAge > 120)) {

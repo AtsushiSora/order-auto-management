@@ -1,8 +1,9 @@
-import { Eye, FileSignature, Plus, ShoppingCart } from "lucide-react";
+import { ExternalLink, Eye, FileSignature, Plus, ShoppingCart } from "lucide-react";
 import { useState, type FormEvent } from "react";
 import { Drawer } from "../components/Drawer";
 import { PageHeader } from "../components/PageHeader";
 import { StatusBadge } from "../components/StatusBadge";
+import { createContractHandoff, getContractAppUrl, isSameOriginContractHandoff } from "../lib/contractHandoff";
 import { formatCurrency, formatDate } from "../lib/format";
 import { useAppData } from "../state/AppDataContext";
 import { useAuth } from "../state/AuthContext";
@@ -45,7 +46,7 @@ const initialSaleForm = (): SaleContractInput => ({
 });
 
 export function ContractsPage({ type }: { type: "買取" | "販売" }) {
-  const { data, savePurchaseContract, saveSaleContract } = useAppData();
+  const { data, savePurchaseContract, saveSaleContract, issueDirectContractHandoff } = useAppData();
   const { profile } = useAuth();
   const canEdit = profile?.role === "owner" || profile?.role === "regular";
   const contracts = data.contracts.filter((contract) => contract.type === type);
@@ -147,6 +148,91 @@ export function ContractsPage({ type }: { type: "買取" | "販売" }) {
     }
   };
 
+  const launchPurchaseContractSystem = async () => {
+    if (!isSameOriginContractHandoff(window.location.origin, getContractAppUrl("purchase"))) {
+      return setError("契約書への入力引き継ぎは公開版の管理システムから実行してください。");
+    }
+    if (!form.customerLabel.trim()) return setError("お客様名・取引先名を入力してください。");
+    if (!form.vehicleName.trim()) return setError("車両名を入力してください。");
+    if (!form.storageLocation.trim()) return setError("保管場所を入力してください。");
+    if (!form.contractedOn || !form.plannedArrivalDate) return setError("契約日と入庫予定日を入力してください。");
+    if (form.amount < 0 || form.askingPrice < 0) return setError("金額は0円以上で入力してください。");
+
+    let handoffStorageKey = "";
+    setSubmitting(true);
+    setError("");
+    try {
+      const nextForm = {
+        ...form,
+        customerLabel: form.customerLabel.trim(),
+        vehicleName: form.vehicleName.trim(),
+        chassisNumber: form.chassisNumber.trim(),
+        storageLocation: form.storageLocation.trim(),
+        status: "署名待ち" as const,
+      };
+      const contractId = await savePurchaseContract(nextForm);
+      const completion = await issueDirectContractHandoff(contractId);
+      const handoff = createContractHandoff(window.sessionStorage, "purchase", {
+        assignmentId: null,
+        completionToken: completion.completionToken,
+        customerName: nextForm.customerLabel,
+        contractDate: nextForm.contractedOn,
+        vehicleName: nextForm.vehicleName,
+        chassisNumber: nextForm.chassisNumber,
+        amount: nextForm.amount,
+        plannedArrivalDate: nextForm.plannedArrivalDate,
+        storageLocation: nextForm.storageLocation,
+        paymentMethod: nextForm.paymentMethod,
+      });
+      handoffStorageKey = handoff.storageKey;
+      window.location.assign(handoff.url);
+    } catch (reason) {
+      if (handoffStorageKey) window.sessionStorage.removeItem(handoffStorageKey);
+      setError(reason instanceof Error ? reason.message : "買取契約書を開けませんでした。");
+      setSubmitting(false);
+    }
+  };
+
+  const launchSaleContractSystem = async () => {
+    if (!isSameOriginContractHandoff(window.location.origin, getContractAppUrl("sale"))) {
+      return setError("契約書への入力引き継ぎは公開版の管理システムから実行してください。");
+    }
+    if (!saleForm.vehicleId) return setError("販売する車両を選択してください。");
+    if (!saleForm.customerLabel.trim()) return setError("お客様名を入力してください。");
+    if (!saleForm.contractedOn) return setError("契約日を入力してください。");
+    if (saleForm.amount <= 0) return setError("販売金額は1円以上で入力してください。");
+    const vehicle = data.vehicles.find((item) => item.id === saleForm.vehicleId);
+    if (!vehicle || !["入庫済み", "販売中"].includes(vehicle.status)) {
+      return setError("入庫済みまたは販売中の車両だけ販売契約できます。");
+    }
+
+    let handoffStorageKey = "";
+    setSubmitting(true);
+    setError("");
+    try {
+      const nextForm = { ...saleForm, customerLabel: saleForm.customerLabel.trim(), status: "署名待ち" as const };
+      const contractId = await saveSaleContract(nextForm);
+      const completion = await issueDirectContractHandoff(contractId);
+      const handoff = createContractHandoff(window.sessionStorage, "sale", {
+        assignmentId: null,
+        completionToken: completion.completionToken,
+        customerName: nextForm.customerLabel,
+        contractDate: nextForm.contractedOn,
+        vehicleName: vehicle.name,
+        chassisNumber: vehicle.chassisNumber,
+        managementNumber: vehicle.managementNumber,
+        amount: nextForm.amount,
+        paymentMethod: nextForm.paymentMethod,
+      });
+      handoffStorageKey = handoff.storageKey;
+      window.location.assign(handoff.url);
+    } catch (reason) {
+      if (handoffStorageKey) window.sessionStorage.removeItem(handoffStorageKey);
+      setError(reason instanceof Error ? reason.message : "販売契約書を開けませんでした。");
+      setSubmitting(false);
+    }
+  };
+
   return (
     <>
       <PageHeader
@@ -225,11 +311,13 @@ export function ContractsPage({ type }: { type: "買取" | "販売" }) {
             </div>
 
             {form.status === "契約済み" && !readOnly ? <div className="contract-link-notice"><strong>保存と同時に連携します</strong><span>車両管理番号を発行し、在庫を「入庫予定」で登録します。買取金額が1円以上なら未払い予定も作成します。</span></div> : null}
+            {!readOnly ? <div className="contract-link-notice"><strong>既存の買取契約書へ引き継げます</strong><span>入力内容を署名待ちで保存し、買取契約システムを開きます。契約完了後に在庫と支払い予定へ一度だけ反映します。</span></div> : null}
             {readOnly ? <p className="form-hint">契約済みの車両情報・金額は、連携先の在庫画面から修正できます。</p> : null}
             {error ? <p className="form-error">{error}</p> : null}
             <div className="form-actions">
               <button type="button" className="secondary-button" onClick={() => setDrawerOpen(false)}>{readOnly ? "閉じる" : "キャンセル"}</button>
-              {!readOnly ? <button type="submit" className="primary-button" disabled={submitting}>{submitting ? "保存中" : form.status === "契約済み" ? "契約して在庫へ登録" : "保存する"}</button> : null}
+              {!readOnly ? <button type="submit" className="secondary-button" disabled={submitting}>{submitting ? "保存中" : form.status === "契約済み" ? "契約して在庫へ登録" : "下書きを保存"}</button> : null}
+              {!readOnly ? <button type="button" className="primary-button" disabled={submitting} onClick={() => void launchPurchaseContractSystem()}><ExternalLink size={18} />{submitting ? "準備中" : "買取契約書を開く"}</button> : null}
             </div>
           </form>
         </Drawer>
@@ -261,11 +349,13 @@ export function ContractsPage({ type }: { type: "買取" | "販売" }) {
             </div>
 
             {saleForm.status === "契約済み" && !readOnly ? <div className="contract-link-notice"><strong>保存と同時に連携します</strong><span>対象車両を「売約済み」に変更し、販売代金を未入金として入出金へ登録します。</span></div> : null}
+            {!readOnly ? <div className="contract-link-notice"><strong>既存の販売契約書へ引き継げます</strong><span>入力内容を署名待ちで保存し、販売契約システムを開きます。契約完了後に売約済みと入金予定へ一度だけ反映します。</span></div> : null}
             {readOnly ? <p className="form-hint">契約済みの入金・納車状況は、在庫または入出金画面から確認できます。</p> : null}
             {error ? <p className="form-error">{error}</p> : null}
             <div className="form-actions">
               <button type="button" className="secondary-button" onClick={() => setDrawerOpen(false)}>{readOnly ? "閉じる" : "キャンセル"}</button>
-              {!readOnly ? <button type="submit" className="primary-button" disabled={submitting || availableSaleVehicles.length === 0}>{submitting ? "保存中" : saleForm.status === "契約済み" ? "契約して売約済みにする" : "保存する"}</button> : null}
+              {!readOnly ? <button type="submit" className="secondary-button" disabled={submitting || availableSaleVehicles.length === 0}>{submitting ? "保存中" : saleForm.status === "契約済み" ? "契約して売約済みにする" : "下書きを保存"}</button> : null}
+              {!readOnly ? <button type="button" className="primary-button" disabled={submitting || availableSaleVehicles.length === 0} onClick={() => void launchSaleContractSystem()}><ExternalLink size={18} />{submitting ? "準備中" : "販売契約書を開く"}</button> : null}
             </div>
           </form>
         </Drawer>

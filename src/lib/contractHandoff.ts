@@ -6,7 +6,7 @@ export const CONTRACT_HANDOFF_TTL_MS = 10 * 60 * 1000;
 export type ContractHandoffTarget = "sale" | "purchase";
 
 export type SaleContractHandoff = {
-  assignmentId: string;
+  assignmentId: string | null;
   completionToken: string;
   customerName: string;
   contractDate: string;
@@ -18,7 +18,7 @@ export type SaleContractHandoff = {
 };
 
 export type PurchaseContractHandoff = {
-  assignmentId: string;
+  assignmentId: string | null;
   completionToken: string;
   customerName: string;
   contractDate: string;

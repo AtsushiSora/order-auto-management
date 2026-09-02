@@ -46,6 +46,21 @@ describe("contract handoff", () => {
     expect(storage.getItem(`${CONTRACT_HANDOFF_PREFIX}old`)).toBeNull();
   });
 
+  it("supports direct owner and regular-staff handoffs without an assignment", () => {
+    const storage = new MemoryStorage();
+    const token = "33333333-3333-4333-8333-333333333333";
+    const result = createContractHandoff(storage, "purchase", {
+      assignmentId: null, completionToken: "c".repeat(64), customerName: "直接契約テスト", contractDate: "2026-09-02",
+      vehicleName: "直接買取車", chassisNumber: "DIRECT-001", amount: 100_000,
+      plannedArrivalDate: "2026-09-03", storageLocation: "自宅", paymentMethod: "振込",
+    }, { now: 3_000, token });
+
+    const saved = JSON.parse(storage.getItem(`${CONTRACT_HANDOFF_PREFIX}${token}`) ?? "null");
+    expect(saved.payload.assignmentId).toBeNull();
+    expect(result.url).toBe(`https://atsushisora.github.io/kaitori-contract/contract.html?handoff=${token}#create`);
+    expect(result.url).not.toContain("直接契約テスト");
+  });
+
   it("requires the same browser origin and maps sale payment labels", () => {
     expect(isSameOriginContractHandoff("https://atsushisora.github.io", "https://atsushisora.github.io/kaitori-contract/contract.html")).toBe(true);
     expect(isSameOriginContractHandoff("http://127.0.0.1:5173", "https://atsushisora.github.io/kaitori-contract/contract.html")).toBe(false);

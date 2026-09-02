@@ -27,7 +27,7 @@ export function ContractHandoffsPage() {
   const rows = useMemo(() => data.contractHandoffs.map((handoff) => {
     const assignment = data.spotAssignments.find((item) => item.id === handoff.assignmentId);
     const contract = data.contracts.find((item) => item.id === handoff.contractId);
-    const staff = data.staffProfiles.find((item) => item.id === assignment?.staffId);
+    const staff = data.staffProfiles.find((item) => item.id === (assignment?.staffId ?? handoff.issuedBy));
     const vehicle = data.vehicles.find((item) => item.id === (contract?.vehicleId ?? assignment?.vehicleId));
     return {
       handoff,
