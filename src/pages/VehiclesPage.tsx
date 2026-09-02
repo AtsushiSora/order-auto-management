@@ -298,6 +298,7 @@ function VehicleDetailDrawer({
   const completePurchasePayment = async () => {
     if (!purchasePayment || purchasePayment.status === "完了") return;
     if (vehicle.status === "入庫予定") return setUpdateError("買取代金は入庫を確定するまで支払済みにできません。");
+    if (!receiptChecklistComplete) return setUpdateError("車両・書類の受取確認完了後に買取代金を支払ってください。");
     if (!window.confirm(`${formatCurrency(purchasePaymentRemaining)}を支払済みにしますか？`)) return;
     setBusy(true);
     setUpdateError("");
@@ -466,7 +467,7 @@ function VehicleDetailDrawer({
           <div className={`payment-workflow ${purchasePayment.status === "完了" ? "complete" : "pending"}`}>
             <div className="payment-workflow-heading"><span><strong>{formatCurrency(purchasePayment.amount)}</strong><small>{purchasePayment.method}・予定日 {formatDate(purchasePayment.scheduledOn)}</small></span><StatusBadge>{purchasePayment.status}</StatusBadge></div>
             <dl><div><dt>処理済み</dt><dd>{formatCurrency(purchasePayment.processedAmount)}</dd></div><div><dt>未払い残額</dt><dd>{formatCurrency(purchasePaymentRemaining)}</dd></div></dl>
-            {purchasePayment.status === "完了" ? <p className="payment-complete-note"><CheckCircle2 size={17} />{formatDate(purchasePayment.processedOn)} に支払い完了</p> : vehicle.status === "入庫予定" ? <p className="payment-lock-note">入庫確定後に支払済みへ変更できます。</p> : canManagePayments ? <button type="button" className="primary-button full-button" disabled={busy} onClick={() => void completePurchasePayment()}><CircleDollarSign size={18} />支払済みにする</button> : <p className="section-note">支払い状況を変更する権限がありません。</p>}
+            {purchasePayment.status === "完了" ? <p className="payment-complete-note"><CheckCircle2 size={17} />{formatDate(purchasePayment.processedOn)} に支払い完了</p> : vehicle.status === "入庫予定" || !receiptChecklistComplete ? <p className="payment-lock-note">車両・書類の受取確認と入庫確定後に支払済みへ変更できます。</p> : canManagePayments ? <button type="button" className="primary-button full-button" disabled={busy} onClick={() => void completePurchasePayment()}><CircleDollarSign size={18} />支払済みにする</button> : <p className="section-note">支払い状況を変更する権限がありません。</p>}
           </div>
         ) : (
           <p className="section-note">この車両に紐づく買取代金の支払い予定はありません。必要な場合は入出金画面から登録してください。</p>
