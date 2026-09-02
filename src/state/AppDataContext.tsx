@@ -14,6 +14,7 @@ import { buildAntiqueLedgerEntries } from "../lib/antiqueLedger";
 import { buildExpenseEvidencePath, PRIVATE_BUCKET, validateEvidenceFile } from "../lib/evidence";
 import { canIssueDocument, findCompletedSaleReceipt, includedTaxAmount, nextDemoDocumentNumber } from "../lib/issuedDocuments";
 import { calculateStaffPlannedAmount } from "../lib/staffSettlements";
+import { validateStaffProfileUpdate } from "../lib/staffProfiles";
 import { supabase } from "../lib/supabase";
 import {
   antiqueLedgerDetailToDb,
@@ -78,6 +79,7 @@ import type {
   VehiclePublicationInput,
   WebsiteInquiryStatus,
   CashflowOffset,
+  UpdateStaffProfileInput,
 } from "../types";
 import { useAuth } from "./AuthContext";
 
@@ -106,6 +108,7 @@ const emptyData: AppData = {
 type AppDataContextValue = {
   data: AppData;
   isDemo: boolean;
+  updateStaffProfile: (input: UpdateStaffProfileInput) => Promise<void>;
   addVehicle: (input: NewVehicleInput) => Promise<Vehicle>;
   updateVehicle: (vehicleId: string, patch: Partial<Vehicle>) => Promise<void>;
   saveVehiclePublication: (input: VehiclePublicationInput) => Promise<void>;
@@ -241,7 +244,7 @@ const errorMessage = (error: unknown) => {
 };
 
 export function AppDataProvider({ children }: { children: ReactNode }) {
-  const { configured, session, profile, signOut, testSignIn } = useAuth();
+  const { configured, session, profile, refreshProfile, signOut, testSignIn } = useAuth();
   const testLoginEnabled = import.meta.env.DEV || import.meta.env.VITE_ENABLE_TEST_LOGIN === "true";
   const [data, setData] = useState<AppData>(() => configured ? emptyData : loadInitialDemoData());
   const [loading, setLoading] = useState(configured);
@@ -271,7 +274,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     setLoadError(null);
     try {
       const fetchResults = () => Promise.all([
-        client.from("staff_profiles").select("*").eq("is_active", true).order("display_name", { ascending: true }),
+        client.from("staff_profiles").select("*").order("display_name", { ascending: true }),
         client.from("spot_assignments").select("*").order("created_at", { ascending: false }),
         client.from("contract_handoffs").select("*").order("issued_at", { ascending: false }),
         client.from("vehicles").select("*").is("deleted_at", null).order("created_at", { ascending: false }),
@@ -415,6 +418,31 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   const value = useMemo<AppDataContextValue>(() => ({
     data,
     isDemo: !configured,
+    updateStaffProfile: async (input) => {
+      const checked = validateStaffProfileUpdate(profile, data.staffProfiles, input);
+      if (configured && supabase) {
+        const { error } = await supabase
+          .from("staff_profiles")
+          .update({
+            display_name: checked.displayName,
+            role: checked.role,
+            is_active: checked.isActive,
+            deactivated_at: checked.isActive ? null : new Date().toISOString(),
+          })
+          .eq("id", checked.staffId);
+        if (error) throw new Error(error.message);
+        if (checked.staffId === profile?.id) await refreshProfile();
+        await refreshData();
+        return;
+      }
+
+      setData((current) => ({
+        ...current,
+        staffProfiles: current.staffProfiles.map((staff) => staff.id === checked.staffId
+          ? { ...staff, displayName: checked.displayName, role: checked.role, isActive: checked.isActive }
+          : staff),
+      }));
+    },
     addVehicle: async (input) => {
       if (configured && supabase) {
         const { data: inserted, error } = await supabase
@@ -1364,7 +1392,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       if (!configured) setData(cloneSeedData());
     },
     refreshData,
-  }), [configured, data, persistExpense, profile?.id, profile?.role, refreshData, session?.user.id]);
+  }), [configured, data, persistExpense, profile, refreshData, refreshProfile, session?.user.id]);
 
   if (loading) return <SystemLoading message="共有データを読み込んでいます" />;
   if (loadError) return (

@@ -24,6 +24,13 @@ export type StaffProfile = {
   isActive: boolean;
 };
 
+export type UpdateStaffProfileInput = {
+  staffId: string;
+  displayName: string;
+  role: StaffRole;
+  isActive: boolean;
+};
+
 export type StaffSettlementDirection = "スタッフへ支給" | "スタッフへ請求";
 export type StaffEngagementType = "紹介のみ" | "契約から全て担当";
 export type StaffBusinessType = "販売" | "買取・オークション" | "廃車";

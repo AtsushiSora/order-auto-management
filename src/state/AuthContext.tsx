@@ -32,6 +32,7 @@ type AuthContextValue = {
   testSignIn: () => void;
   switchTestRole: (role: "owner" | "spot") => void;
   updatePassword: (password: string) => Promise<void>;
+  refreshProfile: () => Promise<void>;
   signOut: () => Promise<void>;
 };
 
@@ -235,8 +236,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       window.history.replaceState({}, document.title, window.location.pathname);
       window.location.hash = "#/dashboard";
     },
+    refreshProfile: async () => {
+      if (isTestSession) return;
+      await loadProfile(session);
+    },
     signOut,
-  }), [error, isTestSession, loading, passwordSetupRequired, profile, session, signOut, user]);
+  }), [error, isTestSession, loadProfile, loading, passwordSetupRequired, profile, session, signOut, user]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
