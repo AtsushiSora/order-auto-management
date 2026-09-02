@@ -281,6 +281,10 @@ function VehicleDetailDrawer({
       await confirmDelivery();
       return;
     }
+    if (status === "入庫予定") {
+      await commitUpdate({ status, arrivedAt: null });
+      return;
+    }
     const patch: Partial<Vehicle> = { status };
     await commitUpdate(patch);
   };
