@@ -6,6 +6,7 @@ import { ContractsPage } from "./pages/ContractsPage";
 import { DashboardPage } from "./pages/DashboardPage";
 import { ExpensesPage } from "./pages/ExpensesPage";
 import { PaymentsPage } from "./pages/PaymentsPage";
+import { IssuedDocumentsPage } from "./pages/IssuedDocumentsPage";
 import { ProfitsPage } from "./pages/ProfitsPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { SiteIntegrationPage } from "./pages/SiteIntegrationPage";
@@ -24,6 +25,7 @@ const pageIds: PageId[] = [
   "site-integration",
   "antique-ledger",
   "accounting",
+  "issued-documents",
   "settings",
 ];
 
@@ -83,6 +85,8 @@ export default function App() {
         return <AntiqueLedgerPage />;
       case "accounting":
         return <AccountingPage />;
+      case "issued-documents":
+        return <IssuedDocumentsPage />;
       case "settings":
         return <SettingsPage />;
       default:

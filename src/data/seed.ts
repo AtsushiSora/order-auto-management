@@ -121,6 +121,7 @@ export const seedData: AppData = {
   ],
   vehicleDocuments: [],
   attachments: [],
+  issuedDocuments: [],
   expenses: [
     {
       id: "expense-001",

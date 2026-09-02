@@ -13,6 +13,8 @@ import type {
   ExpenseStatus,
   JournalCandidateReview,
   JournalExport,
+  IssuedDocument,
+  IssueDocumentInput,
   NewCashflowInput,
   NewExpenseInput,
   NewVehicleInput,
@@ -466,6 +468,39 @@ export const mapAttachmentFromDb = (source: unknown): Attachment => {
     createdAt: stringValue(row, "created_at"),
   };
 };
+
+export const mapIssuedDocumentFromDb = (source: unknown): IssuedDocument => {
+  const row = source as DbRow;
+  return {
+    id: stringValue(row, "id"),
+    documentType: stringValue(row, "document_type") === "receipt" ? "R" : "S",
+    documentNumber: stringValue(row, "document_number"),
+    contractId: stringValue(row, "contract_id"),
+    vehicleId: stringValue(row, "vehicle_id"),
+    cashflowId: nullableString(row, "cashflow_id"),
+    customerName: stringValue(row, "customer_name"),
+    vehicleLabel: stringValue(row, "vehicle_label"),
+    amount: numberValue(row, "amount"),
+    showTaxBreakdown: Boolean(row.show_tax_breakdown),
+    taxAmount: numberValue(row, "tax_amount"),
+    deliveryMethod: stringValue(row, "delivery_method") === "paper" ? "紙" : "電子・PDF",
+    stampDutyAmount: numberValue(row, "stamp_duty_amount"),
+    issuedOn: stringValue(row, "issued_on"),
+    note: stringValue(row, "note"),
+    status: stringValue(row, "status") === "voided" ? "無効" : "有効",
+    createdAt: stringValue(row, "created_at"),
+  };
+};
+
+export const issueDocumentToRpc = (input: IssueDocumentInput) => ({
+  p_contract_id: input.contractId,
+  p_document_type: input.documentType === "S" ? "invoice" : "receipt",
+  p_issued_on: input.issuedOn,
+  p_delivery_method: input.deliveryMethod === "紙" ? "paper" : "electronic",
+  p_show_tax_breakdown: input.showTaxBreakdown,
+  p_stamp_duty_amount: input.deliveryMethod === "紙" && input.documentType === "R" ? input.stampDutyAmount : 0,
+  p_note: input.note.trim(),
+});
 
 export const newExpenseToDb = (input: NewExpenseInput) => ({
   vehicle_id: input.vehicleId,

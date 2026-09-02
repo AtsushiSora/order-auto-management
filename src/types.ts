@@ -9,6 +9,7 @@ export type PageId =
   | "site-integration"
   | "antique-ledger"
   | "accounting"
+  | "issued-documents"
   | "settings";
 
 export type StaffRole = "owner" | "accounting" | "regular" | "spot";
@@ -121,6 +122,40 @@ export type Attachment = {
   mimeType: string;
   byteSize: number;
   createdAt: string;
+};
+
+export type IssuedDocumentType = "S" | "R";
+export type IssuedDocumentDelivery = "電子・PDF" | "紙";
+export type IssuedDocumentStatus = "有効" | "無効";
+
+export type IssuedDocument = {
+  id: string;
+  documentType: IssuedDocumentType;
+  documentNumber: string;
+  contractId: string;
+  vehicleId: string;
+  cashflowId: string | null;
+  customerName: string;
+  vehicleLabel: string;
+  amount: number;
+  showTaxBreakdown: boolean;
+  taxAmount: number;
+  deliveryMethod: IssuedDocumentDelivery;
+  stampDutyAmount: number;
+  issuedOn: string;
+  note: string;
+  status: IssuedDocumentStatus;
+  createdAt: string;
+};
+
+export type IssueDocumentInput = {
+  contractId: string;
+  documentType: IssuedDocumentType;
+  issuedOn: string;
+  deliveryMethod: IssuedDocumentDelivery;
+  showTaxBreakdown: boolean;
+  stampDutyAmount: number;
+  note: string;
 };
 
 export type CashflowDirection = "入金" | "支払い";
@@ -277,6 +312,7 @@ export type AppData = {
   vehicleDocuments: VehicleDocument[];
   expenses: Expense[];
   attachments: Attachment[];
+  issuedDocuments: IssuedDocument[];
   cashflows: Cashflow[];
   contracts: Contract[];
   approvals: Approval[];

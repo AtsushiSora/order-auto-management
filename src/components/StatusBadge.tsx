@@ -17,7 +17,9 @@ type BadgeValue =
   | "掲載中"
   | "非公開"
   | "正常"
-  | "全体経費";
+  | "全体経費"
+  | "有効"
+  | "無効";
 
 const toneByValue: Record<BadgeValue, string> = {
   入庫予定: "blue",
@@ -43,6 +45,8 @@ const toneByValue: Record<BadgeValue, string> = {
   対応中: "amber",
   掲載中: "green",
   非公開: "slate",
+  有効: "green",
+  無効: "dark",
 };
 
 export function StatusBadge({ children }: { children: BadgeValue }) {

@@ -1554,6 +1554,7 @@ button.alert-card:hover {
 .mini-summary-card.blue { border-color: #bfd5ed; background: linear-gradient(135deg, #fff, #eef6ff); }
 .mini-summary-card.red { border-color: #edc4c7; background: linear-gradient(135deg, #fff, #fff4f4); }
 .mini-summary-card.teal { border-color: #b7dcda; background: linear-gradient(135deg, #fff, #ecf8f7); }
+.mini-summary-card.green { border-color: #b8ddca; background: linear-gradient(135deg, #fff, #eef9f3); }
 
 .mini-summary-card small {
   margin-bottom: 6px;
@@ -2242,6 +2243,100 @@ button.mini-summary-card:hover {
   .danger-zone {
     align-items: stretch;
     flex-direction: column;
+  }
+}
+
+.document-type-tabs {
+  margin-bottom: 14px;
+}
+
+.document-type-tabs button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+}
+
+.document-source-preview {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.document-source-preview span {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+  padding: 10px 11px;
+  border-radius: 8px;
+  color: var(--slate-500);
+  background: var(--slate-100);
+  font-size: 9px;
+  font-weight: 700;
+}
+
+.document-source-preview span:last-child {
+  grid-column: 1 / -1;
+}
+
+.document-source-preview strong {
+  overflow-wrap: anywhere;
+  color: var(--slate-800);
+  font-size: 12px;
+}
+
+.tax-breakdown-check {
+  margin-bottom: 13px;
+}
+
+.field-note {
+  color: var(--slate-500);
+  font-size: 10px;
+  font-weight: 500;
+  line-height: 1.55;
+}
+
+.document-number {
+  display: inline-flex;
+  padding: 5px 8px;
+  border-radius: 6px;
+  color: #185f93;
+  background: #eaf4fc;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.document-number.r {
+  color: var(--green-700);
+  background: var(--green-100);
+}
+
+.issued-document-actions {
+  display: flex;
+  gap: 7px;
+}
+
+.danger-table-button {
+  color: var(--red-700);
+}
+
+.danger-table-button:hover {
+  border-color: #e9aeb2;
+  background: var(--red-100);
+}
+
+.issued-document-table td:nth-child(3) {
+  min-width: 220px;
+}
+
+@media (max-width: 560px) {
+  .document-source-preview {
+    grid-template-columns: 1fr;
+  }
+
+  .document-source-preview span:last-child {
+    grid-column: auto;
   }
 }
 

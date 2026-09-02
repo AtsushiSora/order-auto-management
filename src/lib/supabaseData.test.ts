@@ -7,6 +7,7 @@ import {
   mapExpenseFromDb,
   mapJournalCandidateReviewFromDb,
   mapJournalExportFromDb,
+  mapIssuedDocumentFromDb,
   mapVehicleFromDb,
   mapVehicleDocumentFromDb,
   mapWebsiteInquiryFromDb,
@@ -20,6 +21,7 @@ import {
   vehicleInspectionImportToRpc,
   vehiclePublicationToRpc,
   websiteInquiryStatusToRpc,
+  issueDocumentToRpc,
 } from "./supabaseData";
 
 describe("Supabaseデータ変換", () => {
@@ -390,6 +392,48 @@ describe("Supabaseデータ変換", () => {
       counterpartyType: "オークション",
       identityVerificationMethod: "オークション会場の取引記録",
       disposalTypeOverride: "売却",
+    });
+  });
+
+  it("S・R発行履歴とRPC引数を変換する", () => {
+    expect(mapIssuedDocumentFromDb({
+      id: "document-id",
+      document_type: "receipt",
+      document_number: "R-202609-0001",
+      contract_id: "contract-id",
+      vehicle_id: "vehicle-id",
+      cashflow_id: "cashflow-id",
+      customer_name: "テスト顧客",
+      vehicle_label: "26-0001 テスト車",
+      amount: 110000,
+      show_tax_breakdown: true,
+      tax_amount: 10000,
+      delivery_method: "paper",
+      stamp_duty_amount: 200,
+      issued_on: "2026-09-02",
+      note: "テスト",
+      status: "issued",
+      created_at: "2026-09-02T00:00:00Z",
+    })).toMatchObject({
+      documentType: "R",
+      deliveryMethod: "紙",
+      status: "有効",
+      taxAmount: 10000,
+    });
+
+    expect(issueDocumentToRpc({
+      contractId: "contract-id",
+      documentType: "S",
+      issuedOn: "2026-09-02",
+      deliveryMethod: "電子・PDF",
+      showTaxBreakdown: false,
+      stampDutyAmount: 500,
+      note: " 備考 ",
+    })).toMatchObject({
+      p_document_type: "invoice",
+      p_delivery_method: "electronic",
+      p_stamp_duty_amount: 0,
+      p_note: "備考",
     });
   });
 });

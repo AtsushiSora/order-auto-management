@@ -11,6 +11,7 @@ import { DataLoadError, SystemLoading } from "../components/SystemState";
 import { seedData } from "../data/seed";
 import { buildAntiqueLedgerEntries } from "../lib/antiqueLedger";
 import { buildExpenseEvidencePath, PRIVATE_BUCKET, validateEvidenceFile } from "../lib/evidence";
+import { canIssueDocument, findCompletedSaleReceipt, includedTaxAmount, nextDemoDocumentNumber } from "../lib/issuedDocuments";
 import { supabase } from "../lib/supabase";
 import {
   antiqueLedgerDetailToDb,
@@ -22,6 +23,7 @@ import {
   mapExpenseFromDb,
   mapJournalCandidateReviewFromDb,
   mapJournalExportFromDb,
+  mapIssuedDocumentFromDb,
   mapVehicleFromDb,
   mapVehicleDocumentFromDb,
   mapWebsiteInquiryFromDb,
@@ -36,11 +38,14 @@ import {
   vehiclePublicationToRpc,
   vehicleDocumentToDb,
   websiteInquiryStatusToRpc,
+  issueDocumentToRpc,
 } from "../lib/supabaseData";
 import type {
   AppData,
   Attachment,
   AttachmentCategory,
+  IssuedDocument,
+  IssueDocumentInput,
   NewCashflowInput,
   NewExpenseInput,
   NewVehicleInput,
@@ -65,6 +70,7 @@ const emptyData: AppData = {
   vehicleDocuments: [],
   expenses: [],
   attachments: [],
+  issuedDocuments: [],
   cashflows: [],
   contracts: [],
   approvals: [],
@@ -90,6 +96,8 @@ type AppDataContextValue = {
   uploadExpenseAttachment: (expenseId: string, category: AttachmentCategory, file: File) => Promise<void>;
   getAttachmentUrl: (attachmentId: string) => Promise<string>;
   deleteAttachment: (attachmentId: string) => Promise<void>;
+  issueDocument: (input: IssueDocumentInput) => Promise<IssuedDocument>;
+  voidIssuedDocument: (documentId: string) => Promise<void>;
   addCashflow: (input: NewCashflowInput) => Promise<void>;
   completeCashflow: (cashflowId: string, processedOn: string) => Promise<void>;
   savePurchaseContract: (input: PurchaseContractInput) => Promise<void>;
@@ -140,6 +148,7 @@ const loadInitialDemoData = (): AppData => {
         paymentMethod: expense.paymentMethod ?? "振込",
       })),
       attachments: parsed.attachments ?? [],
+      issuedDocuments: parsed.issuedDocuments ?? [],
       cashflows: (parsed.cashflows ?? seed.cashflows).map((cashflow) => ({
         ...cashflow,
         kind: cashflow.kind ?? demoCashflowKind(cashflow),
@@ -194,11 +203,12 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     setLoading(true);
     setLoadError(null);
     try {
-      const [vehiclesResult, documentsResult, expensesResult, attachmentsResult, cashflowsResult, contractsResult, approvalsResult, inquiriesResult, ledgerResult, journalReviewsResult, journalExportsResult] = await Promise.all([
+      const [vehiclesResult, documentsResult, expensesResult, attachmentsResult, issuedDocumentsResult, cashflowsResult, contractsResult, approvalsResult, inquiriesResult, ledgerResult, journalReviewsResult, journalExportsResult] = await Promise.all([
         supabase.from("vehicles").select("*").is("deleted_at", null).order("created_at", { ascending: false }),
         supabase.from("vehicle_documents").select("*").order("created_at", { ascending: true }),
         supabase.from("expenses").select("*").is("deleted_at", null).order("incurred_on", { ascending: false }),
         supabase.from("attachments").select("*").order("created_at", { ascending: false }),
+        supabase.from("issued_documents").select("*").order("issued_on", { ascending: false }).order("created_at", { ascending: false }),
         supabase.from("cashflows").select("*").is("deleted_at", null).order("scheduled_on", { ascending: false }),
         supabase.from("contracts").select("*").is("deleted_at", null).order("updated_at", { ascending: false }),
         supabase.from("approvals").select("*").order("created_at", { ascending: false }),
@@ -208,7 +218,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         supabase.from("journal_exports").select("*").order("created_at", { ascending: false }),
       ]);
 
-      const firstError = [vehiclesResult, documentsResult, expensesResult, attachmentsResult, cashflowsResult, contractsResult, approvalsResult, inquiriesResult, ledgerResult, journalReviewsResult, journalExportsResult]
+      const firstError = [vehiclesResult, documentsResult, expensesResult, attachmentsResult, issuedDocumentsResult, cashflowsResult, contractsResult, approvalsResult, inquiriesResult, ledgerResult, journalReviewsResult, journalExportsResult]
         .find((result) => result.error)?.error;
       if (firstError) throw firstError;
 
@@ -217,6 +227,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         vehicleDocuments: (documentsResult.data ?? []).map(mapVehicleDocumentFromDb),
         expenses: (expensesResult.data ?? []).map(mapExpenseFromDb),
         attachments: (attachmentsResult.data ?? []).map(mapAttachmentFromDb),
+        issuedDocuments: (issuedDocumentsResult.data ?? []).map(mapIssuedDocumentFromDb),
         cashflows: (cashflowsResult.data ?? []).map(mapCashflowFromDb),
         contracts: (contractsResult.data ?? []).map(mapContractFromDb),
         approvals: (approvalsResult.data ?? []).map(mapApprovalFromDb),
@@ -590,6 +601,62 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       setData((current) => ({
         ...current,
         attachments: current.attachments.filter((item) => item.id !== attachmentId),
+      }));
+    },
+    issueDocument: async (input) => {
+      if (!input.contractId) throw new Error("販売契約を選択してください。");
+      if (!input.issuedOn) throw new Error("発行日を入力してください。");
+      if (input.issuedOn > new Date().toISOString().slice(0, 10)) throw new Error("発行日に未来の日付は指定できません。");
+      if (input.stampDutyAmount < 0) throw new Error("印紙額は0円以上で入力してください。");
+      if (input.note.length > 500) throw new Error("備考は500文字以内で入力してください。");
+      const contract = data.contracts.find((item) => item.id === input.contractId);
+      if (!contract || !canIssueDocument(data, contract, input.documentType)) {
+        throw new Error(input.documentType === "R" ? "Rは販売代金の入金完了後に発行できます。" : "契約済みの販売契約を選択してください。");
+      }
+
+      if (configured && supabase) {
+        const { data: saved, error } = await supabase.rpc("issue_sales_document", issueDocumentToRpc(input));
+        if (error) throw new Error(error.message);
+        const document = mapIssuedDocumentFromDb(Array.isArray(saved) ? saved[0] : saved);
+        setData((current) => ({ ...current, issuedDocuments: [document, ...current.issuedDocuments] }));
+        return document;
+      }
+
+      const vehicle = data.vehicles.find((item) => item.id === contract.vehicleId);
+      if (!vehicle) throw new Error("対象車両が見つかりません。");
+      const receipt = input.documentType === "R" ? findCompletedSaleReceipt(data, contract) : null;
+      const document: IssuedDocument = {
+        id: crypto.randomUUID(),
+        documentType: input.documentType,
+        documentNumber: nextDemoDocumentNumber(data.issuedDocuments, input.documentType, input.issuedOn),
+        contractId: contract.id,
+        vehicleId: vehicle.id,
+        cashflowId: receipt?.id ?? null,
+        customerName: contract.customerLabel,
+        vehicleLabel: `${vehicle.managementNumber} ${vehicle.name}`,
+        amount: contract.amount,
+        showTaxBreakdown: input.showTaxBreakdown,
+        taxAmount: input.showTaxBreakdown ? includedTaxAmount(contract.amount) : 0,
+        deliveryMethod: input.deliveryMethod,
+        stampDutyAmount: input.documentType === "R" && input.deliveryMethod === "紙" ? input.stampDutyAmount : 0,
+        issuedOn: input.issuedOn,
+        note: input.note.trim(),
+        status: "有効",
+        createdAt: new Date().toISOString(),
+      };
+      setData((current) => ({ ...current, issuedDocuments: [document, ...current.issuedDocuments] }));
+      return document;
+    },
+    voidIssuedDocument: async (documentId) => {
+      const target = data.issuedDocuments.find((document) => document.id === documentId);
+      if (!target || target.status === "無効") throw new Error("対象の発行履歴が見つからないか、すでに無効です。");
+      if (configured && supabase) {
+        const { error } = await supabase.rpc("void_issued_document", { p_document_id: documentId });
+        if (error) throw new Error(error.message);
+      }
+      setData((current) => ({
+        ...current,
+        issuedDocuments: current.issuedDocuments.map((document) => document.id === documentId ? { ...document, status: "無効" } : document),
       }));
     },
     addCashflow: async (input) => {
