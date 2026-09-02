@@ -68,6 +68,21 @@ export function Layout({
   });
   const userLabel = profile?.displayName ?? "利用者";
   const roleLabel = profile ? staffRoleLabels[profile.role] : "確認中";
+  const mobileNavItems = profile?.role === "spot"
+    ? [
+        { id: "spot-workspace" as PageId, label: "担当案件", icon: BriefcaseBusiness },
+        { id: "staff-settlements" as PageId, label: "精算", icon: Users },
+      ]
+    : [
+        { id: "dashboard" as PageId, label: "TOP", icon: Home },
+        { id: "vehicles" as PageId, label: "在庫", icon: Car },
+        { id: "purchase-contracts" as PageId, label: "契約", icon: FileSignature },
+        { id: "payments" as PageId, label: "入出金", icon: WalletCards },
+      ];
+  const contractPageActive = currentPage === "purchase-contracts" || currentPage === "sales-contracts";
+  const mainMobilePageActive = mobileNavItems.some(({ id }) =>
+    id === "purchase-contracts" ? contractPageActive : currentPage === id,
+  );
 
   const navigate = (page: PageId) => {
     onNavigate(page);
@@ -170,6 +185,35 @@ export function Layout({
 
         <main className="content">{children}</main>
       </div>
+
+      <nav
+        className={`mobile-bottom-nav ${profile?.role === "spot" ? "spot" : ""}`}
+        aria-label="スマートフォン用メニュー"
+      >
+        {mobileNavItems.map((item) => {
+          const Icon = item.icon;
+          const active = item.id === "purchase-contracts" ? contractPageActive : currentPage === item.id;
+          return (
+            <button
+              key={item.id}
+              type="button"
+              className={active ? "active" : ""}
+              onClick={() => navigate(item.id)}
+            >
+              <Icon size={21} strokeWidth={active ? 2.5 : 2} />
+              <span>{item.label}</span>
+            </button>
+          );
+        })}
+        <button
+          type="button"
+          className={mobileMenuOpen || !mainMobilePageActive ? "active" : ""}
+          onClick={() => setMobileMenuOpen(true)}
+        >
+          <Menu size={21} />
+          <span>その他</span>
+        </button>
+      </nav>
     </div>
   );
 }

@@ -118,7 +118,7 @@ export function ContractHandoffsPage() {
 
       <section className="table-panel panel">
         <div className="panel-heading"><div><h2>連携の発行・完了履歴</h2><p>再発行前の履歴も削除せず残ります。</p></div></div>
-        <div className="table-scroll">
+        <div className="table-scroll handoff-desktop-list">
           <table className="data-table handoff-table">
             <thead><tr><th>発行日時</th><th>種別・案件</th><th>担当者</th><th>状態</th><th>外部契約ID</th><th>完了・期限</th><th>確認・操作</th></tr></thead>
             <tbody>
@@ -138,6 +138,31 @@ export function ContractHandoffsPage() {
               {!visibleRows.length ? <tr><td colSpan={7} className="table-empty"><Inbox size={24} /><p>{data.contractHandoffs.length ? "条件に一致する履歴はありません。" : "契約連携の履歴はまだありません。"}</p></td></tr> : null}
             </tbody>
           </table>
+        </div>
+        <div className="handoff-mobile-list">
+          {visibleRows.map(({ handoff, status, assignment, contract, staff, vehicle }) => (
+            <article key={handoff.id} className="handoff-mobile-card">
+              <div className="handoff-mobile-heading">
+                <div>
+                  <small>{formatDateTime(handoff.issuedAt)}</small>
+                  <strong>{handoff.contractType}　{assignment?.leadLabel || contract?.customerLabel || "担当案件"}</strong>
+                </div>
+                <StatusBadge>{status}</StatusBadge>
+              </div>
+              <dl>
+                <div><dt>車両</dt><dd>{vehicle ? `${vehicle.managementNumber} ${vehicle.name}` : contract?.status ?? "契約確認中"}</dd></div>
+                <div><dt>担当者</dt><dd>{staff?.displayName ?? "利用停止・未登録"}</dd></div>
+                <div><dt>完了・期限</dt><dd>{handoff.completedAt ? formatDateTime(handoff.completedAt) : formatDateTime(handoff.expiresAt)}</dd></div>
+              </dl>
+              {status === "要確認" && handoff.lastErrorCode ? (
+                <div className="handoff-mobile-recovery">
+                  <small>{contractHandoffErrorMessage[handoff.lastErrorCode]}</small>
+                  <button type="button" className="secondary-button" disabled={retryingId !== null || !handoff.externalContractId} onClick={() => void retry(handoff.id)}><RefreshCw size={15} className={retryingId === handoff.id ? "spin" : ""} />{retryingId === handoff.id ? "再試行中" : "安全に再試行"}</button>
+                </div>
+              ) : status === "期限切れ" ? <p className="handoff-mobile-note">担当案件から契約システムを開き直してください。</p> : null}
+            </article>
+          ))}
+          {!visibleRows.length ? <div className="handoff-mobile-empty"><Inbox size={24} /><p>{data.contractHandoffs.length ? "条件に一致する履歴はありません。" : "契約連携の履歴はまだありません。"}</p></div> : null}
         </div>
       </section>
     </>

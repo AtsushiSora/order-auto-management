@@ -2031,6 +2031,15 @@ button.mini-summary-card:hover {
   display: none;
 }
 
+.mobile-bottom-nav,
+.mobile-recent-list,
+.mobile-status-filter,
+.mobile-vehicle-register,
+.handoff-mobile-list,
+.vehicle-card-action {
+  display: none;
+}
+
 @media (max-width: 1260px) {
   .summary-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -2109,8 +2118,13 @@ button.mini-summary-card:hover {
 }
 
 @media (max-width: 680px) {
+  body {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
   .topbar {
-    padding: 0 13px;
+    height: 61px;
+    padding: 0 12px;
   }
 
   .topbar-title {
@@ -2123,7 +2137,7 @@ button.mini-summary-card:hover {
   }
 
   .content {
-    padding: 21px 14px 40px;
+    padding: 18px 12px calc(102px + env(safe-area-inset-bottom));
   }
 
   .page-header {
@@ -2141,7 +2155,6 @@ button.mini-summary-card:hover {
     width: 100%;
   }
 
-  .summary-grid,
   .alerts-grid,
   .vehicle-card-grid,
   .mini-summary-grid,
@@ -2166,21 +2179,31 @@ button.mini-summary-card:hover {
   }
 
   .summary-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 11px;
   }
 
   .summary-card {
-    min-height: 92px;
-    padding: 16px;
+    min-height: 104px;
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 9px;
+    padding: 13px;
   }
 
   .summary-icon {
-    width: 51px;
-    height: 51px;
+    width: 38px;
+    height: 38px;
+  }
+
+  .summary-icon svg {
+    width: 21px;
+    height: 21px;
   }
 
   .summary-card strong {
-    font-size: 32px;
+    margin-top: 2px;
+    font-size: 26px;
   }
 
   .alerts-grid {
@@ -2201,9 +2224,67 @@ button.mini-summary-card:hover {
     padding: 17px 16px 13px;
   }
 
+  .recent-panel .table-scroll {
+    display: none;
+  }
+
+  .mobile-recent-list {
+    display: grid;
+  }
+
+  .mobile-recent-list > button {
+    min-height: 84px;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 10px;
+    padding: 13px 15px;
+    border: 0;
+    border-top: 1px solid var(--slate-150);
+    background: #fff;
+    text-align: left;
+  }
+
+  .mobile-recent-main,
+  .mobile-recent-values {
+    min-width: 0;
+    display: grid;
+    gap: 4px;
+  }
+
+  .mobile-recent-main > small,
+  .mobile-recent-values > small {
+    color: var(--slate-500);
+    font-size: 10px;
+  }
+
+  .mobile-recent-main > strong {
+    overflow: hidden;
+    color: var(--slate-900);
+    font-size: 13px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .mobile-recent-main .status-badge {
+    width: max-content;
+  }
+
+  .mobile-recent-values {
+    text-align: right;
+  }
+
+  .mobile-recent-values > strong {
+    font-size: 11px;
+  }
+
   .filter-bar {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .filter-bar .search-field {
+    height: 48px;
   }
 
   .search-field {
@@ -2243,6 +2324,78 @@ button.mini-summary-card:hover {
     padding: 17px;
   }
 
+  .vehicle-status-select {
+    display: none;
+  }
+
+  .mobile-status-filter {
+    width: calc(100% + 28px);
+    display: flex;
+    gap: 7px;
+    margin: 0 -14px;
+    padding: 2px 14px 5px;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .mobile-status-filter::-webkit-scrollbar {
+    display: none;
+  }
+
+  .mobile-status-filter button {
+    min-height: 38px;
+    flex: 0 0 auto;
+    padding: 0 13px;
+    border: 1px solid var(--slate-200);
+    border-radius: 20px;
+    color: var(--slate-600);
+    background: #fff;
+    font-size: 11px;
+    font-weight: 750;
+  }
+
+  .mobile-status-filter button.active {
+    border-color: var(--blue-600);
+    color: #fff;
+    background: var(--blue-600);
+  }
+
+  .vehicle-card-action {
+    min-height: 39px;
+    display: grid;
+    place-items: center;
+    margin-top: 13px;
+    border-radius: 8px;
+    color: var(--blue-600);
+    background: var(--blue-100);
+    font-size: 12px;
+    font-weight: 800;
+  }
+
+  .vehicle-header-register {
+    display: none;
+  }
+
+  .mobile-vehicle-register {
+    position: fixed;
+    right: 14px;
+    bottom: calc(79px + env(safe-area-inset-bottom));
+    z-index: 29;
+    min-height: 48px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    padding: 0 18px;
+    border: 1px solid #0761c8;
+    border-radius: 24px;
+    color: #fff;
+    background: linear-gradient(180deg, #0d75e5, #075fc5);
+    box-shadow: 0 7px 20px rgba(7, 74, 145, 0.28);
+    font-size: 13px;
+    font-weight: 800;
+  }
+
   .form-row {
     grid-template-columns: 1fr;
     gap: 0;
@@ -2273,6 +2426,17 @@ button.mini-summary-card:hover {
     padding: 14px 15px;
   }
 
+  .drawer {
+    width: 100%;
+  }
+
+  .field-label input,
+  .field-label select,
+  .field-label textarea {
+    min-height: 48px;
+    font-size: 16px;
+  }
+
   .form-actions {
     position: sticky;
     bottom: 0;
@@ -2297,6 +2461,142 @@ button.mini-summary-card:hover {
   .danger-zone {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .handoff-desktop-list {
+    display: none;
+  }
+
+  .handoff-mobile-list {
+    display: grid;
+    gap: 10px;
+    padding: 0 12px 14px;
+  }
+
+  .handoff-mobile-card {
+    padding: 14px;
+    border: 1px solid var(--slate-200);
+    border-radius: 10px;
+    background: var(--slate-100);
+  }
+
+  .handoff-mobile-heading {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 10px;
+  }
+
+  .handoff-mobile-heading > div {
+    min-width: 0;
+    display: grid;
+    gap: 4px;
+  }
+
+  .handoff-mobile-heading small,
+  .handoff-mobile-card dt {
+    color: var(--slate-500);
+    font-size: 10px;
+  }
+
+  .handoff-mobile-heading strong {
+    color: var(--slate-900);
+    font-size: 13px;
+  }
+
+  .handoff-mobile-card dl {
+    display: grid;
+    gap: 8px;
+    margin: 13px 0 0;
+    padding-top: 12px;
+    border-top: 1px solid var(--slate-200);
+  }
+
+  .handoff-mobile-card dl > div {
+    display: grid;
+    grid-template-columns: 74px minmax(0, 1fr);
+    gap: 8px;
+  }
+
+  .handoff-mobile-card dd {
+    margin: 0;
+    color: var(--slate-700);
+    font-size: 11px;
+    font-weight: 700;
+    overflow-wrap: anywhere;
+  }
+
+  .handoff-mobile-recovery,
+  .handoff-mobile-note {
+    margin: 12px 0 0;
+    padding-top: 12px;
+    border-top: 1px solid var(--slate-200);
+  }
+
+  .handoff-mobile-recovery small,
+  .handoff-mobile-note {
+    color: var(--red-700);
+    font-size: 11px;
+    line-height: 1.55;
+  }
+
+  .handoff-mobile-recovery .secondary-button {
+    width: 100%;
+    min-height: 44px;
+    margin-top: 9px;
+  }
+
+  .handoff-mobile-empty {
+    min-height: 150px;
+    display: grid;
+    place-items: center;
+    align-content: center;
+    color: var(--slate-500);
+    text-align: center;
+  }
+
+  .handoff-mobile-empty p {
+    margin: 8px 0 0;
+    font-size: 11px;
+  }
+
+  .mobile-bottom-nav {
+    position: fixed;
+    inset: auto 0 0 0;
+    z-index: 32;
+    min-height: calc(67px + env(safe-area-inset-bottom));
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    padding: 5px 5px calc(5px + env(safe-area-inset-bottom));
+    border-top: 1px solid var(--slate-200);
+    background: rgba(255, 255, 255, 0.97);
+    box-shadow: 0 -6px 18px rgba(12, 39, 62, 0.08);
+    backdrop-filter: blur(12px);
+  }
+
+  .mobile-bottom-nav.spot {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .mobile-bottom-nav button {
+    min-height: 56px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    gap: 3px;
+    padding: 3px 1px;
+    border: 0;
+    border-radius: 9px;
+    color: var(--slate-500);
+    background: transparent;
+    font-size: 10px;
+    font-weight: 750;
+  }
+
+  .mobile-bottom-nav button.active {
+    color: var(--blue-600);
+    background: var(--blue-50);
   }
 }
 

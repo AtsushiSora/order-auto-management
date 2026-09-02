@@ -205,6 +205,26 @@ export function DashboardPage({
             </tbody>
           </table>
         </div>
+        <div className="mobile-recent-list">
+          {recentVehicles.map((vehicle) => {
+            const profit = calculateVehicleProfit(vehicle, data.expenses);
+            return (
+              <button type="button" key={vehicle.id} onClick={() => onNavigate("vehicles")}>
+                <span className="mobile-recent-main">
+                  <small>{vehicle.managementNumber}</small>
+                  <strong>{vehicle.name}</strong>
+                  <StatusBadge>{vehicle.status}</StatusBadge>
+                </span>
+                <span className="mobile-recent-values">
+                  <small>販売 {formatCurrency(vehicle.askingPrice)}</small>
+                  <strong className={profit.expectedProfit < 0 ? "negative" : "positive"}>
+                    利益 {formatCurrency(profit.expectedProfit)}
+                  </strong>
+                </span>
+              </button>
+            );
+          })}
+        </div>
       </section>
 
       {isDemo ? <p className="demo-note">表示中の内容は初期画面確認用の架空データです。本物のお客様情報は含まれていません。</p> : null}

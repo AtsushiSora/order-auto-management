@@ -135,11 +135,16 @@ export function VehiclesPage({
 
   return (
     <>
-      <PageHeader title="在庫" description="入庫予定から納車済みまで、車両ごとの取引を管理します。" action={canEdit ? <div className="page-header-actions"><button type="button" className="secondary-button" onClick={() => setInspectionImportOpen(true)}><ScanLine size={19} />車検証を読み取る</button><button type="button" className="primary-button" onClick={openNewVehicle}><Plus size={20} />車両を登録</button></div> : undefined} />
+      <PageHeader title="在庫" description="入庫予定から納車済みまで、車両ごとの取引を管理します。" action={canEdit ? <div className="page-header-actions"><button type="button" className="secondary-button" onClick={() => setInspectionImportOpen(true)}><ScanLine size={19} />車検証を読み取る</button><button type="button" className="primary-button vehicle-header-register" onClick={openNewVehicle}><Plus size={20} />車両を登録</button></div> : undefined} />
 
       <div className="filter-bar panel">
         <label className="search-field"><Search size={19} /><input type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="管理番号・車両名・車台番号で検索" /></label>
-        <label className="select-field compact"><Filter size={18} /><select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as VehicleStatus | "すべて")}><option value="すべて">すべての状態</option>{vehicleStatuses.map((status) => <option key={status}>{status}</option>)}</select></label>
+        <label className="select-field compact vehicle-status-select"><Filter size={18} /><select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as VehicleStatus | "すべて")}><option value="すべて">すべての状態</option>{vehicleStatuses.map((status) => <option key={status}>{status}</option>)}</select></label>
+        <div className="mobile-status-filter" aria-label="車両状態で絞り込む">
+          {["すべて" as const, ...vehicleStatuses].map((status) => (
+            <button key={status} type="button" className={statusFilter === status ? "active" : ""} onClick={() => setStatusFilter(status)}>{status}</button>
+          ))}
+        </div>
         <div className="result-count">{filteredVehicles.length}台</div>
       </div>
 
@@ -152,12 +157,15 @@ export function VehiclesPage({
               <div className="vehicle-card-title"><small>{vehicle.managementNumber}</small><h2>{vehicle.name}</h2><p>{vehicle.acquisitionSource}</p></div>
               <dl className="vehicle-card-values"><div><dt>販売価格</dt><dd>{formatCurrency(vehicle.askingPrice)}</dd></div><div><dt>予想利益</dt><dd className={profit.expectedProfit < 0 ? "negative" : "positive"}>{formatCurrency(profit.expectedProfit)}</dd></div></dl>
               <div className={`document-indicator ${vehicle.documentsComplete ? "complete" : "missing"}`}>{vehicle.documentsComplete ? <CheckCircle2 size={17} /> : <FileWarning size={17} />}{vehicle.documentsComplete ? "必要書類 確認済み" : "書類の確認が必要"}</div>
+              <span className="vehicle-card-action">詳細を見る</span>
             </button>
           );
         })}
       </section>
 
       {filteredVehicles.length === 0 ? <div className="empty-state panel"><Car size={34} /><h2>該当する車両がありません</h2><p>検索条件を変更するか、新しい車両を登録してください。</p></div> : null}
+
+      {canEdit ? <button type="button" className="mobile-vehicle-register" onClick={openNewVehicle}><Plus size={20} />車両を登録</button> : null}
 
       {drawerMode === "new" ? (
         <Drawer title="車両を登録" subtitle="0円買取の場合は仕入額を0円で登録できます。" onClose={() => setDrawerMode(null)}>
