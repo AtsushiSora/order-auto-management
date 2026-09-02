@@ -8,6 +8,7 @@ import type {
   CashflowKind,
   CashflowStatus,
   Contract,
+  ContractHandoff,
   ContractStatus,
   Expense,
   ExpenseStatus,
@@ -238,6 +239,9 @@ const staffSettlementStatusFromDb: Record<string, StaffSettlement["status"]> = {
 const spotAssignmentStatusFromDb: Record<string, SpotAssignment["status"]> = {
   open: "進行中", completed: "完了", cancelled: "取消",
 };
+const contractHandoffStatusFromDb: Record<string, ContractHandoff["status"]> = {
+  issued: "連携待ち", completed: "完了", revoked: "無効",
+};
 
 const stringValue = (row: DbRow, key: string) => String(row[key] ?? "");
 const nullableString = (row: DbRow, key: string) => (row[key] == null ? null : String(row[key]));
@@ -300,6 +304,22 @@ export const mapSpotAssignmentFromDb = (source: unknown): SpotAssignment => {
     status: spotAssignmentStatusFromDb[stringValue(row, "status")] ?? "進行中",
     createdAt: stringValue(row, "created_at"),
     updatedAt: stringValue(row, "updated_at"),
+  };
+};
+
+export const mapContractHandoffFromDb = (source: unknown): ContractHandoff => {
+  const row = source as DbRow;
+  return {
+    id: stringValue(row, "id"),
+    assignmentId: stringValue(row, "assignment_id"),
+    contractId: stringValue(row, "contract_id"),
+    contractType: stringValue(row, "contract_type") === "sale" ? "販売" : "買取",
+    status: contractHandoffStatusFromDb[stringValue(row, "status")] ?? "無効",
+    externalContractId: nullableString(row, "external_contract_id"),
+    issuedBy: stringValue(row, "issued_by"),
+    issuedAt: stringValue(row, "issued_at"),
+    expiresAt: stringValue(row, "expires_at"),
+    completedAt: nullableString(row, "completed_at"),
   };
 };
 

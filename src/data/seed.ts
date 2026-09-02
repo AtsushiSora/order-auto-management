@@ -8,6 +8,7 @@ export const seedData: AppData = {
     { id: "demo-spot", displayName: "スポットスタッフ", role: "spot", isActive: true },
   ],
   spotAssignments: [],
+  contractHandoffs: [],
   vehicles: [
     {
       id: "vehicle-26-0001",

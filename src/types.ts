@@ -11,6 +11,7 @@ export type PageId =
   | "accounting"
   | "issued-documents"
   | "staff-settlements"
+  | "contract-handoffs"
   | "spot-workspace"
   | "settings";
 
@@ -72,6 +73,21 @@ export type SpotAssignment = {
   status: SpotAssignmentStatus;
   createdAt: string;
   updatedAt: string;
+};
+
+export type ContractHandoffStatus = "連携待ち" | "完了" | "無効";
+
+export type ContractHandoff = {
+  id: string;
+  assignmentId: string;
+  contractId: string;
+  contractType: "買取" | "販売";
+  status: ContractHandoffStatus;
+  externalContractId: string | null;
+  issuedBy: string;
+  issuedAt: string;
+  expiresAt: string;
+  completedAt: string | null;
 };
 
 export type SaveSpotAssignmentInput = Omit<SpotAssignment, "id" | "contractId" | "status" | "createdAt" | "updatedAt"> & {
@@ -368,6 +384,7 @@ export type AntiqueLedgerEntry = {
 export type AppData = {
   staffProfiles: StaffProfile[];
   spotAssignments: SpotAssignment[];
+  contractHandoffs: ContractHandoff[];
   vehicles: Vehicle[];
   vehicleDocuments: VehicleDocument[];
   expenses: Expense[];

@@ -1556,6 +1556,33 @@ button.alert-card:hover {
 .mini-summary-card.teal { border-color: #b7dcda; background: linear-gradient(135deg, #fff, #ecf8f7); }
 .mini-summary-card.green { border-color: #b8ddca; background: linear-gradient(135deg, #fff, #eef9f3); }
 
+.handoff-summary-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.handoff-filter button {
+  min-width: 72px;
+}
+
+.handoff-external-id {
+  display: inline-block;
+  max-width: 210px;
+  overflow: hidden;
+  color: var(--slate-600);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  vertical-align: middle;
+}
+
+.spin {
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
 .mini-summary-card small {
   margin-bottom: 6px;
   color: var(--slate-600);
@@ -2107,8 +2134,22 @@ button.mini-summary-card:hover {
   .mini-summary-grid,
   .cashflow-summary-grid,
   .profit-explanation-grid,
-  .settings-grid {
+    .settings-grid {
     grid-template-columns: 1fr;
+  }
+
+  .handoff-summary-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .handoff-filter {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    height: auto;
+  }
+
+  .handoff-filter button {
+    min-height: 38px;
   }
 
   .summary-grid {

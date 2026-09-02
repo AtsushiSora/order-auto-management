@@ -22,7 +22,9 @@ type BadgeValue =
   | "取消"
   | "進行中"
   | "有効"
-  | "無効";
+  | "無効"
+  | "連携待ち"
+  | "期限切れ";
 
 const toneByValue: Record<BadgeValue, string> = {
   入庫予定: "blue",
@@ -53,6 +55,8 @@ const toneByValue: Record<BadgeValue, string> = {
   非公開: "slate",
   有効: "green",
   無効: "dark",
+  連携待ち: "amber",
+  期限切れ: "red",
 };
 
 export function StatusBadge({ children }: { children: BadgeValue }) {

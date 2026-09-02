@@ -21,6 +21,7 @@ import {
   mapAntiqueLedgerDetailFromDb,
   mapCashflowFromDb,
   mapContractFromDb,
+  mapContractHandoffFromDb,
   mapExpenseFromDb,
   mapJournalCandidateReviewFromDb,
   mapJournalExportFromDb,
@@ -82,6 +83,7 @@ const demoEvidenceUrls = new Map<string, string>();
 const emptyData: AppData = {
   staffProfiles: [],
   spotAssignments: [],
+  contractHandoffs: [],
   vehicles: [],
   vehicleDocuments: [],
   expenses: [],
@@ -168,6 +170,7 @@ const loadInitialDemoData = (): AppData => {
       ...parsed,
       staffProfiles: parsed.staffProfiles ?? seed.staffProfiles,
       spotAssignments: parsed.spotAssignments ?? [],
+      contractHandoffs: parsed.contractHandoffs ?? [],
       vehicles: (parsed.vehicles ?? seed.vehicles).map((vehicle) => ({
         ...publicationDefaults(vehicle),
         ...vehicle,
@@ -234,9 +237,10 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     setLoading(true);
     setLoadError(null);
     try {
-      const [staffResult, spotAssignmentsResult, vehiclesResult, documentsResult, expensesResult, attachmentsResult, issuedDocumentsResult, staffSettlementsResult, cashflowsResult, contractsResult, approvalsResult, inquiriesResult, ledgerResult, journalReviewsResult, journalExportsResult] = await Promise.all([
+      const [staffResult, spotAssignmentsResult, contractHandoffsResult, vehiclesResult, documentsResult, expensesResult, attachmentsResult, issuedDocumentsResult, staffSettlementsResult, cashflowsResult, contractsResult, approvalsResult, inquiriesResult, ledgerResult, journalReviewsResult, journalExportsResult] = await Promise.all([
         supabase.from("staff_profiles").select("*").eq("is_active", true).order("display_name", { ascending: true }),
         supabase.from("spot_assignments").select("*").order("created_at", { ascending: false }),
+        supabase.from("contract_handoffs").select("*").order("issued_at", { ascending: false }),
         supabase.from("vehicles").select("*").is("deleted_at", null).order("created_at", { ascending: false }),
         supabase.from("vehicle_documents").select("*").order("created_at", { ascending: true }),
         supabase.from("expenses").select("*").is("deleted_at", null).order("incurred_on", { ascending: false }),
@@ -252,13 +256,14 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         supabase.from("journal_exports").select("*").order("created_at", { ascending: false }),
       ]);
 
-      const firstError = [staffResult, spotAssignmentsResult, vehiclesResult, documentsResult, expensesResult, attachmentsResult, issuedDocumentsResult, staffSettlementsResult, cashflowsResult, contractsResult, approvalsResult, inquiriesResult, ledgerResult, journalReviewsResult, journalExportsResult]
+      const firstError = [staffResult, spotAssignmentsResult, contractHandoffsResult, vehiclesResult, documentsResult, expensesResult, attachmentsResult, issuedDocumentsResult, staffSettlementsResult, cashflowsResult, contractsResult, approvalsResult, inquiriesResult, ledgerResult, journalReviewsResult, journalExportsResult]
         .find((result) => result.error)?.error;
       if (firstError) throw firstError;
 
       setData({
         staffProfiles: (staffResult.data ?? []).map(mapStaffProfileFromDb),
         spotAssignments: (spotAssignmentsResult.data ?? []).map(mapSpotAssignmentFromDb),
+        contractHandoffs: (contractHandoffsResult.data ?? []).map(mapContractHandoffFromDb),
         vehicles: (vehiclesResult.data ?? []).map(mapVehicleFromDb),
         vehicleDocuments: (documentsResult.data ?? []).map(mapVehicleDocumentFromDb),
         expenses: (expensesResult.data ?? []).map(mapExpenseFromDb),

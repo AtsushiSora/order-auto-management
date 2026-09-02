@@ -1,4 +1,4 @@
-import type { PaymentMethod } from "../types";
+import type { ContractHandoff, PaymentMethod } from "../types";
 
 export const CONTRACT_HANDOFF_PREFIX = "orderAutoContractHandoff:";
 export const CONTRACT_HANDOFF_TTL_MS = 10 * 60 * 1000;
@@ -100,4 +100,14 @@ export function mapSalePaymentMethod(method: PaymentMethod) {
   if (method === "ローン会社") return "ローン";
   if (method === "現金") return "現金";
   return "その他";
+}
+
+export type EffectiveContractHandoffStatus = ContractHandoff["status"] | "期限切れ";
+
+export function getEffectiveContractHandoffStatus(
+  handoff: Pick<ContractHandoff, "status" | "expiresAt">,
+  now = Date.now(),
+): EffectiveContractHandoffStatus {
+  if (handoff.status === "連携待ち" && Date.parse(handoff.expiresAt) <= now) return "期限切れ";
+  return handoff.status;
 }

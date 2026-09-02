@@ -3,6 +3,7 @@ import {
   CONTRACT_HANDOFF_PREFIX,
   CONTRACT_HANDOFF_TTL_MS,
   createContractHandoff,
+  getEffectiveContractHandoffStatus,
   isSameOriginContractHandoff,
   mapSalePaymentMethod,
 } from "./contractHandoff";
@@ -50,5 +51,13 @@ describe("contract handoff", () => {
     expect(isSameOriginContractHandoff("http://127.0.0.1:5173", "https://atsushisora.github.io/kaitori-contract/contract.html")).toBe(false);
     expect(mapSalePaymentMethod("振込")).toBe("銀行振込");
     expect(mapSalePaymentMethod("ローン会社")).toBe("ローン");
+  });
+
+  it("shows an issued handoff as expired only after its deadline", () => {
+    const expiresAt = "2026-09-02T01:00:00.000Z";
+    expect(getEffectiveContractHandoffStatus({ status: "連携待ち", expiresAt }, Date.parse("2026-09-02T00:59:59.000Z"))).toBe("連携待ち");
+    expect(getEffectiveContractHandoffStatus({ status: "連携待ち", expiresAt }, Date.parse(expiresAt))).toBe("期限切れ");
+    expect(getEffectiveContractHandoffStatus({ status: "完了", expiresAt }, Date.parse("2027-01-01T00:00:00.000Z"))).toBe("完了");
+    expect(getEffectiveContractHandoffStatus({ status: "無効", expiresAt }, Date.parse("2027-01-01T00:00:00.000Z"))).toBe("無効");
   });
 });
