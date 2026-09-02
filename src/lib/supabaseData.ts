@@ -72,8 +72,10 @@ const acquisitionSourceFromDb = Object.fromEntries(
 ) as Record<string, AcquisitionSource>;
 
 const vehicleDocumentTypeToDb: Record<VehicleDocumentType, string> = {
+  車両本体: "vehicle_body",
+  鍵の本数: "keys",
   車検証: "vehicle_inspection_certificate",
-  譲渡証明書: "transfer_certificate",
+  譲渡書類: "transfer_certificate",
   印鑑証明: "seal_registration_certificate",
   住民票: "residence_certificate",
   申請依頼書: "application_request_form",

@@ -21,6 +21,13 @@ import { StatusBadge } from "../components/StatusBadge";
 import { VehicleInspectionImportDrawer } from "../components/VehicleInspectionImportDrawer";
 import { calculateVehicleProfit, outstandingAmount } from "../lib/calculations";
 import { formatCurrency, formatDate } from "../lib/format";
+import {
+  isVehicleReceiptChecklistComplete,
+  vehicleDocumentInputForStatus,
+  vehicleReceiptChecklistTypes,
+  vehicleReceiptStatus,
+  type VehicleReceiptStatus,
+} from "../lib/vehicleReceiptChecklist";
 import { useAppData } from "../state/AppDataContext";
 import { useAuth } from "../state/AuthContext";
 import type {
@@ -41,8 +48,6 @@ import type {
 
 const vehicleStatuses: VehicleStatus[] = ["入庫予定", "入庫済み", "販売中", "売約済み", "納車済み", "廃車処分"];
 const acquisitionSources: AcquisitionSource[] = ["一般のお客様", "オークション", "業者", "保険関係"];
-const requiredDocumentTypes: VehicleDocumentType[] = ["車検証", "譲渡証明書", "印鑑証明", "住民票", "申請依頼書", "自賠責保険"];
-const documentTypes: VehicleDocumentType[] = [...requiredDocumentTypes, "その他"];
 const expenseCategories = ["部品代", "外注費", "陸送費", "登録費用", "仕入手数料", "販売手数料", "その他"];
 const expensePaymentMethods: PaymentMethod[] = ["現金", "振込", "ローン会社", "カード", "その他"];
 
@@ -235,12 +240,19 @@ function VehicleDetailDrawer({
   const [busy, setBusy] = useState(false);
   const [arrivalDate, setArrivalDate] = useState(vehicle.arrivedAt ?? new Date().toISOString().slice(0, 10));
   const [deliveryDate, setDeliveryDate] = useState(vehicle.deliveredAt ?? new Date().toISOString().slice(0, 10));
+  const keyDocument = documents.find((document) => document.documentType === "鍵の本数");
+  const [keyCount, setKeyCount] = useState(keyDocument?.note ?? "");
+  const receiptChecklistComplete = isVehicleReceiptChecklistComplete(documents);
+  const undecidedReceiptCount = vehicleReceiptChecklistTypes.filter((type) =>
+    vehicleReceiptStatus(documents.find((document) => document.documentType === type)) === "未選択",
+  ).length;
 
   useEffect(() => {
     setEditForm({ ...vehicle });
     setArrivalDate(vehicle.arrivedAt ?? new Date().toISOString().slice(0, 10));
     setDeliveryDate(vehicle.deliveredAt ?? new Date().toISOString().slice(0, 10));
-  }, [vehicle]);
+    setKeyCount(documents.find((document) => document.documentType === "鍵の本数")?.note ?? "");
+  }, [vehicle, documents]);
 
   const commitUpdate = async (patch: Partial<Vehicle>) => {
     setUpdateError("");
@@ -275,6 +287,7 @@ function VehicleDetailDrawer({
 
   const confirmArrival = async () => {
     if (!arrivalDate) return setUpdateError("実際の入庫日を入力してください。");
+    if (!receiptChecklistComplete) return setUpdateError("受取確認をすべて「受取済み」または「不要」にしてください。");
     setBusy(true);
     setUpdateError("");
     try { await onMarkArrived(vehicle.id, arrivalDate); }
@@ -325,16 +338,35 @@ function VehicleDetailDrawer({
     finally { setBusy(false); }
   };
 
-  const toggleDocument = async (documentType: VehicleDocumentType, isReceived: boolean) => {
+  const updateDocumentStatus = async (documentType: VehicleDocumentType, status: VehicleReceiptStatus) => {
     const current = documents.find((document) => document.documentType === documentType);
     setBusy(true);
     setUpdateError("");
     try {
-      const updated = await onDocumentUpdate({ vehicleId: vehicle.id, documentType, isRequired: documentType !== "その他", isReceived, receivedAt: isReceived ? new Date().toISOString().slice(0, 10) : null, note: current?.note ?? "" });
-      const nextDocuments = [...documents.filter((document) => document.documentType !== documentType), updated];
-      const complete = requiredDocumentTypes.every((type) => nextDocuments.some((document) => document.documentType === type && document.isReceived));
-      if (complete !== vehicle.documentsComplete) await onUpdate({ documentsComplete: complete });
+      const updated = await onDocumentUpdate(vehicleDocumentInputForStatus(vehicle.id, documentType, status, current?.note ?? ""));
+      if (documentType === "鍵の本数") setKeyCount(updated.note);
     } catch (reason) { setUpdateError(reason instanceof Error ? reason.message : "書類の状態を保存できませんでした。"); }
+    finally { setBusy(false); }
+  };
+
+  const saveKeyCount = async () => {
+    if (vehicleReceiptStatus(keyDocument) !== "受取済み") return;
+    if (!/^\d+$/.test(keyCount) || Number(keyCount) < 1) {
+      setUpdateError("受け取った鍵の本数を1本以上で入力してください。");
+      return;
+    }
+    setBusy(true);
+    setUpdateError("");
+    try {
+      await onDocumentUpdate({
+        vehicleId: vehicle.id,
+        documentType: "鍵の本数",
+        isRequired: true,
+        isReceived: true,
+        receivedAt: keyDocument?.receivedAt ?? new Date().toISOString().slice(0, 10),
+        note: keyCount,
+      });
+    } catch (reason) { setUpdateError(reason instanceof Error ? reason.message : "鍵の本数を保存できませんでした。"); }
     finally { setBusy(false); }
   };
 
@@ -366,8 +398,8 @@ function VehicleDetailDrawer({
             <span className="workflow-icon"><PackageCheck size={24} /></span>
             <div className="workflow-content">
               <strong>入庫を確認してください</strong>
-              <p>入庫を確定するまでは、買取代金を支払済みにできません。</p>
-              {canEdit ? <div className="workflow-action"><label className="field-label">実際の入庫日<input type="date" value={arrivalDate} max={new Date().toISOString().slice(0, 10)} disabled={busy} onChange={(event) => setArrivalDate(event.target.value)} /></label><button type="button" className="primary-button" disabled={busy} onClick={() => void confirmArrival()}><PackageCheck size={17} />{busy ? "処理中" : "入庫を確定する"}</button></div> : null}
+              <p>{receiptChecklistComplete ? "受取確認が完了しました。実際の入庫日を確認してください。" : `受取確認が残り${undecidedReceiptCount}項目あります。完了するまで買取代金も支払済みにできません。`}</p>
+              {canEdit ? <div className="workflow-action"><label className="field-label">実際の入庫日<input type="date" value={arrivalDate} max={new Date().toISOString().slice(0, 10)} disabled={busy} onChange={(event) => setArrivalDate(event.target.value)} /></label><button type="button" className="primary-button" disabled={busy || !receiptChecklistComplete} onClick={() => void confirmArrival()}><PackageCheck size={17} />{busy ? "処理中" : "入庫を確定する"}</button></div> : null}
             </div>
           </div>
         ) : vehicle.status === "納車済み" ? (
@@ -415,13 +447,15 @@ function VehicleDetailDrawer({
       )}
 
       <section className="detail-section">
-        <h3>必要書類</h3><p className="section-note">受け取った書類を1つずつ確認します。「その他」は必要な場合だけ使います。</p>
+        <h3>車両・書類の受取確認</h3><p className="section-note">全項目を「受取済み」または「不要」にしてください。未選択がある間は入庫を確定できません。</p>
         <div className="document-checklist">
-          {documentTypes.map((type) => {
+          {vehicleReceiptChecklistTypes.map((type) => {
             const document = documents.find((item) => item.documentType === type);
-            return <label className="document-check" key={type}><input type="checkbox" checked={document?.isReceived ?? false} disabled={!canEdit || busy} onChange={(event) => void toggleDocument(type, event.target.checked)} /><span><strong>{type}</strong><small>{document?.isReceived ? `${formatDate(document.receivedAt)} 受領` : type === "その他" ? "必要な場合に確認" : "未受領"}</small></span></label>;
+            const status = vehicleReceiptStatus(document);
+            return <div className={`receipt-check-item ${status === "未選択" ? "pending" : "decided"}`} key={type}><div className="receipt-check-heading"><span><strong>{type}</strong><small>{status === "受取済み" ? `${formatDate(document?.receivedAt ?? null)} 受領` : status}</small></span><select aria-label={`${type}の受取状態`} value={status} disabled={!canEdit || busy} onChange={(event) => void updateDocumentStatus(type, event.target.value as VehicleReceiptStatus)}><option>未選択</option><option>受取済み</option><option>不要</option></select></div>{type === "鍵の本数" && status === "受取済み" ? <label className="key-count-field">受け取った本数<input type="number" min="1" inputMode="numeric" value={keyCount} disabled={!canEdit || busy} onChange={(event) => setKeyCount(event.target.value)} onBlur={() => void saveKeyCount()} /></label> : null}</div>;
           })}
         </div>
+        <p className={`receipt-check-summary ${receiptChecklistComplete ? "complete" : "pending"}`}>{receiptChecklistComplete ? <><CheckCircle2 size={17} />受取確認はすべて完了しています</> : <><FileWarning size={17} />未選択が{undecidedReceiptCount}項目あります</>}</p>
       </section>
 
       <section className="detail-section">

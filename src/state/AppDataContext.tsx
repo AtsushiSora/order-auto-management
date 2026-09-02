@@ -17,6 +17,7 @@ import { calculateStaffPlannedAmount } from "../lib/staffSettlements";
 import { validateStaffInvitationInput, validateStaffProfileUpdate } from "../lib/staffProfiles";
 import { calculateMonthlyBalance, calculateMonthlyMovement } from "../lib/monthlyBalance";
 import { emptyProductionReadiness, normalizeProductionReadiness, statusToDb } from "../lib/productionReadiness";
+import { isVehicleReceiptChecklistComplete } from "../lib/vehicleReceiptChecklist";
 import { supabase } from "../lib/supabase";
 import {
   antiqueLedgerDetailToDb,
@@ -682,6 +683,9 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       const target = data.vehicles.find((vehicle) => vehicle.id === vehicleId);
       if (!target) throw new Error("対象車両が見つかりません。");
       if (target.status !== "入庫予定") throw new Error("この車両はすでに入庫処理されています。");
+      if (!isVehicleReceiptChecklistComplete(data.vehicleDocuments.filter((document) => document.vehicleId === vehicleId))) {
+        throw new Error("受取確認をすべて「受取済み」または「不要」にしてください。");
+      }
       setData((current) => ({
         ...current,
         vehicles: current.vehicles.map((vehicle) => vehicle.id === vehicleId
@@ -726,13 +730,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
           .single();
         if (error) throw new Error(error.message);
         const document = mapVehicleDocumentFromDb(updated);
-        setData((current) => ({
-          ...current,
-          vehicleDocuments: [
-            ...current.vehicleDocuments.filter((item) => !(item.vehicleId === document.vehicleId && item.documentType === document.documentType)),
-            document,
-          ],
-        }));
+        await refreshData();
         return document;
       }
 
@@ -752,6 +750,14 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
           ...current.vehicleDocuments.filter((item) => !(item.vehicleId === document.vehicleId && item.documentType === document.documentType)),
           document,
         ],
+        vehicles: current.vehicles.map((vehicle) => {
+          if (vehicle.id !== document.vehicleId) return vehicle;
+          const nextDocuments = [
+            ...current.vehicleDocuments.filter((item) => !(item.vehicleId === document.vehicleId && item.documentType === document.documentType)),
+            document,
+          ].filter((item) => item.vehicleId === document.vehicleId);
+          return { ...vehicle, documentsComplete: isVehicleReceiptChecklistComplete(nextDocuments) };
+        }),
       }));
       return document;
     },

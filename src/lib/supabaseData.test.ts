@@ -285,10 +285,10 @@ describe("Supabaseデータ変換", () => {
     });
   });
 
-  it("譲渡証明書の受領状態をDB形式へ変換できる", () => {
+  it("譲渡書類の受領状態をDB形式へ変換できる", () => {
     const row = vehicleDocumentToDb({
       vehicleId: "vehicle-id",
-      documentType: "譲渡証明書",
+      documentType: "譲渡書類",
       isRequired: true,
       isReceived: true,
       receivedAt: "2026-09-02",
@@ -307,7 +307,7 @@ describe("Supabaseデータ変換", () => {
       note: "原本",
       created_at: "2026-09-02T00:00:00Z",
       updated_at: "2026-09-02T00:00:00Z",
-    }).documentType).toBe("譲渡証明書");
+    }).documentType).toBe("譲渡書類");
   });
 
   it("買取代金をDBの業務区分へ変換する", () => {

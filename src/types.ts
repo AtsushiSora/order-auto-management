@@ -165,8 +165,10 @@ export type Vehicle = {
 };
 
 export type VehicleDocumentType =
+  | "車両本体"
+  | "鍵の本数"
   | "車検証"
-  | "譲渡証明書"
+  | "譲渡書類"
   | "印鑑証明"
   | "住民票"
   | "申請依頼書"
