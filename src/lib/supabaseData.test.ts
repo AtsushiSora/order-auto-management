@@ -8,6 +8,7 @@ import {
   newCashflowToDb,
   newVehicleToDb,
   purchaseContractToRpc,
+  saleContractToRpc,
   vehicleDocumentToDb,
 } from "./supabaseData";
 
@@ -115,6 +116,25 @@ describe("Supabaseデータ変換", () => {
     expect(input.p_acquisition_source).toBe("auction");
     expect(input.p_payment_method).toBe("bank_transfer");
     expect(input.p_amount).toBe(0);
+  });
+
+  it("販売契約を売約・入金連動RPCの引数へ変換する", () => {
+    const input = saleContractToRpc({
+      contractId: null,
+      vehicleId: "vehicle-id",
+      customerLabel: "販売確認 顧客",
+      amount: 880000,
+      status: "契約済み",
+      contractedOn: "2026-09-02",
+      paymentMethod: "ローン会社",
+    });
+
+    expect(input).toMatchObject({
+      p_vehicle_id: "vehicle-id",
+      p_status: "contracted",
+      p_amount: 880000,
+      p_payment_method: "loan_company",
+    });
   });
 
   it("譲渡証明書の受領状態をDB形式へ変換できる", () => {

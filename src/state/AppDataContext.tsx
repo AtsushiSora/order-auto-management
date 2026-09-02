@@ -21,6 +21,7 @@ import {
   newExpenseToDb,
   newVehicleToDb,
   purchaseContractToRpc,
+  saleContractToRpc,
   vehiclePatchToDb,
   vehicleDocumentToDb,
 } from "../lib/supabaseData";
@@ -30,6 +31,7 @@ import type {
   NewExpenseInput,
   NewVehicleInput,
   PurchaseContractInput,
+  SaleContractInput,
   Vehicle,
   VehicleDocument,
   VehicleDocumentInput,
@@ -45,12 +47,14 @@ type AppDataContextValue = {
   addVehicle: (input: NewVehicleInput) => Promise<Vehicle>;
   updateVehicle: (vehicleId: string, patch: Partial<Vehicle>) => Promise<void>;
   markVehicleArrived: (vehicleId: string, arrivedOn: string) => Promise<void>;
+  markVehicleDelivered: (vehicleId: string, deliveredOn: string) => Promise<void>;
   updateVehicleDocument: (input: VehicleDocumentInput) => Promise<VehicleDocument>;
   archiveVehicle: (vehicleId: string) => Promise<void>;
   addExpense: (input: NewExpenseInput) => Promise<void>;
   addCashflow: (input: NewCashflowInput) => Promise<void>;
   completeCashflow: (cashflowId: string, processedOn: string) => Promise<void>;
   savePurchaseContract: (input: PurchaseContractInput) => Promise<void>;
+  saveSaleContract: (input: SaleContractInput) => Promise<void>;
   resetDemoData: () => void;
   refreshData: () => Promise<void>;
 };
@@ -229,6 +233,34 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         ...current,
         vehicles: current.vehicles.map((vehicle) => vehicle.id === vehicleId
           ? { ...vehicle, status: "入庫済み", arrivedAt: arrivedOn, updatedAt: new Date().toISOString() }
+          : vehicle),
+      }));
+    },
+    markVehicleDelivered: async (vehicleId, deliveredOn) => {
+      if (!deliveredOn) throw new Error("実際の納車日を入力してください。");
+      if (deliveredOn > new Date().toISOString().slice(0, 10)) {
+        throw new Error("実際の納車日に未来の日付は指定できません。");
+      }
+      if (configured && supabase) {
+        const { error } = await supabase.rpc("mark_vehicle_delivered", {
+          p_vehicle_id: vehicleId,
+          p_delivered_on: deliveredOn,
+        });
+        if (error) throw new Error(error.message);
+        await refreshData();
+        return;
+      }
+
+      const target = data.vehicles.find((vehicle) => vehicle.id === vehicleId);
+      if (!target) throw new Error("対象車両が見つかりません。");
+      if (target.status !== "売約済み") throw new Error("売約済みの車両だけ納車処理できます。");
+      if (target.arrivedAt && deliveredOn < target.arrivedAt) throw new Error("納車日は入庫日以降で入力してください。");
+      const saleReceipt = data.cashflows.find((cashflow) => cashflow.vehicleId === vehicleId && cashflow.kind === "販売代金");
+      if (!saleReceipt || saleReceipt.status !== "完了") throw new Error("販売代金の入金完了後に納車してください。");
+      setData((current) => ({
+        ...current,
+        vehicles: current.vehicles.map((vehicle) => vehicle.id === vehicleId
+          ? { ...vehicle, status: "納車済み", deliveredAt: deliveredOn, updatedAt: new Date().toISOString() }
           : vehicle),
       }));
     },
@@ -425,6 +457,68 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
             status: "未処理" as const,
             method: input.paymentMethod,
             scheduledOn: input.plannedArrivalDate,
+            processedOn: null,
+            createdAt: now,
+          }, ...current.cashflows],
+        };
+      });
+    },
+    saveSaleContract: async (input) => {
+      if (configured && supabase) {
+        const { error } = await supabase.rpc("save_sale_contract", saleContractToRpc(input));
+        if (error) throw new Error(error.message);
+        await refreshData();
+        return;
+      }
+
+      const existing = input.contractId
+        ? data.contracts.find((contract) => contract.id === input.contractId && contract.type === "販売")
+        : null;
+      if (existing?.status === "契約済み") throw new Error("契約済みの内容は在庫画面から確認してください。");
+      const vehicle = data.vehicles.find((item) => item.id === input.vehicleId);
+      if (!vehicle) throw new Error("対象車両が見つかりません。");
+      if (input.status === "契約済み" && !["入庫済み", "販売中"].includes(vehicle.status)) {
+        throw new Error("入庫済みまたは販売中の車両だけ販売契約できます。");
+      }
+      if (input.status === "契約済み" && input.amount <= 0) throw new Error("契約済みにする場合は販売金額を1円以上で入力してください。");
+      const duplicate = data.contracts.find((contract) => contract.type === "販売" && contract.vehicleId === input.vehicleId && contract.id !== input.contractId && contract.status !== "キャンセル済み");
+      if (duplicate) throw new Error("この車両にはすでに販売契約があります。");
+
+      const now = new Date().toISOString();
+      const contractId = existing?.id ?? crypto.randomUUID();
+      const contract = {
+        id: contractId,
+        type: "販売" as const,
+        vehicleId: input.vehicleId,
+        customerLabel: input.customerLabel.trim(),
+        amount: input.amount,
+        status: input.status,
+        contractedOn: input.contractedOn,
+        salePaymentMethod: input.paymentMethod,
+        updatedAt: now,
+      };
+      setData((current) => {
+        const next = {
+          ...current,
+          contracts: [contract, ...current.contracts.filter((item) => item.id !== contractId)],
+        };
+        if (input.status !== "契約済み") return next;
+        return {
+          ...next,
+          vehicles: current.vehicles.map((item) => item.id === input.vehicleId
+            ? { ...item, status: "売約済み", salePrice: input.amount, updatedAt: now }
+            : item),
+          cashflows: [{
+            id: crypto.randomUUID(),
+            vehicleId: input.vehicleId,
+            direction: "入金" as const,
+            kind: "販売代金" as const,
+            description: `販売代金 ${input.customerLabel.trim()}`,
+            amount: input.amount,
+            processedAmount: 0,
+            status: "未処理" as const,
+            method: input.paymentMethod,
+            scheduledOn: input.contractedOn,
             processedOn: null,
             createdAt: now,
           }, ...current.cashflows],

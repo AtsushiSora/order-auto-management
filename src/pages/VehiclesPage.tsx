@@ -10,6 +10,7 @@ import {
   ReceiptText,
   Save,
   Search,
+  Truck,
   Trash2,
 } from "lucide-react";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
@@ -69,7 +70,7 @@ export function VehiclesPage({
   openNewForm?: boolean;
   onNewFormOpened?: () => void;
 }) {
-  const { data, addVehicle, updateVehicle, markVehicleArrived, updateVehicleDocument, archiveVehicle, addExpense, completeCashflow } = useAppData();
+  const { data, addVehicle, updateVehicle, markVehicleArrived, markVehicleDelivered, updateVehicleDocument, archiveVehicle, addExpense, completeCashflow } = useAppData();
   const { profile } = useAuth();
   const canEdit = profile?.role === "owner" || profile?.role === "regular";
   const canManagePayments = profile?.role === "owner" || profile?.role === "regular" || profile?.role === "accounting";
@@ -181,13 +182,13 @@ export function VehiclesPage({
         </Drawer>
       ) : null}
 
-      {drawerMode === "detail" && selectedVehicle ? <VehicleDetailDrawer vehicle={selectedVehicle} documents={selectedDocuments} expenses={data.expenses} cashflows={data.cashflows.filter((cashflow) => cashflow.vehicleId === selectedVehicle.id)} canEdit={canEdit} canManagePayments={canManagePayments} isOwner={isOwner} onClose={() => setDrawerMode(null)} onUpdate={(patch) => updateVehicle(selectedVehicle.id, patch)} onMarkArrived={markVehicleArrived} onDocumentUpdate={updateVehicleDocument} onAddExpense={addExpense} onCompleteCashflow={completeCashflow} onArchive={async () => { await archiveVehicle(selectedVehicle.id); setDrawerMode(null); }} /> : null}
+      {drawerMode === "detail" && selectedVehicle ? <VehicleDetailDrawer vehicle={selectedVehicle} documents={selectedDocuments} expenses={data.expenses} cashflows={data.cashflows.filter((cashflow) => cashflow.vehicleId === selectedVehicle.id)} canEdit={canEdit} canManagePayments={canManagePayments} isOwner={isOwner} onClose={() => setDrawerMode(null)} onUpdate={(patch) => updateVehicle(selectedVehicle.id, patch)} onMarkArrived={markVehicleArrived} onMarkDelivered={markVehicleDelivered} onDocumentUpdate={updateVehicleDocument} onAddExpense={addExpense} onCompleteCashflow={completeCashflow} onArchive={async () => { await archiveVehicle(selectedVehicle.id); setDrawerMode(null); }} /> : null}
     </>
   );
 }
 
 function VehicleDetailDrawer({
-  vehicle, documents, expenses, cashflows, onClose, onUpdate, onMarkArrived, onDocumentUpdate, onAddExpense, onCompleteCashflow, onArchive, canEdit, canManagePayments, isOwner,
+  vehicle, documents, expenses, cashflows, onClose, onUpdate, onMarkArrived, onMarkDelivered, onDocumentUpdate, onAddExpense, onCompleteCashflow, onArchive, canEdit, canManagePayments, isOwner,
 }: {
   vehicle: Vehicle;
   documents: VehicleDocument[];
@@ -196,6 +197,7 @@ function VehicleDetailDrawer({
   onClose: () => void;
   onUpdate: (patch: Partial<Vehicle>) => Promise<void>;
   onMarkArrived: (vehicleId: string, arrivedOn: string) => Promise<void>;
+  onMarkDelivered: (vehicleId: string, deliveredOn: string) => Promise<void>;
   onDocumentUpdate: (input: VehicleDocumentInput) => Promise<VehicleDocument>;
   onAddExpense: (input: NewExpenseInput) => Promise<void>;
   onCompleteCashflow: (cashflowId: string, processedOn: string) => Promise<void>;
@@ -208,6 +210,8 @@ function VehicleDetailDrawer({
   const vehicleExpenses = expenses.filter((expense) => expense.vehicleId === vehicle.id);
   const purchasePayment = cashflows.find((cashflow) => cashflow.kind === "買取代金" && cashflow.direction === "支払い") ?? null;
   const purchasePaymentRemaining = purchasePayment ? outstandingAmount(purchasePayment.amount, purchasePayment.processedAmount) : 0;
+  const saleReceipt = cashflows.find((cashflow) => cashflow.kind === "販売代金" && cashflow.direction === "入金") ?? null;
+  const saleReceiptRemaining = saleReceipt ? outstandingAmount(saleReceipt.amount, saleReceipt.processedAmount) : 0;
   const [editMode, setEditMode] = useState(false);
   const [expenseMode, setExpenseMode] = useState(false);
   const [editForm, setEditForm] = useState<Vehicle>({ ...vehicle });
@@ -215,10 +219,12 @@ function VehicleDetailDrawer({
   const [updateError, setUpdateError] = useState("");
   const [busy, setBusy] = useState(false);
   const [arrivalDate, setArrivalDate] = useState(vehicle.arrivedAt ?? new Date().toISOString().slice(0, 10));
+  const [deliveryDate, setDeliveryDate] = useState(vehicle.deliveredAt ?? new Date().toISOString().slice(0, 10));
 
   useEffect(() => {
     setEditForm({ ...vehicle });
     setArrivalDate(vehicle.arrivedAt ?? new Date().toISOString().slice(0, 10));
+    setDeliveryDate(vehicle.deliveredAt ?? new Date().toISOString().slice(0, 10));
   }, [vehicle]);
 
   const commitUpdate = async (patch: Partial<Vehicle>) => {
@@ -236,8 +242,19 @@ function VehicleDetailDrawer({
       setUpdateError("先に「入庫を確定する」で入庫済みにしてください。");
       return;
     }
+    if (status === "売約済み" && vehicle.status !== "売約済み") {
+      setUpdateError("売約済みへの変更は、販売契約を契約済みにすると自動で行われます。");
+      return;
+    }
+    if (status === "納車済み") {
+      if (vehicle.status !== "売約済み") {
+        setUpdateError("先に販売契約を契約済みにして、車両を売約済みにしてください。");
+        return;
+      }
+      await confirmDelivery();
+      return;
+    }
     const patch: Partial<Vehicle> = { status };
-    if (status === "納車済み" && !vehicle.deliveredAt) patch.deliveredAt = new Date().toISOString().slice(0, 10);
     await commitUpdate(patch);
   };
 
@@ -258,6 +275,26 @@ function VehicleDetailDrawer({
     setUpdateError("");
     try { await onCompleteCashflow(purchasePayment.id, new Date().toISOString().slice(0, 10)); }
     catch (reason) { setUpdateError(reason instanceof Error ? reason.message : "支払いを完了できませんでした。"); }
+    finally { setBusy(false); }
+  };
+
+  const completeSaleReceipt = async () => {
+    if (!saleReceipt || saleReceipt.status === "完了") return;
+    if (!window.confirm(`${formatCurrency(saleReceiptRemaining)}を入金済みにしますか？`)) return;
+    setBusy(true);
+    setUpdateError("");
+    try { await onCompleteCashflow(saleReceipt.id, new Date().toISOString().slice(0, 10)); }
+    catch (reason) { setUpdateError(reason instanceof Error ? reason.message : "入金を完了できませんでした。"); }
+    finally { setBusy(false); }
+  };
+
+  const confirmDelivery = async () => {
+    if (!deliveryDate) return setUpdateError("実際の納車日を入力してください。");
+    if (!saleReceipt || saleReceipt.status !== "完了") return setUpdateError("販売代金の入金完了後に納車してください。");
+    setBusy(true);
+    setUpdateError("");
+    try { await onMarkDelivered(vehicle.id, deliveryDate); }
+    catch (reason) { setUpdateError(reason instanceof Error ? reason.message : "納車を確定できませんでした。"); }
     finally { setBusy(false); }
   };
 
@@ -318,11 +355,22 @@ function VehicleDetailDrawer({
               {canEdit ? <div className="workflow-action"><label className="field-label">実際の入庫日<input type="date" value={arrivalDate} max={new Date().toISOString().slice(0, 10)} disabled={busy} onChange={(event) => setArrivalDate(event.target.value)} /></label><button type="button" className="primary-button" disabled={busy} onClick={() => void confirmArrival()}><PackageCheck size={17} />{busy ? "処理中" : "入庫を確定する"}</button></div> : null}
             </div>
           </div>
+        ) : vehicle.status === "納車済み" ? (
+          <div className="workflow-card success"><span className="workflow-icon"><Truck size={24} /></span><div className="workflow-content"><strong>納車済み</strong><p>{formatDate(vehicle.deliveredAt)} に納車しました。</p></div></div>
+        ) : vehicle.status === "売約済み" ? (
+          <div className={`workflow-card ${saleReceipt?.status === "完了" ? "success" : "warning"}`}>
+            <span className="workflow-icon"><Truck size={24} /></span>
+            <div className="workflow-content">
+              <strong>{saleReceipt?.status === "完了" ? "入金確認済み・納車できます" : "販売代金の入金待ち"}</strong>
+              <p>{saleReceipt?.status === "完了" ? "実際の納車日を確認して、納車を確定してください。" : "販売代金の入金を完了するまでは納車済みにできません。"}</p>
+              {canEdit && saleReceipt?.status === "完了" ? <div className="workflow-action"><label className="field-label">実際の納車日<input type="date" value={deliveryDate} min={vehicle.arrivedAt ?? undefined} max={new Date().toISOString().slice(0, 10)} disabled={busy} onChange={(event) => setDeliveryDate(event.target.value)} /></label><button type="button" className="primary-button" disabled={busy} onClick={() => void confirmDelivery()}><Truck size={17} />{busy ? "処理中" : "納車を確定する"}</button></div> : null}
+            </div>
+          </div>
         ) : vehicle.arrivedAt ? (
           <div className="workflow-card success"><span className="workflow-icon"><CheckCircle2 size={24} /></span><div className="workflow-content"><strong>入庫済み</strong><p>{formatDate(vehicle.arrivedAt)} に入庫しました。</p></div></div>
         ) : null}
         <label className="field-label">車両の状態<select value={vehicle.status} disabled={!canEdit || busy} onChange={(event) => void changeStatus(event.target.value as VehicleStatus)}>{vehicleStatuses.map((status) => <option key={status}>{status}</option>)}</select></label>
-        {canEdit && vehicle.status !== "売約済み" && vehicle.status !== "納車済み" ? <button type="button" className="secondary-button full-button" disabled={busy} onClick={() => void changeStatus("売約済み")}>売約済みに変更</button> : null}
+        {canEdit && !["売約済み", "納車済み"].includes(vehicle.status) ? <p className="form-hint">売約済みへの変更は、販売契約を「契約済み」にすると自動で行われます。</p> : null}
         {!canEdit ? <p className="form-hint">経理権限では車両情報を閲覧できますが、変更はできません。</p> : null}
       </section>
 
@@ -375,6 +423,19 @@ function VehicleDetailDrawer({
           <p className="section-note">この車両に紐づく買取代金の支払い予定はありません。必要な場合は入出金画面から登録してください。</p>
         )}
       </section>
+
+      {saleReceipt || vehicle.status === "売約済み" || vehicle.status === "納車済み" ? (
+        <section className="detail-section">
+          <h3>販売代金</h3>
+          {saleReceipt ? (
+            <div className={`payment-workflow ${saleReceipt.status === "完了" ? "complete" : "pending"}`}>
+              <div className="payment-workflow-heading"><span><strong>{formatCurrency(saleReceipt.amount)}</strong><small>{saleReceipt.method}・契約日 {formatDate(saleReceipt.scheduledOn)}</small></span><StatusBadge>{saleReceipt.status}</StatusBadge></div>
+              <dl><div><dt>入金済み</dt><dd>{formatCurrency(saleReceipt.processedAmount)}</dd></div><div><dt>未入金残額</dt><dd>{formatCurrency(saleReceiptRemaining)}</dd></div></dl>
+              {saleReceipt.status === "完了" ? <p className="payment-complete-note"><CheckCircle2 size={17} />{formatDate(saleReceipt.processedOn)} に入金完了</p> : canManagePayments ? <button type="button" className="primary-button full-button" disabled={busy} onClick={() => void completeSaleReceipt()}><CircleDollarSign size={18} />入金済みにする</button> : <p className="section-note">入金状況を変更する権限がありません。</p>}
+            </div>
+          ) : <p className="section-note">販売契約に紐づく販売代金が見つかりません。納車前に入出金を確認してください。</p>}
+        </section>
+      ) : null}
 
       <section className="detail-section">
         <div className="section-heading"><h3>車両経費</h3>{canEdit ? <button type="button" className="text-button" onClick={() => setExpenseMode((current) => !current)}><ReceiptText size={15} />{expenseMode ? "入力を閉じる" : "経費を追加"}</button> : null}</div>

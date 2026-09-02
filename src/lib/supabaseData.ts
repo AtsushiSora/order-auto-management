@@ -15,6 +15,7 @@ import type {
   PaymentMethod,
   PaymentStatus,
   PurchaseContractInput,
+  SaleContractInput,
   Vehicle,
   VehicleDocument,
   VehicleDocumentInput,
@@ -274,6 +275,7 @@ export const mapContractFromDb = (source: unknown): Contract => {
     storageLocation: stringValue(row, "storage_location"),
     plannedArrivalDate: stringValue(row, "planned_arrival_date"),
     paymentMethod: paymentMethodFromDb[stringValue(row, "purchase_payment_method")],
+    salePaymentMethod: paymentMethodFromDb[stringValue(row, "sale_payment_method")],
     updatedAt: stringValue(row, "updated_at"),
   };
 };
@@ -290,6 +292,16 @@ export const purchaseContractToRpc = (input: PurchaseContractInput) => ({
   p_asking_price: input.askingPrice,
   p_storage_location: input.storageLocation.trim(),
   p_planned_arrival_date: input.plannedArrivalDate,
+  p_payment_method: paymentMethodToDb[input.paymentMethod],
+});
+
+export const saleContractToRpc = (input: SaleContractInput) => ({
+  p_contract_id: input.contractId,
+  p_vehicle_id: input.vehicleId,
+  p_customer_label: input.customerLabel.trim(),
+  p_amount: input.amount,
+  p_status: contractStatusToDb[input.status],
+  p_contracted_on: input.contractedOn,
   p_payment_method: paymentMethodToDb[input.paymentMethod],
 });
 

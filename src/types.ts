@@ -125,6 +125,7 @@ export type Contract = {
   storageLocation?: string;
   plannedArrivalDate?: string;
   paymentMethod?: PaymentMethod;
+  salePaymentMethod?: PaymentMethod;
   updatedAt: string;
 };
 
@@ -174,6 +175,16 @@ export type PurchaseContractInput = {
   askingPrice: number;
   storageLocation: string;
   plannedArrivalDate: string;
+  paymentMethod: PaymentMethod;
+};
+
+export type SaleContractInput = {
+  contractId: string | null;
+  vehicleId: string;
+  customerLabel: string;
+  amount: number;
+  status: Exclude<ContractStatus, "キャンセル済み">;
+  contractedOn: string;
   paymentMethod: PaymentMethod;
 };
 
