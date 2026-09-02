@@ -341,6 +341,8 @@ export const mapSystemBackupFromDb = (source: unknown): SystemBackup => {
     attachmentBackupStatus: ["none", "complete", "partial", "failed"].includes(attachmentStatus)
       ? attachmentStatus as SystemBackup["attachmentBackupStatus"]
       : "metadata_only",
+    driveFolderUrl: nullableString(row, "drive_folder_url"),
+    driveSavedAt: nullableString(row, "drive_saved_at"),
     createdAt: stringValue(row, "created_at"),
   };
 };

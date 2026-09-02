@@ -1,7 +1,8 @@
-import { useEffect, useState } from "react";
-import { Database, Download, HardDrive, KeyRound, MailPlus, Plus, RotateCcw, ShieldCheck, Trash2, UserCog } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { CloudUpload, Database, Download, ExternalLink, HardDrive, KeyRound, MailPlus, Plus, RotateCcw, ShieldCheck, Trash2, UserCog } from "lucide-react";
 import { PageHeader } from "../components/PageHeader";
 import { formatDateTime } from "../lib/format";
+import { requestGoogleDriveAccessToken } from "../lib/googleDrive";
 import { staffRoleLabels, validateStaffInvitationInput } from "../lib/staffProfiles";
 import { useAuth } from "../state/AuthContext";
 import { useAppData } from "../state/AppDataContext";
@@ -190,12 +191,14 @@ function StaffProfileEditor({ staff, currentUserId }: { staff: StaffProfile; cur
 }
 
 function BackupPanel({ isDemo }: { isDemo: boolean }) {
-  const { data, createSystemBackup, downloadSystemBackup, restoreSystemBackup, deleteSystemBackup } = useAppData();
+  const { data, createSystemBackup, downloadSystemBackup, saveSystemBackupToDrive, restoreSystemBackup, deleteSystemBackup } = useAppData();
   const [busy, setBusy] = useState("");
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [restoreId, setRestoreId] = useState<string | null>(null);
   const [restoreMode, setRestoreMode] = useState<BackupRestoreMode>("追加");
+  const googleAccessToken = useRef("");
+  const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID?.trim() ?? "";
   const latest = data.systemBackups[0];
   const due = !latest || Date.now() - new Date(latest.createdAt).getTime() >= 30 * 24 * 60 * 60 * 1000;
 
@@ -226,6 +229,18 @@ function BackupPanel({ isDemo }: { isDemo: boolean }) {
     anchor.click();
     URL.revokeObjectURL(url);
     setMessage("バックアップファイルをダウンロードしました。Google Driveへ保存できます。");
+  });
+
+  const saveToDrive = (backupId: string) => run(`drive-${backupId}`, async () => {
+    try {
+      const token = googleAccessToken.current || await requestGoogleDriveAccessToken(googleClientId);
+      googleAccessToken.current = token;
+      await saveSystemBackupToDrive(backupId, token);
+      setMessage("Google Driveへ直接保存しました。「Drive保存済み」から保存先を開けます。");
+    } catch (reason) {
+      googleAccessToken.current = "";
+      throw reason;
+    }
   });
 
   const restore = () => {
@@ -270,9 +285,11 @@ function BackupPanel({ isDemo }: { isDemo: boolean }) {
           <div><strong>{formatDateTime(backup.createdAt)}</strong><span>{backup.rowCount}件・手動バックアップ</span><span className={`backup-file-status ${backup.attachmentBackupStatus}`}>{attachmentBackupLabel(backup)}</span></div>
           <div className="backup-row-actions">
             <button type="button" className="table-action-button" disabled={Boolean(busy)} onClick={() => void download(backup.id, backup.createdAt)}><Download size={16} />JSON保存</button>
+            <button type="button" className="table-action-button drive-action-button" disabled={Boolean(busy) || isDemo || !googleClientId || !["none", "complete"].includes(backup.attachmentBackupStatus)} onClick={() => void saveToDrive(backup.id)}><CloudUpload size={16} />{busy === `drive-${backup.id}` ? "保存中…" : backup.driveSavedAt ? "Drive再保存" : "Drive保存"}</button>
             <button type="button" className="table-action-button" disabled={Boolean(busy)} onClick={() => { setRestoreId(backup.id); setRestoreMode("追加"); setMessage(null); setError(null); }}><RotateCcw size={16} />復元</button>
             <button type="button" className="table-action-button danger-table-button" disabled={Boolean(busy)} onClick={() => remove(backup.id)}><Trash2 size={16} />削除</button>
           </div>
+          {backup.driveSavedAt && backup.driveFolderUrl ? <a className="backup-drive-link" href={backup.driveFolderUrl} target="_blank" rel="noreferrer"><ExternalLink size={14} />Drive保存済み：{formatDateTime(backup.driveSavedAt)}</a> : null}
         </article>)}
         {!data.systemBackups.length ? <div className="empty-state compact"><HardDrive size={28} /><h2>バックアップはありません</h2><p>「今すぐ作成」から最初のバックアップを作成してください。</p></div> : null}
       </div>
@@ -284,8 +301,8 @@ function BackupPanel({ isDemo }: { isDemo: boolean }) {
       </div> : null}
 
       <div className="backup-drive-box">
-        <div><strong>Google Driveへの直接保存</strong><p>システム内の完全バックアップを先に作成できます。Google Driveへの自動コピーは、Google側の認証を接続後に有効になります。</p></div>
-        <span className="setting-status pending">未接続</span>
+        <div><strong>Google Driveへの直接保存</strong><p>{googleClientId ? "各バックアップの「Drive保存」を押すとGoogleの確認画面が開き、専用フォルダへ業務データと添付ファイルを保存します。Googleの許可情報はシステムに保存しません。" : "保存処理は実装済みです。Google Cloudのウェブ用OAuthクライアントIDを設定すると利用できます。"}</p></div>
+        <span className={`setting-status ${googleClientId ? "planned" : "pending"}`}>{googleClientId ? "利用可能" : "Google設定待ち"}</span>
       </div>
     </section>
   );

@@ -339,6 +339,8 @@ export type SystemBackup = {
   attachmentFileCount: number;
   attachmentTotalBytes: number;
   attachmentBackupStatus: AttachmentBackupStatus;
+  driveFolderUrl: string | null;
+  driveSavedAt: string | null;
   createdAt: string;
 };
 

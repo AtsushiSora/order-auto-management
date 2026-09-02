@@ -2054,6 +2054,7 @@ button.mini-summary-card:hover {
 
 .backup-row {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 14px;
@@ -2083,6 +2084,22 @@ button.mini-summary-card:hover {
   display: inline-flex;
   align-items: center;
   gap: 5px;
+}
+
+.backup-drive-link {
+  display: inline-flex;
+  flex-basis: 100%;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 5px;
+  color: #087a61;
+  font-size: 0.78rem;
+  font-weight: 750;
+  text-decoration: none;
+}
+
+.backup-drive-link:hover {
+  text-decoration: underline;
 }
 
 .backup-restore-box {
@@ -2444,7 +2461,7 @@ button.mini-summary-card:hover {
 
   .backup-row-actions {
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .backup-restore-box {

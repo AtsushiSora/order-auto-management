@@ -9,7 +9,7 @@ const allowedOrigins = new Set([
 const sourceBucket = "order-auto-private";
 const backupBucket = "order-auto-backups";
 
-type BackupAction = "create" | "restore" | "delete";
+type BackupAction = "create" | "restore" | "delete" | "save_to_drive";
 type AttachmentRow = {
   id: string;
   storage_path: string;
@@ -32,6 +32,50 @@ const response = (origin: string, body: Record<string, unknown>, status = 200) =
 );
 
 const backupObjectPath = (backupId: string, attachmentId: string) => `${backupId}/${attachmentId}`;
+
+const googleRequest = async (url: string, accessToken: string, init: RequestInit) => {
+  const result = await fetch(url, {
+    ...init,
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      ...(init.headers ?? {}),
+    },
+  });
+  if (!result.ok) {
+    let detail = "";
+    try {
+      const body = await result.json() as { error?: { message?: unknown } };
+      detail = typeof body.error?.message === "string" ? body.error.message : "";
+    } catch {
+      // GoogleからJSON以外の応答が来た場合はHTTP状態を使用する。
+    }
+    if (result.status === 401) throw new Error("Google Driveの接続期限が切れました。もう一度Googleへ接続してください。");
+    throw new Error(detail || `Google Driveへ保存できませんでした（${result.status}）。`);
+  }
+  return result;
+};
+
+const uploadToGoogleDrive = async (
+  accessToken: string,
+  parentId: string,
+  name: string,
+  mimeType: string,
+  file: Blob,
+) => {
+  const boundary = `order_auto_${crypto.randomUUID().replaceAll("-", "")}`;
+  const metadata = JSON.stringify({ name, mimeType, parents: [parentId] });
+  const body = new Blob([
+    `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${metadata}\r\n`,
+    `--${boundary}\r\nContent-Type: ${mimeType}\r\n\r\n`,
+    file,
+    `\r\n--${boundary}--`,
+  ]);
+  return googleRequest(
+    "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name",
+    accessToken,
+    { method: "POST", headers: { "Content-Type": `multipart/related; boundary=${boundary}` }, body },
+  );
+};
 
 const removeBackupFiles = async (
   admin: ReturnType<typeof createClient>,
@@ -100,14 +144,14 @@ Deno.serve(async (request: Request) => {
     return response(responseOrigin, { error: "バックアップを操作できるのは事業主だけです。" }, 403);
   }
 
-  let input: { action?: unknown; backupId?: unknown; mode?: unknown };
+  let input: { action?: unknown; backupId?: unknown; mode?: unknown; googleAccessToken?: unknown };
   try {
     input = await request.json();
   } catch {
     return response(responseOrigin, { error: "入力内容を確認してください。" }, 400);
   }
   const action = typeof input.action === "string" ? input.action as BackupAction : "";
-  if (!new Set<BackupAction>(["create", "restore", "delete"]).has(action as BackupAction)) {
+  if (!new Set<BackupAction>(["create", "restore", "delete", "save_to_drive"]).has(action as BackupAction)) {
     return response(responseOrigin, { error: "バックアップ操作を確認してください。" }, 400);
   }
 
@@ -224,6 +268,86 @@ Deno.serve(async (request: Request) => {
         restoredFileCount: restoredCount,
         missingFileCount: missingCount,
       });
+    }
+
+    if (action === "save_to_drive") {
+      const googleAccessToken = typeof input.googleAccessToken === "string" ? input.googleAccessToken.trim() : "";
+      if (!googleAccessToken || googleAccessToken.length > 4096) {
+        return response(responseOrigin, { error: "Google Driveへ接続し直してください。" }, 400);
+      }
+      const { data: backup, error: backupError } = await admin
+        .from("system_backups")
+        .select("id, row_count, payload, attachment_file_count, attachment_total_bytes, attachment_backup_status, created_at")
+        .eq("id", backupId)
+        .single();
+      if (backupError || !backup) throw backupError ?? new Error("バックアップが見つかりません。");
+      if (!["none", "complete"].includes(backup.attachment_backup_status)) {
+        return response(responseOrigin, { error: "添付ファイルまで保全済みの新しいバックアップを選択してください。" }, 409);
+      }
+
+      const createdAt = new Date(backup.created_at);
+      const timestamp = createdAt.toISOString().replaceAll(":", "-").replace("T", "_").slice(0, 19);
+      const folderName = `ORDER AUTO バックアップ_${timestamp}`;
+      const folderResult = await googleRequest(
+        "https://www.googleapis.com/drive/v3/files?fields=id,webViewLink",
+        googleAccessToken,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json; charset=UTF-8" },
+          body: JSON.stringify({
+            name: folderName,
+            mimeType: "application/vnd.google-apps.folder",
+            appProperties: { orderAutoBackupId: backupId },
+          }),
+        },
+      );
+      const folder = await folderResult.json() as { id?: unknown; webViewLink?: unknown };
+      const folderId = typeof folder.id === "string" ? folder.id : "";
+      const folderUrl = typeof folder.webViewLink === "string" ? folder.webViewLink : `https://drive.google.com/drive/folders/${folderId}`;
+      if (!folderId) throw new Error("Google Driveの保存先フォルダを作成できませんでした。");
+
+      const manifest = new Blob([JSON.stringify({
+        format: "order-auto-system-backup",
+        version: 2,
+        id: backup.id,
+        createdAt: backup.created_at,
+        rowCount: backup.row_count,
+        attachmentFileCount: backup.attachment_file_count,
+        attachmentTotalBytes: backup.attachment_total_bytes,
+        payload: backup.payload,
+      }, null, 2)], { type: "application/json" });
+      await uploadToGoogleDrive(googleAccessToken, folderId, `order-auto-backup_${timestamp}.json`, "application/json", manifest);
+
+      const attachments = Array.isArray(backup.payload?.attachments)
+        ? backup.payload.attachments as (AttachmentRow & { original_file_name?: string })[]
+        : [];
+      let uploadedFileCount = 0;
+      for (const attachment of attachments) {
+        const { data: file, error: fileError } = await admin.storage
+          .from(backupBucket)
+          .download(backupObjectPath(backupId, attachment.id));
+        if (fileError || !file) throw new Error("保全済みの添付ファイルを読み込めませんでした。");
+        const originalName = typeof attachment.original_file_name === "string" && attachment.original_file_name.trim()
+          ? attachment.original_file_name.trim()
+          : `attachment-${attachment.id}`;
+        const safeName = originalName.replace(/[\\/:*?"<>|]/g, "_").slice(0, 180);
+        await uploadToGoogleDrive(
+          googleAccessToken,
+          folderId,
+          `${attachment.id.slice(0, 8)}_${safeName}`,
+          attachment.mime_type,
+          file,
+        );
+        uploadedFileCount += 1;
+      }
+
+      const savedAt = new Date().toISOString();
+      const { error: updateError } = await admin
+        .from("system_backups")
+        .update({ drive_folder_id: folderId, drive_folder_url: folderUrl, drive_saved_at: savedAt })
+        .eq("id", backupId);
+      if (updateError) throw updateError;
+      return response(responseOrigin, { success: true, folderUrl, uploadedFileCount, savedAt });
     }
 
     await removeBackupFiles(admin, backupId);

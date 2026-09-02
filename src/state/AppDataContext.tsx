@@ -171,6 +171,7 @@ type AppDataContextValue = {
   saveMonthlyBalanceCheck: (input: SaveMonthlyBalanceCheckInput) => Promise<MonthlyBalanceCheck>;
   createSystemBackup: () => Promise<SystemBackup>;
   downloadSystemBackup: (backupId: string) => Promise<Blob>;
+  saveSystemBackupToDrive: (backupId: string, googleAccessToken: string) => Promise<{ folderUrl: string }>;
   restoreSystemBackup: (backupId: string, mode: BackupRestoreMode) => Promise<void>;
   deleteSystemBackup: (backupId: string) => Promise<void>;
   savePurchaseContract: (input: PurchaseContractInput) => Promise<string>;
@@ -337,7 +338,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         client.from("cashflow_offsets").select("*").order("created_at", { ascending: false }),
         client.from("cashflow_events").select("*").order("processed_on", { ascending: false }),
         client.from("monthly_balance_checks").select("*").order("target_month", { ascending: false }),
-        client.from("system_backups").select("id, backup_kind, row_count, attachment_file_count, attachment_total_bytes, attachment_backup_status, created_at").order("created_at", { ascending: false }),
+        client.from("system_backups").select("id, backup_kind, row_count, attachment_file_count, attachment_total_bytes, attachment_backup_status, drive_folder_url, drive_saved_at, created_at").order("created_at", { ascending: false }),
         client.from("contracts").select("*").is("deleted_at", null).order("updated_at", { ascending: false }),
         client.from("approvals").select("*").order("created_at", { ascending: false }),
         client.from("website_inquiries").select("*").order("received_at", { ascending: false }),
@@ -1297,6 +1298,8 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         attachmentFileCount: 0,
         attachmentTotalBytes: 0,
         attachmentBackupStatus: data.attachments.length ? "metadata_only" : "none",
+        driveFolderUrl: null,
+        driveSavedAt: null,
         createdAt: now,
       };
       demoBackupPayloads.set(backup.id, structuredClone({ ...data, systemBackups: [] }));
@@ -1329,6 +1332,18 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       const backup = data.systemBackups.find((item) => item.id === backupId);
       if (!payload || !backup) throw new Error("バックアップが見つかりません。");
       return new Blob([JSON.stringify({ format: "order-auto-system-backup", version: 1, ...backup, payload }, null, 2)], { type: "application/json" });
+    },
+    saveSystemBackupToDrive: async (backupId, googleAccessToken) => {
+      if (profile?.role !== "owner" || !profile.isActive) throw new Error("Google Driveへ保存できるのは事業主だけです。");
+      if (!configured || !supabase) throw new Error("テストモードではGoogle Driveへ保存できません。");
+      const { data: result, error } = await supabase.functions.invoke("manage-system-backup", {
+        body: { action: "save_to_drive", backupId, googleAccessToken },
+      });
+      if (error) throw new Error(await functionErrorMessage(error, "Google Driveへ保存できませんでした。"));
+      const folderUrl = typeof result?.folderUrl === "string" ? result.folderUrl : "";
+      if (!folderUrl) throw new Error("Google Driveの保存先を確認できませんでした。");
+      await refreshData();
+      return { folderUrl };
     },
     restoreSystemBackup: async (backupId, mode) => {
       if (profile?.role !== "owner" || !profile.isActive) throw new Error("復元できるのは事業主だけです。");
