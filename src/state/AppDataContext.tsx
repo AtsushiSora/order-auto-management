@@ -128,6 +128,7 @@ type AppDataContextValue = {
   saveSpotPurchaseContract: (assignmentId: string, input: PurchaseContractInput) => Promise<void>;
   saveSpotSaleContract: (assignmentId: string, input: SaleContractInput) => Promise<void>;
   issueContractHandoff: (assignmentId: string) => Promise<{ completionToken: string; expiresAt: string }>;
+  retryContractHandoff: (handoffId: string) => Promise<void>;
   addCashflow: (input: NewCashflowInput) => Promise<void>;
   completeCashflow: (cashflowId: string, processedOn: string) => Promise<void>;
   savePurchaseContract: (input: PurchaseContractInput) => Promise<void>;
@@ -891,6 +892,14 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       const expiresAt = String(row?.expires_at ?? "");
       if (!/^[0-9a-f]{64}$/.test(completionToken) || !expiresAt) throw new Error("契約完了連携を発行できませんでした。");
       return { completionToken, expiresAt };
+    },
+    retryContractHandoff: async (handoffId) => {
+      if (!configured || !supabase || profile?.role !== "owner") throw new Error("事業主だけが契約連携を再試行できます。");
+      const { data: result, error } = await supabase.rpc("retry_contract_handoff", { p_handoff_id: handoffId });
+      if (error) throw new Error(error.message);
+      await refreshData();
+      const response = result as { success?: boolean; error_code?: string } | null;
+      if (!response?.success) throw new Error("再試行しても反映できませんでした。表示された確認内容を直してから、もう一度お試しください。");
     },
     addCashflow: async (input) => {
       if (configured && supabase) {

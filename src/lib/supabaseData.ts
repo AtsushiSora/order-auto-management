@@ -320,6 +320,10 @@ export const mapContractHandoffFromDb = (source: unknown): ContractHandoff => {
     issuedAt: stringValue(row, "issued_at"),
     expiresAt: stringValue(row, "expires_at"),
     completedAt: nullableString(row, "completed_at"),
+    failureCount: numberValue(row, "failure_count"),
+    lastErrorCode: nullableString(row, "last_error_code") as ContractHandoff["lastErrorCode"],
+    lastErrorAt: nullableString(row, "last_error_at"),
+    lastAttemptedAt: nullableString(row, "last_attempted_at"),
   };
 };
 

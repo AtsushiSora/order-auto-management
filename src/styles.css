@@ -1575,6 +1575,19 @@ button.alert-card:hover {
   vertical-align: middle;
 }
 
+.handoff-recovery-cell {
+  max-width: 330px;
+  white-space: normal;
+}
+
+.handoff-recovery-cell > small {
+  display: block;
+  margin-bottom: 8px;
+  color: var(--red-700);
+  font-size: 11px;
+  line-height: 1.55;
+}
+
 .spin {
   animation: spin 0.8s linear infinite;
 }

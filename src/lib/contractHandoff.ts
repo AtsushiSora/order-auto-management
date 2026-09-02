@@ -102,12 +102,21 @@ export function mapSalePaymentMethod(method: PaymentMethod) {
   return "その他";
 }
 
-export type EffectiveContractHandoffStatus = ContractHandoff["status"] | "期限切れ";
+export type EffectiveContractHandoffStatus = ContractHandoff["status"] | "要確認" | "期限切れ";
 
 export function getEffectiveContractHandoffStatus(
-  handoff: Pick<ContractHandoff, "status" | "expiresAt">,
+  handoff: Pick<ContractHandoff, "status" | "expiresAt" | "lastErrorCode">,
   now = Date.now(),
 ): EffectiveContractHandoffStatus {
   if (handoff.status === "連携待ち" && Date.parse(handoff.expiresAt) <= now) return "期限切れ";
+  if (handoff.status === "連携待ち" && handoff.lastErrorCode) return "要確認";
   return handoff.status;
 }
+
+export const contractHandoffErrorMessage: Record<NonNullable<ContractHandoff["lastErrorCode"]>, string> = {
+  expired: "連携期限が切れています。担当案件から契約を開き直してください。",
+  assignment_unavailable: "担当案件の状態が変更されています。案件を確認してください。",
+  contract_unavailable: "管理側の契約が署名待ちではありません。契約状態を確認してください。",
+  vehicle_not_available: "販売車両が入庫済み・販売中ではありません。車両状態を確認してください。",
+  unexpected_error: "一時的な問題で自動反映できませんでした。再試行してください。",
+};

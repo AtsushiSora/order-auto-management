@@ -76,6 +76,12 @@ export type SpotAssignment = {
 };
 
 export type ContractHandoffStatus = "連携待ち" | "完了" | "無効";
+export type ContractHandoffErrorCode =
+  | "expired"
+  | "assignment_unavailable"
+  | "contract_unavailable"
+  | "vehicle_not_available"
+  | "unexpected_error";
 
 export type ContractHandoff = {
   id: string;
@@ -88,6 +94,10 @@ export type ContractHandoff = {
   issuedAt: string;
   expiresAt: string;
   completedAt: string | null;
+  failureCount: number;
+  lastErrorCode: ContractHandoffErrorCode | null;
+  lastErrorAt: string | null;
+  lastAttemptedAt: string | null;
 };
 
 export type SaveSpotAssignmentInput = Omit<SpotAssignment, "id" | "contractId" | "status" | "createdAt" | "updatedAt"> & {

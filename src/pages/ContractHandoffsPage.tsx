@@ -2,19 +2,26 @@ import { History, Inbox, RefreshCw, Search } from "lucide-react";
 import { useMemo, useState } from "react";
 import { PageHeader } from "../components/PageHeader";
 import { StatusBadge } from "../components/StatusBadge";
-import { getEffectiveContractHandoffStatus, type EffectiveContractHandoffStatus } from "../lib/contractHandoff";
+import {
+  contractHandoffErrorMessage,
+  getEffectiveContractHandoffStatus,
+  type EffectiveContractHandoffStatus,
+} from "../lib/contractHandoff";
 import { formatDateTime } from "../lib/format";
 import { useAppData } from "../state/AppDataContext";
 
 type FilterStatus = "すべて" | EffectiveContractHandoffStatus;
 
-const filterStatuses: FilterStatus[] = ["すべて", "連携待ち", "完了", "期限切れ", "無効"];
+const filterStatuses: FilterStatus[] = ["すべて", "連携待ち", "完了", "要確認", "期限切れ", "無効"];
 
 export function ContractHandoffsPage() {
-  const { data, refreshData } = useAppData();
+  const { data, refreshData, retryContractHandoff } = useAppData();
   const [filter, setFilter] = useState<FilterStatus>("すべて");
   const [search, setSearch] = useState("");
   const [refreshing, setRefreshing] = useState(false);
+  const [retryingId, setRetryingId] = useState<string | null>(null);
+  const [pageError, setPageError] = useState("");
+  const [pageMessage, setPageMessage] = useState("");
   const now = Date.now();
 
   const rows = useMemo(() => data.contractHandoffs.map((handoff) => {
@@ -36,7 +43,7 @@ export function ContractHandoffsPage() {
     waiting: rows.filter((row) => row.status === "連携待ち").length,
     completed: rows.filter((row) => row.status === "完了").length,
     expired: rows.filter((row) => row.status === "期限切れ").length,
-    revoked: rows.filter((row) => row.status === "無効").length,
+    attention: rows.filter((row) => row.status === "要確認").length,
   }), [rows]);
 
   const visibleRows = useMemo(() => {
@@ -64,6 +71,20 @@ export function ContractHandoffsPage() {
     }
   };
 
+  const retry = async (handoffId: string) => {
+    setRetryingId(handoffId);
+    setPageError("");
+    setPageMessage("");
+    try {
+      await retryContractHandoff(handoffId);
+      setPageMessage("契約を管理システムへ反映しました。在庫・入出金も更新されています。");
+    } catch (reason) {
+      setPageError(reason instanceof Error ? reason.message : "契約連携を再試行できませんでした。");
+    } finally {
+      setRetryingId(null);
+    }
+  };
+
   return (
     <>
       <PageHeader
@@ -75,14 +96,17 @@ export function ContractHandoffsPage() {
       <div className="mini-summary-grid handoff-summary-grid">
         <button type="button" className="mini-summary-card amber" onClick={() => setFilter("連携待ち")}><small>連携待ち</small><strong>{counts.waiting}件</strong></button>
         <button type="button" className="mini-summary-card green" onClick={() => setFilter("完了")}><small>管理へ反映済み</small><strong>{counts.completed}件</strong></button>
-        <button type="button" className="mini-summary-card red" onClick={() => setFilter("期限切れ")}><small>期限切れ</small><strong>{counts.expired}件</strong></button>
-        <button type="button" className="mini-summary-card" onClick={() => setFilter("無効")}><small>再発行等で無効</small><strong>{counts.revoked}件</strong></button>
+        <button type="button" className="mini-summary-card red" onClick={() => setFilter("要確認")}><small>確認・再試行が必要</small><strong>{counts.attention}件</strong></button>
+        <button type="button" className="mini-summary-card" onClick={() => setFilter("期限切れ")}><small>期限切れ</small><strong>{counts.expired}件</strong></button>
       </div>
 
       <section className="integration-note panel">
         <History size={24} />
         <div><strong>完了した契約は在庫・入出金へ一度だけ反映されます</strong><p>連携待ちは契約システム側で署名・保存が完了していない状態です。期限切れの場合は、担当案件から契約システムをもう一度開くと新しい連携が発行されます。</p></div>
       </section>
+
+      {pageError ? <p className="form-error page-message">{pageError}</p> : null}
+      {pageMessage ? <p className="form-success page-message">{pageMessage}</p> : null}
 
       <section className="filter-bar panel">
         <label className="search-field"><Search size={18} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="案件・担当者・車両・外部契約IDで検索" /></label>
@@ -96,7 +120,7 @@ export function ContractHandoffsPage() {
         <div className="panel-heading"><div><h2>連携の発行・完了履歴</h2><p>再発行前の履歴も削除せず残ります。</p></div></div>
         <div className="table-scroll">
           <table className="data-table handoff-table">
-            <thead><tr><th>発行日時</th><th>種別・案件</th><th>担当者</th><th>状態</th><th>外部契約ID</th><th>完了・期限</th></tr></thead>
+            <thead><tr><th>発行日時</th><th>種別・案件</th><th>担当者</th><th>状態</th><th>外部契約ID</th><th>完了・期限</th><th>確認・操作</th></tr></thead>
             <tbody>
               {visibleRows.map(({ handoff, status, assignment, contract, staff, vehicle }) => (
                 <tr key={handoff.id}>
@@ -106,9 +130,12 @@ export function ContractHandoffsPage() {
                   <td><StatusBadge>{status}</StatusBadge></td>
                   <td><span className="handoff-external-id">{handoff.externalContractId ?? "—"}</span></td>
                   <td><span className="vehicle-reference"><strong>{handoff.completedAt ? formatDateTime(handoff.completedAt) : "未完了"}</strong><small>{status === "完了" ? "管理システムへ反映済み" : `期限 ${formatDateTime(handoff.expiresAt)}`}</small></span></td>
+                  <td className="handoff-recovery-cell">
+                    {status === "要確認" && handoff.lastErrorCode ? <><small>{contractHandoffErrorMessage[handoff.lastErrorCode]}</small><button type="button" className="table-action-button" disabled={retryingId !== null || !handoff.externalContractId} onClick={() => void retry(handoff.id)}><RefreshCw size={14} className={retryingId === handoff.id ? "spin" : ""} />{retryingId === handoff.id ? "再試行中" : "安全に再試行"}</button></> : status === "期限切れ" ? <small>担当案件から契約システムを開き直してください。</small> : <span className="muted-cell">—</span>}
+                  </td>
                 </tr>
               ))}
-              {!visibleRows.length ? <tr><td colSpan={6} className="table-empty"><Inbox size={24} /><p>{data.contractHandoffs.length ? "条件に一致する履歴はありません。" : "契約連携の履歴はまだありません。"}</p></td></tr> : null}
+              {!visibleRows.length ? <tr><td colSpan={7} className="table-empty"><Inbox size={24} /><p>{data.contractHandoffs.length ? "条件に一致する履歴はありません。" : "契約連携の履歴はまだありません。"}</p></td></tr> : null}
             </tbody>
           </table>
         </div>

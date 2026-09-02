@@ -55,9 +55,10 @@ describe("contract handoff", () => {
 
   it("shows an issued handoff as expired only after its deadline", () => {
     const expiresAt = "2026-09-02T01:00:00.000Z";
-    expect(getEffectiveContractHandoffStatus({ status: "連携待ち", expiresAt }, Date.parse("2026-09-02T00:59:59.000Z"))).toBe("連携待ち");
-    expect(getEffectiveContractHandoffStatus({ status: "連携待ち", expiresAt }, Date.parse(expiresAt))).toBe("期限切れ");
-    expect(getEffectiveContractHandoffStatus({ status: "完了", expiresAt }, Date.parse("2027-01-01T00:00:00.000Z"))).toBe("完了");
-    expect(getEffectiveContractHandoffStatus({ status: "無効", expiresAt }, Date.parse("2027-01-01T00:00:00.000Z"))).toBe("無効");
+    expect(getEffectiveContractHandoffStatus({ status: "連携待ち", expiresAt, lastErrorCode: null }, Date.parse("2026-09-02T00:59:59.000Z"))).toBe("連携待ち");
+    expect(getEffectiveContractHandoffStatus({ status: "連携待ち", expiresAt, lastErrorCode: "unexpected_error" }, Date.parse("2026-09-02T00:59:59.000Z"))).toBe("要確認");
+    expect(getEffectiveContractHandoffStatus({ status: "連携待ち", expiresAt, lastErrorCode: "unexpected_error" }, Date.parse(expiresAt))).toBe("期限切れ");
+    expect(getEffectiveContractHandoffStatus({ status: "完了", expiresAt, lastErrorCode: null }, Date.parse("2027-01-01T00:00:00.000Z"))).toBe("完了");
+    expect(getEffectiveContractHandoffStatus({ status: "無効", expiresAt, lastErrorCode: null }, Date.parse("2027-01-01T00:00:00.000Z"))).toBe("無効");
   });
 });

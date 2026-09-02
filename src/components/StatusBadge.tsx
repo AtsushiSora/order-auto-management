@@ -24,6 +24,7 @@ type BadgeValue =
   | "有効"
   | "無効"
   | "連携待ち"
+  | "要確認"
   | "期限切れ";
 
 const toneByValue: Record<BadgeValue, string> = {
@@ -56,6 +57,7 @@ const toneByValue: Record<BadgeValue, string> = {
   有効: "green",
   無効: "dark",
   連携待ち: "amber",
+  要確認: "red",
   期限切れ: "red",
 };
 
