@@ -5,6 +5,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 import { DataLoadError, SystemLoading } from "../components/SystemState";
@@ -220,46 +221,81 @@ function demoCashflowKind(input: NewCashflowInput) {
 
 const errorMessage = (error: unknown) => {
   if (error instanceof Error) return error.message;
+  if (error && typeof error === "object") {
+    const detail = error as { code?: unknown; message?: unknown };
+    const message = typeof detail.message === "string" ? detail.message.trim() : "";
+    const code = typeof detail.code === "string" ? detail.code.trim() : "";
+    if (/failed to fetch|network|timeout|load failed/i.test(message)) {
+      return "通信が不安定です。電波状況を確認して、もう一度試してください。";
+    }
+    if (message) return code ? `${message}（${code}）` : message;
+  }
   return "予期しないエラーが発生しました。";
 };
 
 export function AppDataProvider({ children }: { children: ReactNode }) {
-  const { configured, session, profile } = useAuth();
+  const { configured, session, profile, signOut, testSignIn } = useAuth();
+  const testLoginEnabled = import.meta.env.DEV || import.meta.env.VITE_ENABLE_TEST_LOGIN === "true";
   const [data, setData] = useState<AppData>(() => configured ? emptyData : loadInitialDemoData());
   const [loading, setLoading] = useState(configured);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const configuredRef = useRef(configured);
+  const refreshRequestId = useRef(0);
+  configuredRef.current = configured;
 
   useEffect(() => {
     if (!configured) window.localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
   }, [configured, data]);
 
+  useEffect(() => {
+    if (configured) return;
+    refreshRequestId.current += 1;
+    setData(loadInitialDemoData());
+    setLoading(false);
+    setLoadError(null);
+  }, [configured]);
+
   const refreshData = useCallback(async () => {
     if (!configured || !supabase || !session) return;
+    const client = supabase;
+    const requestId = ++refreshRequestId.current;
+    const requestIsCurrent = () => configuredRef.current && refreshRequestId.current === requestId;
     setLoading(true);
     setLoadError(null);
     try {
-      const [staffResult, spotAssignmentsResult, contractHandoffsResult, vehiclesResult, documentsResult, expensesResult, attachmentsResult, issuedDocumentsResult, staffSettlementsResult, cashflowsResult, contractsResult, approvalsResult, inquiriesResult, ledgerResult, journalReviewsResult, journalExportsResult] = await Promise.all([
-        supabase.from("staff_profiles").select("*").eq("is_active", true).order("display_name", { ascending: true }),
-        supabase.from("spot_assignments").select("*").order("created_at", { ascending: false }),
-        supabase.from("contract_handoffs").select("*").order("issued_at", { ascending: false }),
-        supabase.from("vehicles").select("*").is("deleted_at", null).order("created_at", { ascending: false }),
-        supabase.from("vehicle_documents").select("*").order("created_at", { ascending: true }),
-        supabase.from("expenses").select("*").is("deleted_at", null).order("incurred_on", { ascending: false }),
-        supabase.from("attachments").select("*").order("created_at", { ascending: false }),
-        supabase.from("issued_documents").select("*").order("issued_on", { ascending: false }).order("created_at", { ascending: false }),
-        supabase.from("staff_settlements").select("*").order("created_at", { ascending: false }),
-        supabase.from("cashflows").select("*").is("deleted_at", null).order("scheduled_on", { ascending: false }),
-        supabase.from("contracts").select("*").is("deleted_at", null).order("updated_at", { ascending: false }),
-        supabase.from("approvals").select("*").order("created_at", { ascending: false }),
-        supabase.from("website_inquiries").select("*").order("received_at", { ascending: false }),
-        supabase.from("antique_ledger_details").select("*").order("updated_at", { ascending: false }),
-        supabase.from("journal_candidate_reviews").select("*").order("candidate_date", { ascending: false }),
-        supabase.from("journal_exports").select("*").order("created_at", { ascending: false }),
-      ]);
+      const fetchResults = () => Promise.all([
+        client.from("staff_profiles").select("*").eq("is_active", true).order("display_name", { ascending: true }),
+        client.from("spot_assignments").select("*").order("created_at", { ascending: false }),
+        client.from("contract_handoffs").select("*").order("issued_at", { ascending: false }),
+        client.from("vehicles").select("*").is("deleted_at", null).order("created_at", { ascending: false }),
+        client.from("vehicle_documents").select("*").order("created_at", { ascending: true }),
+        client.from("expenses").select("*").is("deleted_at", null).order("incurred_on", { ascending: false }),
+        client.from("attachments").select("*").order("created_at", { ascending: false }),
+        client.from("issued_documents").select("*").order("issued_on", { ascending: false }).order("created_at", { ascending: false }),
+        client.from("staff_settlements").select("*").order("created_at", { ascending: false }),
+        client.from("cashflows").select("*").is("deleted_at", null).order("scheduled_on", { ascending: false }),
+        client.from("contracts").select("*").is("deleted_at", null).order("updated_at", { ascending: false }),
+        client.from("approvals").select("*").order("created_at", { ascending: false }),
+        client.from("website_inquiries").select("*").order("received_at", { ascending: false }),
+        client.from("antique_ledger_details").select("*").order("updated_at", { ascending: false }),
+        client.from("journal_candidate_reviews").select("*").order("candidate_date", { ascending: false }),
+        client.from("journal_exports").select("*").order("created_at", { ascending: false }),
+      ] as const);
 
-      const firstError = [staffResult, spotAssignmentsResult, contractHandoffsResult, vehiclesResult, documentsResult, expensesResult, attachmentsResult, issuedDocumentsResult, staffSettlementsResult, cashflowsResult, contractsResult, approvalsResult, inquiriesResult, ledgerResult, journalReviewsResult, journalExportsResult]
-        .find((result) => result.error)?.error;
+      let results = await fetchResults();
+      let firstError = results.find((result) => result.error)?.error;
+
+      if (firstError) {
+        await new Promise((resolve) => window.setTimeout(resolve, 650));
+        results = await fetchResults();
+        firstError = results.find((result) => result.error)?.error;
+      }
+
       if (firstError) throw firstError;
+
+      if (!requestIsCurrent()) return;
+
+      const [staffResult, spotAssignmentsResult, contractHandoffsResult, vehiclesResult, documentsResult, expensesResult, attachmentsResult, issuedDocumentsResult, staffSettlementsResult, cashflowsResult, contractsResult, approvalsResult, inquiriesResult, ledgerResult, journalReviewsResult, journalExportsResult] = results;
 
       setData({
         staffProfiles: (staffResult.data ?? []).map(mapStaffProfileFromDb),
@@ -280,9 +316,9 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         journalExports: (journalExportsResult.data ?? []).map(mapJournalExportFromDb),
       });
     } catch (reason) {
-      setLoadError(errorMessage(reason));
+      if (requestIsCurrent()) setLoadError(errorMessage(reason));
     } finally {
-      setLoading(false);
+      if (requestIsCurrent()) setLoading(false);
     }
   }, [configured, session]);
 
@@ -1251,7 +1287,14 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   }), [configured, data, persistExpense, profile?.id, profile?.role, refreshData, session?.user.id]);
 
   if (loading) return <SystemLoading message="共有データを読み込んでいます" />;
-  if (loadError) return <DataLoadError message={loadError} onRetry={() => void refreshData()} />;
+  if (loadError) return (
+    <DataLoadError
+      message={loadError}
+      onRetry={() => void refreshData()}
+      onLogout={() => void signOut()}
+      onUseTestMode={testLoginEnabled ? testSignIn : undefined}
+    />
+  );
 
   return <AppDataContext.Provider value={value}>{children}</AppDataContext.Provider>;
 }

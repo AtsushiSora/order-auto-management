@@ -2926,6 +2926,19 @@ button.mini-summary-card:hover {
   box-shadow: 0 24px 70px rgba(0, 20, 40, 0.28);
 }
 
+.system-state-actions {
+  width: 100%;
+  display: grid;
+  gap: 10px;
+  margin-top: 0;
+}
+
+.system-state-actions .primary-button,
+.system-state-actions .secondary-button,
+.system-state-actions .text-button {
+  width: 100%;
+}
+
 .login-card {
   text-align: center;
 }

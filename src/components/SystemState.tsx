@@ -1,4 +1,4 @@
-import { AlertTriangle, LoaderCircle, LogOut, ShieldX } from "lucide-react";
+import { AlertTriangle, FlaskConical, LoaderCircle, LogOut, RotateCw, ShieldX } from "lucide-react";
 
 export function SystemLoading({ message = "データを確認しています" }: { message?: string }) {
   return (
@@ -22,16 +22,29 @@ export function AccessBlocked({ message, onLogout }: { message: string; onLogout
   );
 }
 
-export function DataLoadError({ message, onRetry }: { message: string; onRetry: () => void }) {
+export function DataLoadError({
+  message,
+  onRetry,
+  onLogout,
+  onUseTestMode,
+}: {
+  message: string;
+  onRetry: () => void;
+  onLogout: () => void;
+  onUseTestMode?: () => void;
+}) {
   return (
     <main className="system-state-page inset">
       <section className="system-state-card">
         <AlertTriangle size={38} />
         <h1>共有データを読み込めませんでした</h1>
         <p>{message}</p>
-        <button type="button" className="secondary-button" onClick={onRetry}>もう一度試す</button>
+        <div className="system-state-actions">
+          <button type="button" className="secondary-button" onClick={onRetry}><RotateCw size={17} />もう一度試す</button>
+          {onUseTestMode ? <button type="button" className="primary-button" onClick={onUseTestMode}><FlaskConical size={17} />架空データで開く</button> : null}
+          <button type="button" className="text-button" onClick={onLogout}><LogOut size={17} />ログイン画面へ戻る</button>
+        </div>
       </section>
     </main>
   );
 }
-
