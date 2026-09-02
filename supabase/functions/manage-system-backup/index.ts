@@ -86,11 +86,16 @@ Deno.serve(async (request: Request) => {
   if (userError || !userResult.user) {
     return response(responseOrigin, { error: "ログインし直してください。" }, 401);
   }
-  const { data: caller } = await admin
+  // 通常画面と同じログインJWTで権限を確認する。
+  // service_role側の接続状態に依存させないことで、実際の画面と判定を一致させる。
+  const { data: caller, error: callerError } = await userClient
     .from("staff_profiles")
     .select("role, is_active")
     .eq("id", userResult.user.id)
     .maybeSingle();
+  if (callerError) {
+    return response(responseOrigin, { error: "利用者権限を確認できませんでした。ログインし直してください。" }, 401);
+  }
   if (!caller?.is_active || caller.role !== "owner") {
     return response(responseOrigin, { error: "バックアップを操作できるのは事業主だけです。" }, 403);
   }
