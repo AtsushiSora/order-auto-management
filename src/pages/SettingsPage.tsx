@@ -10,6 +10,22 @@ import type { BackupRestoreMode, StaffProfile, StaffRole } from "../types";
 const staffRoles = Object.keys(staffRoleLabels) as StaffRole[];
 const inviteRoles = ["accounting", "regular", "spot"] as const;
 
+const formatFileSize = (bytes: number) => {
+  if (bytes < 1024) return `${bytes}B`;
+  if (bytes < 1024 * 1024) return `${Math.ceil(bytes / 1024)}KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)}MB`;
+};
+
+const attachmentBackupLabel = (backup: { attachmentBackupStatus: string; attachmentFileCount: number; attachmentTotalBytes: number }) => {
+  if (backup.attachmentBackupStatus === "complete") {
+    return `添付${backup.attachmentFileCount}件（${formatFileSize(backup.attachmentTotalBytes)}）も保全済み`;
+  }
+  if (backup.attachmentBackupStatus === "none") return "添付ファイルなし";
+  if (backup.attachmentBackupStatus === "partial") return `添付${backup.attachmentFileCount}件のみ保全・要確認`;
+  if (backup.attachmentBackupStatus === "failed") return "添付ファイルの保全に失敗・要確認";
+  return "旧方式：添付ファイル本体は未保全";
+};
+
 function StaffInvitePanel({ isDemo }: { isDemo: boolean }) {
   const { inviteStaffProfile } = useAppData();
   const [open, setOpen] = useState(false);
@@ -244,16 +260,16 @@ function BackupPanel({ isDemo }: { isDemo: boolean }) {
         {due ? <><HardDrive size={22} /><span><strong>バックアップの作成が必要です</strong><small>{latest ? `最終作成：${formatDateTime(latest.createdAt)}` : "まだバックアップがありません"}</small></span></> : <><ShieldCheck size={22} /><span><strong>バックアップは正常です</strong><small>最終作成：{formatDateTime(latest.createdAt)}</small></span></>}
       </div>
 
-      <p className="backup-scope-note">対象：車両・契約・経費・入出金・古物台帳・仕訳・月次残高など。ログインアカウント、監査履歴、添付ファイル本体は対象外です。添付ファイルの登録情報は含まれます。</p>
+      <p className="backup-scope-note">対象：車両・契約・経費・入出金・古物台帳・仕訳・月次残高・添付ファイル本体など。ログインアカウントと監査履歴は対象外です。</p>
       {isDemo ? <p className="form-warning">テストモードのバックアップは、この画面を開いている間だけ復元できます。</p> : null}
       {error ? <p className="inline-error">{error}</p> : null}
       {message ? <p className="inline-success">{message}</p> : null}
 
       <div className="backup-list">
         {data.systemBackups.map((backup) => <article className="backup-row" key={backup.id}>
-          <div><strong>{formatDateTime(backup.createdAt)}</strong><span>{backup.rowCount}件・手動バックアップ</span></div>
+          <div><strong>{formatDateTime(backup.createdAt)}</strong><span>{backup.rowCount}件・手動バックアップ</span><span className={`backup-file-status ${backup.attachmentBackupStatus}`}>{attachmentBackupLabel(backup)}</span></div>
           <div className="backup-row-actions">
-            <button type="button" className="table-action-button" disabled={Boolean(busy)} onClick={() => void download(backup.id, backup.createdAt)}><Download size={16} />保存</button>
+            <button type="button" className="table-action-button" disabled={Boolean(busy)} onClick={() => void download(backup.id, backup.createdAt)}><Download size={16} />JSON保存</button>
             <button type="button" className="table-action-button" disabled={Boolean(busy)} onClick={() => { setRestoreId(backup.id); setRestoreMode("追加"); setMessage(null); setError(null); }}><RotateCcw size={16} />復元</button>
             <button type="button" className="table-action-button danger-table-button" disabled={Boolean(busy)} onClick={() => remove(backup.id)}><Trash2 size={16} />削除</button>
           </div>
@@ -266,6 +282,11 @@ function BackupPanel({ isDemo }: { isDemo: boolean }) {
         <select aria-label="復元方法" value={restoreMode} onChange={(event) => setRestoreMode(event.target.value as BackupRestoreMode)}><option>追加</option><option>全上書き</option></select>
         <div className="backup-restore-actions"><button type="button" className="secondary-button" onClick={() => setRestoreId(null)}>キャンセル</button><button type="button" className={restoreMode === "全上書き" ? "danger-button" : "primary-button"} disabled={Boolean(busy)} onClick={restore}>この方法で復元</button></div>
       </div> : null}
+
+      <div className="backup-drive-box">
+        <div><strong>Google Driveへの直接保存</strong><p>システム内の完全バックアップを先に作成できます。Google Driveへの自動コピーは、Google側の認証を接続後に有効になります。</p></div>
+        <span className="setting-status pending">未接続</span>
+      </div>
     </section>
   );
 }

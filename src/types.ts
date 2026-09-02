@@ -330,11 +330,15 @@ export type SaveMonthlyBalanceCheckInput = {
 
 export type SystemBackupKind = "手動";
 export type BackupRestoreMode = "追加" | "全上書き";
+export type AttachmentBackupStatus = "metadata_only" | "none" | "complete" | "partial" | "failed";
 
 export type SystemBackup = {
   id: string;
   kind: SystemBackupKind;
   rowCount: number;
+  attachmentFileCount: number;
+  attachmentTotalBytes: number;
+  attachmentBackupStatus: AttachmentBackupStatus;
   createdAt: string;
 };
 

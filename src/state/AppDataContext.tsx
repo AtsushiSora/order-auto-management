@@ -96,6 +96,18 @@ import { useAuth } from "./AuthContext";
 const STORAGE_KEY = "order-auto-management-demo-v1";
 const demoEvidenceUrls = new Map<string, string>();
 const demoBackupPayloads = new Map<string, AppData>();
+
+const functionErrorMessage = async (reason: unknown, fallback: string) => {
+  if (!reason || typeof reason !== "object") return fallback;
+  const context = "context" in reason ? reason.context : null;
+  if (!(context instanceof Response)) return fallback;
+  try {
+    const detail = await context.clone().json() as { error?: unknown };
+    return typeof detail.error === "string" && detail.error.trim() ? detail.error : fallback;
+  } catch {
+    return fallback;
+  }
+};
 const emptyData: AppData = {
   staffProfiles: [],
   spotAssignments: [],
@@ -325,7 +337,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         client.from("cashflow_offsets").select("*").order("created_at", { ascending: false }),
         client.from("cashflow_events").select("*").order("processed_on", { ascending: false }),
         client.from("monthly_balance_checks").select("*").order("target_month", { ascending: false }),
-        client.from("system_backups").select("id, backup_kind, row_count, created_at").order("created_at", { ascending: false }),
+        client.from("system_backups").select("id, backup_kind, row_count, attachment_file_count, attachment_total_bytes, attachment_backup_status, created_at").order("created_at", { ascending: false }),
         client.from("contracts").select("*").is("deleted_at", null).order("updated_at", { ascending: false }),
         client.from("approvals").select("*").order("created_at", { ascending: false }),
         client.from("website_inquiries").select("*").order("received_at", { ascending: false }),
@@ -1269,9 +1281,11 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     createSystemBackup: async () => {
       if (profile?.role !== "owner" || !profile.isActive) throw new Error("バックアップを作成できるのは事業主だけです。");
       if (configured && supabase) {
-        const { data: saved, error } = await supabase.rpc("create_system_backup");
-        if (error) throw new Error(error.message);
-        const backup = mapSystemBackupFromDb(Array.isArray(saved) ? saved[0] : saved);
+        const { data: result, error } = await supabase.functions.invoke("manage-system-backup", {
+          body: { action: "create" },
+        });
+        if (error) throw new Error(await functionErrorMessage(error, "バックアップを作成できませんでした。"));
+        const backup = mapSystemBackupFromDb(result?.backup);
         await refreshData();
         return backup;
       }
@@ -1280,6 +1294,9 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         id: crypto.randomUUID(),
         kind: "手動",
         rowCount: Object.entries(data).filter(([key]) => key !== "systemBackups").reduce((sum, [, rows]) => sum + rows.length, 0),
+        attachmentFileCount: 0,
+        attachmentTotalBytes: 0,
+        attachmentBackupStatus: data.attachments.length ? "metadata_only" : "none",
         createdAt: now,
       };
       demoBackupPayloads.set(backup.id, structuredClone({ ...data, systemBackups: [] }));
@@ -1291,7 +1308,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       if (configured && supabase) {
         const { data: row, error } = await supabase
           .from("system_backups")
-          .select("id, backup_kind, row_count, created_at, payload")
+          .select("id, backup_kind, row_count, attachment_file_count, attachment_total_bytes, attachment_backup_status, created_at, payload")
           .eq("id", backupId)
           .single();
         if (error) throw new Error(error.message);
@@ -1301,6 +1318,10 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
           id: row.id,
           createdAt: row.created_at,
           rowCount: row.row_count,
+          attachmentFileCount: row.attachment_file_count,
+          attachmentTotalBytes: row.attachment_total_bytes,
+          attachmentBackupStatus: row.attachment_backup_status,
+          attachmentFiles: "Supabaseの非公開バックアップ領域に保管",
           payload: row.payload,
         }, null, 2)], { type: "application/json" });
       }
@@ -1312,11 +1333,14 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     restoreSystemBackup: async (backupId, mode) => {
       if (profile?.role !== "owner" || !profile.isActive) throw new Error("復元できるのは事業主だけです。");
       if (configured && supabase) {
-        const { error } = await supabase.rpc("restore_system_backup", {
-          p_backup_id: backupId,
-          p_mode: mode === "全上書き" ? "replace" : "merge",
+        const { error } = await supabase.functions.invoke("manage-system-backup", {
+          body: {
+            action: "restore",
+            backupId,
+            mode: mode === "全上書き" ? "replace" : "merge",
+          },
         });
-        if (error) throw new Error(error.message);
+        if (error) throw new Error(await functionErrorMessage(error, "バックアップを復元できませんでした。"));
         await refreshData();
         return;
       }
@@ -1329,8 +1353,10 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     deleteSystemBackup: async (backupId) => {
       if (profile?.role !== "owner" || !profile.isActive) throw new Error("バックアップを削除できるのは事業主だけです。");
       if (configured && supabase) {
-        const { error } = await supabase.rpc("delete_system_backup", { p_backup_id: backupId });
-        if (error) throw new Error(error.message);
+        const { error } = await supabase.functions.invoke("manage-system-backup", {
+          body: { action: "delete", backupId },
+        });
+        if (error) throw new Error(await functionErrorMessage(error, "バックアップを削除できませんでした。"));
         await refreshData();
         return;
       }

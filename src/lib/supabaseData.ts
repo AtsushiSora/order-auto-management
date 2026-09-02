@@ -331,10 +331,16 @@ export const mapMonthlyBalanceCheckFromDb = (source: unknown): MonthlyBalanceChe
 
 export const mapSystemBackupFromDb = (source: unknown): SystemBackup => {
   const row = source as DbRow;
+  const attachmentStatus = stringValue(row, "attachment_backup_status");
   return {
     id: stringValue(row, "id"),
     kind: "手動",
     rowCount: numberValue(row, "row_count"),
+    attachmentFileCount: numberValue(row, "attachment_file_count"),
+    attachmentTotalBytes: numberValue(row, "attachment_total_bytes"),
+    attachmentBackupStatus: ["none", "complete", "partial", "failed"].includes(attachmentStatus)
+      ? attachmentStatus as SystemBackup["attachmentBackupStatus"]
+      : "metadata_only",
     createdAt: stringValue(row, "created_at"),
   };
 };

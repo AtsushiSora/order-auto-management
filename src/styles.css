@@ -2013,6 +2013,23 @@ button.mini-summary-card:hover {
   display: block;
 }
 
+.backup-row .backup-file-status {
+  margin-top: 5px;
+  color: #486277;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.backup-row .backup-file-status.complete {
+  color: #087a61;
+}
+
+.backup-row .backup-file-status.partial,
+.backup-row .backup-file-status.failed,
+.backup-row .backup-file-status.metadata_only {
+  color: #ad5b00;
+}
+
 .backup-status-banner strong {
   font-size: 12px;
 }
@@ -2093,6 +2110,30 @@ button.mini-summary-card:hover {
   background: #fff;
   font: inherit;
   font-size: 11px;
+}
+
+.backup-drive-box {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  margin-top: 18px;
+  padding: 18px 20px;
+  border: 1px dashed #b7c8d6;
+  border-radius: 16px;
+  background: #f7fafc;
+}
+
+.backup-drive-box strong {
+  color: #082d4b;
+}
+
+.backup-drive-box p {
+  max-width: 720px;
+  margin: 5px 0 0;
+  color: #60778a;
+  font-size: 0.85rem;
+  line-height: 1.6;
 }
 
 .staff-management-panel {
@@ -2408,6 +2449,11 @@ button.mini-summary-card:hover {
 
   .backup-restore-box {
     grid-template-columns: 1fr;
+  }
+
+  .backup-drive-box {
+    align-items: flex-start;
+    flex-direction: column;
   }
 
   .backup-restore-box select,
