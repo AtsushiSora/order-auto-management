@@ -18,6 +18,8 @@ import {
   mapCashflowFromDb,
   mapContractFromDb,
   mapExpenseFromDb,
+  mapJournalCandidateReviewFromDb,
+  mapJournalExportFromDb,
   mapVehicleFromDb,
   mapVehicleDocumentFromDb,
   mapWebsiteInquiryFromDb,
@@ -25,6 +27,7 @@ import {
   newCashflowToDb,
   newVehicleToDb,
   purchaseContractToRpc,
+  journalCandidateReviewToRpc,
   saleContractToRpc,
   vehiclePatchToDb,
   vehicleInspectionImportToRpc,
@@ -41,6 +44,7 @@ import type {
   SaleContractInput,
   SaveAntiqueLedgerDetailInput,
   SaveExpenseInput,
+  SaveJournalCandidateReviewInput,
   Vehicle,
   VehicleInspectionImportInput,
   VehicleDocument,
@@ -60,6 +64,8 @@ const emptyData: AppData = {
   approvals: [],
   websiteInquiries: [],
   antiqueLedgerDetails: [],
+  journalCandidateReviews: [],
+  journalExports: [],
 };
 
 type AppDataContextValue = {
@@ -81,6 +87,8 @@ type AppDataContextValue = {
   saveSaleContract: (input: SaleContractInput) => Promise<void>;
   saveAntiqueLedgerDetail: (input: SaveAntiqueLedgerDetailInput) => Promise<void>;
   applyVehicleInspectionImport: (input: VehicleInspectionImportInput) => Promise<void>;
+  saveJournalCandidateReview: (input: SaveJournalCandidateReviewInput) => Promise<void>;
+  recordJournalExport: (targetMonth: string, rowCount: number) => Promise<void>;
   resetDemoData: () => void;
   refreshData: () => Promise<void>;
 };
@@ -128,6 +136,8 @@ const loadInitialDemoData = (): AppData => {
       })),
       websiteInquiries: parsed.websiteInquiries ?? seed.websiteInquiries,
       antiqueLedgerDetails: parsed.antiqueLedgerDetails ?? seed.antiqueLedgerDetails,
+      journalCandidateReviews: parsed.journalCandidateReviews ?? seed.journalCandidateReviews,
+      journalExports: parsed.journalExports ?? seed.journalExports,
     };
   } catch {
     return cloneSeedData();
@@ -174,7 +184,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     setLoading(true);
     setLoadError(null);
     try {
-      const [vehiclesResult, documentsResult, expensesResult, cashflowsResult, contractsResult, approvalsResult, inquiriesResult, ledgerResult] = await Promise.all([
+      const [vehiclesResult, documentsResult, expensesResult, cashflowsResult, contractsResult, approvalsResult, inquiriesResult, ledgerResult, journalReviewsResult, journalExportsResult] = await Promise.all([
         supabase.from("vehicles").select("*").is("deleted_at", null).order("created_at", { ascending: false }),
         supabase.from("vehicle_documents").select("*").order("created_at", { ascending: true }),
         supabase.from("expenses").select("*").is("deleted_at", null).order("incurred_on", { ascending: false }),
@@ -183,9 +193,11 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         supabase.from("approvals").select("*").order("created_at", { ascending: false }),
         supabase.from("website_inquiries").select("*").order("received_at", { ascending: false }),
         supabase.from("antique_ledger_details").select("*").order("updated_at", { ascending: false }),
+        supabase.from("journal_candidate_reviews").select("*").order("candidate_date", { ascending: false }),
+        supabase.from("journal_exports").select("*").order("created_at", { ascending: false }),
       ]);
 
-      const firstError = [vehiclesResult, documentsResult, expensesResult, cashflowsResult, contractsResult, approvalsResult, inquiriesResult, ledgerResult]
+      const firstError = [vehiclesResult, documentsResult, expensesResult, cashflowsResult, contractsResult, approvalsResult, inquiriesResult, ledgerResult, journalReviewsResult, journalExportsResult]
         .find((result) => result.error)?.error;
       if (firstError) throw firstError;
 
@@ -198,6 +210,8 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         approvals: (approvalsResult.data ?? []).map(mapApprovalFromDb),
         websiteInquiries: (inquiriesResult.data ?? []).map(mapWebsiteInquiryFromDb),
         antiqueLedgerDetails: (ledgerResult.data ?? []).map(mapAntiqueLedgerDetailFromDb),
+        journalCandidateReviews: (journalReviewsResult.data ?? []).map(mapJournalCandidateReviewFromDb),
+        journalExports: (journalExportsResult.data ?? []).map(mapJournalExportFromDb),
       });
     } catch (reason) {
       setLoadError(errorMessage(reason));
@@ -761,6 +775,59 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
           ],
         };
       });
+    },
+    saveJournalCandidateReview: async (input) => {
+      if (!input.debitAccount.trim() || !input.creditAccount.trim()) {
+        throw new Error("借方科目と貸方科目を入力してください。");
+      }
+      if (input.amount <= 0) throw new Error("金額は1円以上で入力してください。");
+      if (input.reviewStatus === "確認済み" && input.taxTreatment === "未確認") {
+        throw new Error("確認済みにする前に税区分を選択してください。");
+      }
+      if (configured && supabase) {
+        const { error } = await supabase.rpc("save_journal_candidate_review", journalCandidateReviewToRpc(input));
+        if (error) throw new Error(error.message);
+        await refreshData();
+        return;
+      }
+      const existing = data.journalCandidateReviews.find((item) => item.sourceKey === input.sourceKey);
+      const now = new Date().toISOString();
+      const saved = {
+        ...input,
+        id: existing?.id ?? crypto.randomUUID(),
+        reviewedAt: input.reviewStatus === "確認済み" ? now : null,
+        createdAt: existing?.createdAt ?? now,
+        updatedAt: now,
+      };
+      setData((current) => ({
+        ...current,
+        journalCandidateReviews: [
+          saved,
+          ...current.journalCandidateReviews.filter((item) => item.sourceKey !== input.sourceKey),
+        ],
+      }));
+    },
+    recordJournalExport: async (targetMonth, rowCount) => {
+      if (!/^\d{4}-\d{2}$/.test(targetMonth)) throw new Error("対象月が不正です。");
+      if (rowCount <= 0) throw new Error("出力対象がありません。");
+      if (configured && supabase) {
+        const { error } = await supabase.rpc("record_journal_export", {
+          p_target_month: `${targetMonth}-01`,
+          p_row_count: rowCount,
+        });
+        if (error) throw new Error(error.message);
+        await refreshData();
+        return;
+      }
+      setData((current) => ({
+        ...current,
+        journalExports: [{
+          id: crypto.randomUUID(),
+          targetMonth,
+          rowCount,
+          createdAt: new Date().toISOString(),
+        }, ...current.journalExports],
+      }));
     },
     resetDemoData: () => {
       if (!configured) setData(cloneSeedData());

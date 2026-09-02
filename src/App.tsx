@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Layout } from "./components/Layout";
-import { AccountingPlaceholderPage } from "./pages/AccountingPlaceholderPage";
+import { AccountingPage } from "./pages/AccountingPage";
 import { AntiqueLedgerPage } from "./pages/AntiqueLedgerPage";
 import { ContractsPage } from "./pages/ContractsPage";
 import { DashboardPage } from "./pages/DashboardPage";
@@ -82,7 +82,7 @@ export default function App() {
       case "antique-ledger":
         return <AntiqueLedgerPage />;
       case "accounting":
-        return <AccountingPlaceholderPage type="経理・仕訳候補" />;
+        return <AccountingPage />;
       case "settings":
         return <SettingsPage />;
       default:

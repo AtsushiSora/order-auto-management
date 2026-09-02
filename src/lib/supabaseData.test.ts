@@ -5,10 +5,13 @@ import {
   mapCashflowFromDb,
   mapContractFromDb,
   mapExpenseFromDb,
+  mapJournalCandidateReviewFromDb,
+  mapJournalExportFromDb,
   mapVehicleFromDb,
   mapVehicleDocumentFromDb,
   mapWebsiteInquiryFromDb,
   expenseToRpc,
+  journalCandidateReviewToRpc,
   newCashflowToDb,
   newVehicleToDb,
   purchaseContractToRpc,
@@ -106,6 +109,51 @@ describe("Supabaseデータ変換", () => {
       p_registration_number: "品川 300 あ 12-34",
       p_registered_owner_name: "山田 太郎",
     });
+  });
+
+  it("仕訳候補の確認内容をRPCへ変換し、DB行を画面用に戻す", () => {
+    const rpc = journalCandidateReviewToRpc({
+      sourceKey: "expense:expense-id:recognition",
+      candidateDate: "2026-09-02",
+      description: " 部品代 ",
+      debitAccount: " 消耗品費 ",
+      creditAccount: " 未払金 ",
+      amount: 12000,
+      taxTreatment: "課税10%",
+      reviewStatus: "確認済み",
+      sourceFingerprint: "2026-09-02|12000|部品代",
+      note: " 確認済み ",
+    });
+    expect(rpc).toMatchObject({
+      p_debit_account: "消耗品費",
+      p_tax_treatment: "taxable_10",
+      p_review_status: "confirmed",
+    });
+    expect(mapJournalCandidateReviewFromDb({
+      id: "review-id",
+      source_key: rpc.p_source_key,
+      candidate_date: rpc.p_candidate_date,
+      description: rpc.p_description,
+      debit_account: rpc.p_debit_account,
+      credit_account: rpc.p_credit_account,
+      amount: rpc.p_amount,
+      tax_treatment: rpc.p_tax_treatment,
+      review_status: rpc.p_review_status,
+      source_fingerprint: rpc.p_source_fingerprint,
+      note: rpc.p_note,
+      reviewed_at: "2026-09-02T01:00:00Z",
+      created_at: "2026-09-02T00:00:00Z",
+      updated_at: "2026-09-02T01:00:00Z",
+    })).toMatchObject({ taxTreatment: "課税10%", reviewStatus: "確認済み" });
+  });
+
+  it("月次CSV出力履歴を画面用データへ変換する", () => {
+    expect(mapJournalExportFromDb({
+      id: "export-id",
+      target_month: "2026-09-01",
+      row_count: 4,
+      created_at: "2026-09-02T01:00:00Z",
+    })).toMatchObject({ targetMonth: "2026-09", rowCount: 4 });
   });
 
   it("サイト問い合わせを社内表示へ変換し、対応状況をRPCへ渡せる", () => {

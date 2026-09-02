@@ -10,6 +10,8 @@ import type {
   ContractStatus,
   Expense,
   ExpenseStatus,
+  JournalCandidateReview,
+  JournalExport,
   NewCashflowInput,
   NewExpenseInput,
   NewVehicleInput,
@@ -19,6 +21,8 @@ import type {
   SaleContractInput,
   SaveAntiqueLedgerDetailInput,
   SaveExpenseInput,
+  SaveJournalCandidateReviewInput,
+  TaxTreatment,
   Vehicle,
   VehicleInspectionImportInput,
   VehiclePublicationInput,
@@ -190,6 +194,17 @@ const dispositionTypeToDb: Record<NonNullable<AntiqueLedgerDetail["disposalTypeO
   返還: "return",
   廃車: "scrap",
 };
+const taxTreatmentFromDb: Record<string, TaxTreatment> = {
+  unconfirmed: "未確認",
+  taxable_10: "課税10%",
+  taxable_8: "課税8%",
+  non_taxable: "非課税",
+  exempt: "免税",
+  out_of_scope: "対象外",
+};
+const taxTreatmentToDb = Object.fromEntries(
+  Object.entries(taxTreatmentFromDb).map(([value, label]) => [label, value]),
+) as Record<TaxTreatment, string>;
 
 const stringValue = (row: DbRow, key: string) => String(row[key] ?? "");
 const nullableString = (row: DbRow, key: string) => (row[key] == null ? null : String(row[key]));
@@ -322,6 +337,49 @@ export const antiqueLedgerDetailToDb = (input: SaveAntiqueLedgerDetailInput) => 
   buyer_name_override: input.buyerNameOverride.trim(),
   note: input.note.trim(),
 });
+
+export const mapJournalCandidateReviewFromDb = (source: unknown): JournalCandidateReview => {
+  const row = source as DbRow;
+  return {
+    id: stringValue(row, "id"),
+    sourceKey: stringValue(row, "source_key"),
+    candidateDate: stringValue(row, "candidate_date"),
+    description: stringValue(row, "description"),
+    debitAccount: stringValue(row, "debit_account"),
+    creditAccount: stringValue(row, "credit_account"),
+    amount: numberValue(row, "amount"),
+    taxTreatment: taxTreatmentFromDb[stringValue(row, "tax_treatment")] ?? "未確認",
+    reviewStatus: stringValue(row, "review_status") === "confirmed" ? "確認済み" : "確認待ち",
+    sourceFingerprint: stringValue(row, "source_fingerprint"),
+    note: stringValue(row, "note"),
+    reviewedAt: nullableString(row, "reviewed_at"),
+    createdAt: stringValue(row, "created_at"),
+    updatedAt: stringValue(row, "updated_at"),
+  };
+};
+
+export const journalCandidateReviewToRpc = (input: SaveJournalCandidateReviewInput) => ({
+  p_source_key: input.sourceKey,
+  p_candidate_date: input.candidateDate,
+  p_description: input.description.trim(),
+  p_debit_account: input.debitAccount.trim(),
+  p_credit_account: input.creditAccount.trim(),
+  p_amount: input.amount,
+  p_tax_treatment: taxTreatmentToDb[input.taxTreatment],
+  p_review_status: input.reviewStatus === "確認済み" ? "confirmed" : "pending",
+  p_source_fingerprint: input.sourceFingerprint,
+  p_note: input.note.trim(),
+});
+
+export const mapJournalExportFromDb = (source: unknown): JournalExport => {
+  const row = source as DbRow;
+  return {
+    id: stringValue(row, "id"),
+    targetMonth: stringValue(row, "target_month").slice(0, 7),
+    rowCount: numberValue(row, "row_count"),
+    createdAt: stringValue(row, "created_at"),
+  };
+};
 
 export const newVehicleToDb = (input: NewVehicleInput) => ({
   name: input.name,

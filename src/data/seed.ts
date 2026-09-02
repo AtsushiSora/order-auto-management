@@ -312,4 +312,6 @@ export const seedData: AppData = {
       receivedAt: "2026-09-02T07:30:00+09:00",
     },
   ],
+  journalCandidateReviews: [],
+  journalExports: [],
 };

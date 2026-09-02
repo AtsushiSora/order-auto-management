@@ -2245,6 +2245,102 @@ button.mini-summary-card:hover {
   }
 }
 
+.accounting-summary-grid {
+  grid-template-columns: repeat(3, 1fr);
+}
+
+.accounting-filter-bar {
+  grid-template-columns: minmax(190px, 0.7fr) auto 1fr;
+}
+
+.month-field {
+  min-height: 43px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 12px;
+  border: 1px solid var(--slate-200);
+  border-radius: 8px;
+  background: #fff;
+}
+
+.month-field span {
+  flex: 0 0 auto;
+  color: var(--slate-500);
+  font-size: 10px;
+  font-weight: 750;
+}
+
+.month-field input {
+  width: 100%;
+  border: 0;
+  outline: 0;
+  color: var(--slate-800);
+  background: transparent;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.accounting-export-history {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: -7px 0 13px;
+  color: var(--slate-500);
+  font-size: 11px;
+}
+
+.page-message {
+  margin: -4px 0 14px;
+}
+
+.accounting-table td:nth-child(2) {
+  min-width: 290px;
+  white-space: normal;
+}
+
+.accounting-table td:nth-child(2) strong,
+.accounting-table td:nth-child(2) small {
+  display: block;
+}
+
+.accounting-table td:nth-child(2) small {
+  margin-top: 4px;
+  color: var(--slate-500);
+  font-size: 10px;
+}
+
+.form-warning {
+  margin: 14px 0 0;
+  padding: 10px 12px;
+  border-radius: 8px;
+  color: var(--amber-700);
+  background: var(--amber-100);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.6;
+}
+
+.field-label textarea {
+  min-height: 84px;
+  padding-top: 10px;
+  padding-bottom: 10px;
+  resize: vertical;
+}
+
+@media (max-width: 920px) {
+  .accounting-filter-bar {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 680px) {
+  .accounting-summary-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 @media print {
   .sidebar,
   .topbar,

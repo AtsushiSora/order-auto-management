@@ -36,7 +36,7 @@ const navItems: Array<{
   { id: "profits", label: "利益", icon: BarChart3 },
   { id: "site-integration", label: "サイト連携", icon: Globe2 },
   { id: "antique-ledger", label: "古物台帳", icon: BookOpen, hiddenForSpot: true },
-  { id: "accounting", label: "経理・仕訳候補", icon: ReceiptJapaneseYen, phase: "第2段階" },
+  { id: "accounting", label: "経理・仕訳候補", icon: ReceiptJapaneseYen },
   { id: "settings", label: "設定", icon: Settings, ownerOnly: true },
 ];
 

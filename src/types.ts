@@ -261,6 +261,78 @@ export type AppData = {
   approvals: Approval[];
   websiteInquiries: WebsiteInquiry[];
   antiqueLedgerDetails: AntiqueLedgerDetail[];
+  journalCandidateReviews: JournalCandidateReview[];
+  journalExports: JournalExport[];
+};
+
+export type TaxTreatment =
+  | "未確認"
+  | "課税10%"
+  | "課税8%"
+  | "非課税"
+  | "免税"
+  | "対象外";
+
+export type JournalReviewStatus = "確認待ち" | "確認済み";
+export type JournalCandidateStatus = JournalReviewStatus | "税区分未確認" | "再確認";
+
+export type JournalCandidateReview = {
+  id: string;
+  sourceKey: string;
+  candidateDate: string;
+  description: string;
+  debitAccount: string;
+  creditAccount: string;
+  amount: number;
+  taxTreatment: TaxTreatment;
+  reviewStatus: JournalReviewStatus;
+  sourceFingerprint: string;
+  note: string;
+  reviewedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type JournalCandidateSourceType = "買取" | "販売" | "経費" | "入金" | "支払い";
+
+export type JournalCandidate = {
+  sourceKey: string;
+  sourceType: JournalCandidateSourceType;
+  candidateDate: string;
+  description: string;
+  vehicleLabel: string;
+  amount: number;
+  suggestedDebitAccount: string;
+  suggestedCreditAccount: string;
+  sourceFingerprint: string;
+  debitAccount: string;
+  creditAccount: string;
+  taxTreatment: TaxTreatment;
+  reviewStatus: JournalReviewStatus;
+  status: JournalCandidateStatus;
+  note: string;
+  reviewedAt: string | null;
+};
+
+export type SaveJournalCandidateReviewInput = Pick<
+  JournalCandidateReview,
+  | "sourceKey"
+  | "candidateDate"
+  | "description"
+  | "debitAccount"
+  | "creditAccount"
+  | "amount"
+  | "taxTreatment"
+  | "reviewStatus"
+  | "sourceFingerprint"
+  | "note"
+>;
+
+export type JournalExport = {
+  id: string;
+  targetMonth: string;
+  rowCount: number;
+  createdAt: string;
 };
 
 export type VehicleDocumentInput = Omit<VehicleDocument, "id" | "createdAt" | "updatedAt">;
