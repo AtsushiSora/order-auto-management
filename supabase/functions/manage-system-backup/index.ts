@@ -231,7 +231,12 @@ Deno.serve(async (request: Request) => {
     if (deleteError) throw deleteError;
     return response(responseOrigin, { success: true });
   } catch (reason) {
-    const message = reason instanceof Error ? reason.message : "バックアップ処理に失敗しました。";
+    const detail = reason && typeof reason === "object" && "message" in reason ? reason.message : null;
+    const message = reason instanceof Error
+      ? reason.message
+      : typeof detail === "string" && detail.trim()
+        ? detail
+        : "バックアップ処理に失敗しました。";
     return response(responseOrigin, { error: message }, 500);
   }
 });
