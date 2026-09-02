@@ -14,6 +14,7 @@ import {
   purchaseContractToRpc,
   saleContractToRpc,
   vehicleDocumentToDb,
+  vehicleInspectionImportToRpc,
   vehiclePublicationToRpc,
   websiteInquiryStatusToRpc,
 } from "./supabaseData";
@@ -89,6 +90,22 @@ describe("Supabaseデータ変換", () => {
     });
     expect(input).not.toHaveProperty("chassis_number");
     expect(input).not.toHaveProperty("purchase_price");
+  });
+
+  it("確認済みの車検証情報だけをRPC引数へ変換する", () => {
+    expect(vehicleInspectionImportToRpc({
+      vehicleId: "vehicle-id",
+      vehicleName: " トヨタ ",
+      chassisNumber: " ABC-123 ",
+      registrationNumber: " 品川 300 あ 12-34 ",
+      registeredOwnerName: " 山田 太郎 ",
+    })).toEqual({
+      p_vehicle_id: "vehicle-id",
+      p_vehicle_name: "トヨタ",
+      p_chassis_number: "ABC-123",
+      p_registration_number: "品川 300 あ 12-34",
+      p_registered_owner_name: "山田 太郎",
+    });
   });
 
   it("サイト問い合わせを社内表示へ変換し、対応状況をRPCへ渡せる", () => {

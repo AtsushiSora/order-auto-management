@@ -212,6 +212,28 @@ export type SaveAntiqueLedgerDetailInput = Omit<
   "id" | "createdAt" | "updatedAt"
 >;
 
+export type VehicleInspectionSourceType = "公式アプリJSON" | "公式アプリCSV" | "QRコード";
+
+/** 車検証から読み取った確認前のデータ。rawSourceは保存せず、画面内の解析だけに使う。 */
+export type VehicleInspectionData = {
+  vehicleName: string;
+  chassisNumber: string;
+  registrationNumber: string;
+  registeredOwnerName: string;
+  firstRegistration: string;
+  inspectionExpiry: string;
+  modelType: string;
+  rawSource: string;
+  sourceType: VehicleInspectionSourceType;
+};
+
+export type VehicleInspectionImportInput = Pick<
+  VehicleInspectionData,
+  "vehicleName" | "chassisNumber" | "registrationNumber" | "registeredOwnerName"
+> & {
+  vehicleId: string;
+};
+
 export type AntiqueLedgerEntry = {
   vehicleId: string;
   managementNumber: string;

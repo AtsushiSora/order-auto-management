@@ -9,6 +9,7 @@ import {
 } from "react";
 import { DataLoadError, SystemLoading } from "../components/SystemState";
 import { seedData } from "../data/seed";
+import { buildAntiqueLedgerEntries } from "../lib/antiqueLedger";
 import { supabase } from "../lib/supabase";
 import {
   antiqueLedgerDetailToDb,
@@ -26,6 +27,7 @@ import {
   purchaseContractToRpc,
   saleContractToRpc,
   vehiclePatchToDb,
+  vehicleInspectionImportToRpc,
   vehiclePublicationToRpc,
   vehicleDocumentToDb,
   websiteInquiryStatusToRpc,
@@ -40,6 +42,7 @@ import type {
   SaveAntiqueLedgerDetailInput,
   SaveExpenseInput,
   Vehicle,
+  VehicleInspectionImportInput,
   VehicleDocument,
   VehicleDocumentInput,
   VehiclePublicationInput,
@@ -77,6 +80,7 @@ type AppDataContextValue = {
   savePurchaseContract: (input: PurchaseContractInput) => Promise<void>;
   saveSaleContract: (input: SaleContractInput) => Promise<void>;
   saveAntiqueLedgerDetail: (input: SaveAntiqueLedgerDetailInput) => Promise<void>;
+  applyVehicleInspectionImport: (input: VehicleInspectionImportInput) => Promise<void>;
   resetDemoData: () => void;
   refreshData: () => Promise<void>;
 };
@@ -712,6 +716,51 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
           ...current.antiqueLedgerDetails.filter((item) => item.vehicleId !== input.vehicleId),
         ],
       }));
+    },
+    applyVehicleInspectionImport: async (input) => {
+      const vehicle = data.vehicles.find((item) => item.id === input.vehicleId);
+      if (!vehicle) throw new Error("対象車両が見つかりません。");
+      if (![input.vehicleName, input.chassisNumber, input.registrationNumber, input.registeredOwnerName].some((value) => value.trim())) {
+        throw new Error("反映する車検証情報を1項目以上入力してください。");
+      }
+
+      if (configured && supabase) {
+        const { error } = await supabase.rpc(
+          "apply_vehicle_inspection_import",
+          vehicleInspectionImportToRpc(input),
+        );
+        if (error) throw new Error(error.message);
+        await refreshData();
+        return;
+      }
+
+      const now = new Date().toISOString();
+      setData((current) => {
+        const target = current.vehicles.find((item) => item.id === input.vehicleId);
+        if (!target) return current;
+        const existing = current.antiqueLedgerDetails.find((item) => item.vehicleId === input.vehicleId)
+          ?? buildAntiqueLedgerEntries(current).find((entry) => entry.vehicleId === input.vehicleId)?.detail;
+        if (!existing) return current;
+        const detail = {
+          ...existing,
+          registrationNumber: input.registrationNumber.trim() || existing.registrationNumber,
+          registeredOwnerName: input.registeredOwnerName.trim() || existing.registeredOwnerName,
+          updatedAt: now,
+        };
+        return {
+          ...current,
+          vehicles: current.vehicles.map((item) => item.id === input.vehicleId ? {
+            ...item,
+            name: input.vehicleName.trim() || item.name,
+            chassisNumber: input.chassisNumber.trim() || item.chassisNumber,
+            updatedAt: now,
+          } : item),
+          antiqueLedgerDetails: [
+            detail,
+            ...current.antiqueLedgerDetails.filter((item) => item.vehicleId !== input.vehicleId),
+          ],
+        };
+      });
     },
     resetDemoData: () => {
       if (!configured) setData(cloneSeedData());

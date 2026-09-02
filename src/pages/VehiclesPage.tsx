@@ -9,6 +9,7 @@ import {
   Plus,
   ReceiptText,
   Save,
+  ScanLine,
   Search,
   Truck,
   Trash2,
@@ -17,6 +18,7 @@ import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { Drawer } from "../components/Drawer";
 import { PageHeader } from "../components/PageHeader";
 import { StatusBadge } from "../components/StatusBadge";
+import { VehicleInspectionImportDrawer } from "../components/VehicleInspectionImportDrawer";
 import { calculateVehicleProfit, outstandingAmount } from "../lib/calculations";
 import { formatCurrency, formatDate } from "../lib/format";
 import { useAppData } from "../state/AppDataContext";
@@ -73,7 +75,7 @@ export function VehiclesPage({
   openNewForm?: boolean;
   onNewFormOpened?: () => void;
 }) {
-  const { data, addVehicle, updateVehicle, markVehicleArrived, markVehicleDelivered, updateVehicleDocument, archiveVehicle, addExpense, completeCashflow } = useAppData();
+  const { data, addVehicle, updateVehicle, applyVehicleInspectionImport, markVehicleArrived, markVehicleDelivered, updateVehicleDocument, archiveVehicle, addExpense, completeCashflow } = useAppData();
   const { profile } = useAuth();
   const canEdit = profile?.role === "owner" || profile?.role === "regular";
   const canManagePayments = profile?.role === "owner" || profile?.role === "regular" || profile?.role === "accounting";
@@ -85,6 +87,7 @@ export function VehiclesPage({
   const [form, setForm] = useState<NewVehicleInput>(initialVehicleForm);
   const [formError, setFormError] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [inspectionImportOpen, setInspectionImportOpen] = useState(false);
 
   const filteredVehicles = useMemo(() => {
     const keyword = search.trim().toLowerCase();
@@ -132,7 +135,7 @@ export function VehiclesPage({
 
   return (
     <>
-      <PageHeader title="在庫" description="入庫予定から納車済みまで、車両ごとの取引を管理します。" action={canEdit ? <button type="button" className="primary-button" onClick={openNewVehicle}><Plus size={20} />車両を登録</button> : undefined} />
+      <PageHeader title="在庫" description="入庫予定から納車済みまで、車両ごとの取引を管理します。" action={canEdit ? <div className="page-header-actions"><button type="button" className="secondary-button" onClick={() => setInspectionImportOpen(true)}><ScanLine size={19} />車検証を読み取る</button><button type="button" className="primary-button" onClick={openNewVehicle}><Plus size={20} />車両を登録</button></div> : undefined} />
 
       <div className="filter-bar panel">
         <label className="search-field"><Search size={19} /><input type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="管理番号・車両名・車台番号で検索" /></label>
@@ -186,6 +189,7 @@ export function VehiclesPage({
       ) : null}
 
       {drawerMode === "detail" && selectedVehicle ? <VehicleDetailDrawer vehicle={selectedVehicle} documents={selectedDocuments} expenses={data.expenses} cashflows={data.cashflows.filter((cashflow) => cashflow.vehicleId === selectedVehicle.id)} canEdit={canEdit} canManagePayments={canManagePayments} isOwner={isOwner} onClose={() => setDrawerMode(null)} onUpdate={(patch) => updateVehicle(selectedVehicle.id, patch)} onMarkArrived={markVehicleArrived} onMarkDelivered={markVehicleDelivered} onDocumentUpdate={updateVehicleDocument} onAddExpense={addExpense} onCompleteCashflow={completeCashflow} onArchive={async () => { await archiveVehicle(selectedVehicle.id); setDrawerMode(null); }} /> : null}
+      {inspectionImportOpen ? <VehicleInspectionImportDrawer vehicles={data.vehicles} antiqueLedgerDetails={data.antiqueLedgerDetails} onApply={applyVehicleInspectionImport} onClose={() => setInspectionImportOpen(false)} /> : null}
     </>
   );
 }

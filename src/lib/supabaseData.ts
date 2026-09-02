@@ -20,6 +20,7 @@ import type {
   SaveAntiqueLedgerDetailInput,
   SaveExpenseInput,
   Vehicle,
+  VehicleInspectionImportInput,
   VehiclePublicationInput,
   VehicleDocument,
   VehicleDocumentInput,
@@ -240,6 +241,14 @@ export const vehiclePublicationToRpc = (input: VehiclePublicationInput) => ({
   p_public_price: input.publicPrice,
   p_public_description: input.publicDescription.trim(),
   p_public_image_url: input.publicImageUrl.trim(),
+});
+
+export const vehicleInspectionImportToRpc = (input: VehicleInspectionImportInput) => ({
+  p_vehicle_id: input.vehicleId,
+  p_vehicle_name: input.vehicleName.trim() || null,
+  p_chassis_number: input.chassisNumber.trim() || null,
+  p_registration_number: input.registrationNumber.trim() || null,
+  p_registered_owner_name: input.registeredOwnerName.trim() || null,
 });
 
 export const mapWebsiteInquiryFromDb = (source: unknown): WebsiteInquiry => {

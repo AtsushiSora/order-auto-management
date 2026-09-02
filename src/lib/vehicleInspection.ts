@@ -1,0 +1,228 @@
+import type { VehicleInspectionData, VehicleInspectionSourceType } from "../types";
+
+type FlatRecord = Map<string, string>;
+
+const emptyInspection = (
+  sourceType: VehicleInspectionSourceType,
+  rawSource: string,
+): VehicleInspectionData => ({
+  vehicleName: "",
+  chassisNumber: "",
+  registrationNumber: "",
+  registeredOwnerName: "",
+  firstRegistration: "",
+  inspectionExpiry: "",
+  modelType: "",
+  rawSource,
+  sourceType,
+});
+
+const normalizeKey = (value: string) => value
+  .normalize("NFKC")
+  .replace(/[\s_＿()（）［］\[\]・:：／/.-]/g, "")
+  .toLowerCase();
+
+const flattenJson = (value: unknown, result = new Map<string, string>(), path = ""): FlatRecord => {
+  if (value == null) return result;
+  if (Array.isArray(value)) {
+    value.forEach((item, index) => flattenJson(item, result, `${path}${index}`));
+    return result;
+  }
+  if (typeof value === "object") {
+    Object.entries(value as Record<string, unknown>).forEach(([key, item]) => {
+      const nextPath = path ? `${path}.${key}` : key;
+      if (typeof item === "string" || typeof item === "number") {
+        const text = String(item).trim();
+        if (text) {
+          result.set(normalizeKey(key), text);
+          result.set(normalizeKey(nextPath), text);
+        }
+      } else {
+        flattenJson(item, result, nextPath);
+      }
+    });
+  }
+  return result;
+};
+
+const pick = (record: FlatRecord, aliases: string[]) => {
+  for (const alias of aliases) {
+    const normalized = normalizeKey(alias);
+    const exact = record.get(normalized);
+    if (exact) return exact;
+  }
+  for (const alias of aliases) {
+    const normalized = normalizeKey(alias);
+    const found = [...record.entries()].find(([key]) => key.endsWith(normalized));
+    if (found?.[1]) return found[1];
+  }
+  return "";
+};
+
+const fromRecord = (
+  record: FlatRecord,
+  sourceType: VehicleInspectionSourceType,
+  rawSource: string,
+): VehicleInspectionData => ({
+  ...emptyInspection(sourceType, rawSource),
+  registrationNumber: pick(record, [
+    "自動車登録番号又は車両番号",
+    "自動車登録番号",
+    "車両番号",
+    "登録番号",
+  ]),
+  chassisNumber: pick(record, ["車台番号", "車体番号"]),
+  vehicleName: pick(record, ["車名", "メーカー名"]),
+  registeredOwnerName: pick(record, [
+    "所有者の氏名又は名称_所有者氏名（高水準文字含む）",
+    "所有者の氏名又は名称_所有者氏名（低水準文字）",
+    "所有者の氏名又は名称",
+    "所有者氏名",
+    "所有者名称",
+  ]),
+  firstRegistration: pick(record, ["初度登録年月", "初度検査年月"]),
+  inspectionExpiry: pick(record, ["有効期間の満了する日", "有効期間満了日", "車検満了日"]),
+  modelType: pick(record, ["型式"]),
+});
+
+export const parseCsvRows = (text: string): string[][] => {
+  const rows: string[][] = [];
+  let row: string[] = [];
+  let field = "";
+  let quoted = false;
+  const input = text.replace(/^\uFEFF/, "");
+
+  for (let index = 0; index < input.length; index += 1) {
+    const char = input[index];
+    if (char === '"') {
+      if (quoted && input[index + 1] === '"') {
+        field += '"';
+        index += 1;
+      } else {
+        quoted = !quoted;
+      }
+    } else if (char === "," && !quoted) {
+      row.push(field);
+      field = "";
+    } else if ((char === "\n" || char === "\r") && !quoted) {
+      if (char === "\r" && input[index + 1] === "\n") index += 1;
+      row.push(field);
+      if (row.some((value) => value.trim())) rows.push(row);
+      row = [];
+      field = "";
+    } else {
+      field += char;
+    }
+  }
+  row.push(field);
+  if (row.some((value) => value.trim())) rows.push(row);
+  return rows;
+};
+
+const csvToRecord = (text: string): FlatRecord => {
+  const rows = parseCsvRows(text);
+  const record = new Map<string, string>();
+  if (rows.length < 2) return record;
+  const headers = rows[0];
+  const data = rows.find((row, index) => index > 0 && row.some((value) => value.trim()));
+  if (!data) return record;
+  headers.forEach((header, index) => {
+    const value = (data[index] ?? "").trim();
+    if (header.trim() && value) record.set(normalizeKey(header), value);
+  });
+  return record;
+};
+
+export const parseOfficialVehicleInspectionText = (
+  fileName: string,
+  text: string,
+): VehicleInspectionData => {
+  const isJson = fileName.toLowerCase().endsWith(".json") || text.trimStart().startsWith("{");
+  if (isJson) {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(text.replace(/^\uFEFF/, ""));
+    } catch {
+      throw new Error("JSONファイルを読み取れませんでした。公式アプリから保存したファイルを選んでください。");
+    }
+    return fromRecord(flattenJson(parsed), "公式アプリJSON", text);
+  }
+  const record = csvToRecord(text);
+  if (record.size === 0) {
+    throw new Error("CSVファイルを読み取れませんでした。見出しを含む公式アプリのCSVを選んでください。");
+  }
+  return fromRecord(record, "公式アプリCSV", text);
+};
+
+const labeledQrRecord = (payloads: string[]): FlatRecord => {
+  const record = new Map<string, string>();
+  const labelPattern = /(自動車登録番号又は車両番号|自動車登録番号|車両番号|登録番号|車台番号|車体番号|車名|メーカー名|所有者の氏名又は名称|所有者氏名|所有者名称|初度登録年月|初度検査年月|有効期間の満了する日|有効期間満了日|車検満了日|型式)\s*[=:：]\s*([^\n\r,;|]+)/g;
+  payloads.forEach((payload) => {
+    for (const match of payload.matchAll(labelPattern)) {
+      record.set(normalizeKey(match[1]), match[2].trim());
+    }
+  });
+  return record;
+};
+
+const inferChassisNumber = (payloads: string[]) => {
+  const tokens = payloads.flatMap((payload) => payload.split(/[\s,;|]+/));
+  return tokens.find((token) => /^(?=.{6,30}$)(?=.*[A-Z0-9])(?=.*-)[A-Z0-9-]+$/i.test(token)) ?? "";
+};
+
+const cleanQrValue = (value: string | undefined) => (value ?? "")
+  .replace(/[　 ]+/g, " ")
+  .trim();
+
+const qrDate = (value: string, withDay: boolean) => {
+  if (!/^\d+$/.test(value) || /^9+$/.test(value)) return "";
+  if (withDay && value.length === 6) return `20${value.slice(0, 2)}-${value.slice(2, 4)}-${value.slice(4, 6)}`;
+  if (!withDay && value.length === 4) return `20${value.slice(0, 2)}-${value.slice(2, 4)}`;
+  return "";
+};
+
+/** 国土交通省仕様の登録車QR2（K22）とQR3（K32）を読み取る。分割QRは券面の左から順に結合する。 */
+const parseRegisteredVehicleQr = (payloads: string[]): Partial<VehicleInspectionData> => {
+  const joined = payloads.join("");
+  const qr2Start = joined.indexOf("K22/");
+  const qr3Start = joined.indexOf("K32/");
+  const result: Partial<VehicleInspectionData> = {};
+
+  if (qr2Start >= 0) {
+    const end = qr3Start > qr2Start ? qr3Start : joined.length;
+    const fields = joined.slice(qr2Start, end).split("/");
+    if (fields[0] === "K22") {
+      result.registrationNumber = cleanQrValue(fields[1]);
+      result.chassisNumber = cleanQrValue(fields[3]);
+    }
+  }
+
+  if (qr3Start >= 0) {
+    const fields = joined.slice(qr3Start).split("/");
+    if (fields[0] === "K32") {
+      result.inspectionExpiry = qrDate(cleanQrValue(fields[3]), true);
+      result.firstRegistration = qrDate(cleanQrValue(fields[4]), false);
+      result.modelType = cleanQrValue(fields[5]);
+    }
+  }
+  return result;
+};
+
+/**
+ * QRは券面・発行時期で構成が異なるため、ラベル付きデータと車台番号だけを安全側で推測する。
+ * 結果は必ず確認画面を通し、固定位置を根拠にした自動保存は行わない。
+ */
+export const parseQrPayloads = (payloads: string[]): VehicleInspectionData => {
+  const cleaned = payloads.map((payload) => payload.trim()).filter(Boolean);
+  if (cleaned.length === 0) throw new Error("QRコードの内容がありません。");
+  const rawSource = cleaned.join("\n---\n");
+  const result = fromRecord(labeledQrRecord(cleaned), "QRコード", rawSource);
+  const official = parseRegisteredVehicleQr(cleaned);
+  result.registrationNumber ||= official.registrationNumber ?? "";
+  result.chassisNumber ||= official.chassisNumber ?? "";
+  result.firstRegistration ||= official.firstRegistration ?? "";
+  result.inspectionExpiry ||= official.inspectionExpiry ?? "";
+  result.modelType ||= official.modelType ?? "";
+  if (!result.chassisNumber) result.chassisNumber = inferChassisNumber(cleaned);
+  return result;
+};
