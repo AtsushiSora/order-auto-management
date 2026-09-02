@@ -40,6 +40,7 @@ export function PaymentsPage() {
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [processingId, setProcessingId] = useState<string | null>(null);
+  const [confirmingId, setConfirmingId] = useState<string | null>(null);
   const [listError, setListError] = useState("");
 
   const filtered = data.cashflows.filter((cashflow) => {
@@ -106,7 +107,7 @@ export function PaymentsPage() {
     }
   };
 
-  const markCompleted = async (cashflowId: string) => {
+  const requestCompletion = (cashflowId: string) => {
     const cashflow = data.cashflows.find((item) => item.id === cashflowId);
     if (!cashflow || cashflow.status === "完了") return;
     const vehicle = data.vehicles.find((item) => item.id === cashflow.vehicleId);
@@ -114,14 +115,28 @@ export function PaymentsPage() {
       setListError("買取代金は対象車両の入庫を確定するまで支払済みにできません。");
       return;
     }
-    const remaining = outstandingAmount(cashflow.amount, cashflow.processedAmount);
-    if (!window.confirm(`${cashflow.description}の残額 ${formatCurrency(remaining)} を完了にしますか？`)) return;
+    setListError("");
+    setConfirmingId(cashflowId);
+  };
+
+  const markCompleted = async (cashflowId: string) => {
     setProcessingId(cashflowId);
     setListError("");
-    try { await completeCashflow(cashflowId, new Date().toISOString().slice(0, 10)); }
+    try {
+      await completeCashflow(cashflowId, new Date().toISOString().slice(0, 10));
+      setConfirmingId(null);
+    }
     catch (reason) { setListError(reason instanceof Error ? reason.message : "入出金を完了できませんでした。"); }
     finally { setProcessingId(null); }
   };
+
+  const confirmingCashflow = data.cashflows.find((cashflow) => cashflow.id === confirmingId) ?? null;
+  const confirmingVehicle = confirmingCashflow
+    ? data.vehicles.find((vehicle) => vehicle.id === confirmingCashflow.vehicleId)
+    : null;
+  const confirmingRemaining = confirmingCashflow
+    ? outstandingAmount(confirmingCashflow.amount, confirmingCashflow.processedAmount)
+    : 0;
 
   return (
     <>
@@ -195,7 +210,7 @@ export function PaymentsPage() {
                     <td className="number-cell">{formatCurrency(cashflow.amount)}</td>
                     <td className={`number-cell ${remaining > 0 ? "remaining-value" : ""}`}><strong>{formatCurrency(remaining)}</strong></td>
                     <td className="cashflow-action-cell">
-                      {cashflow.status === "完了" ? <span className="completed-label"><CheckCircle2 size={16} />完了</span> : cashflow.kind === "買取代金" && vehicle?.status === "入庫予定" ? <span className="locked-label"><LockKeyhole size={15} />入庫待ち</span> : cashflow.staffSettlementId && !canSettleStaff ? <span className="locked-label"><LockKeyhole size={15} />事業主・経理のみ</span> : canManage ? <button type="button" className="small-action-button" disabled={processingId === cashflow.id} onClick={() => void markCompleted(cashflow.id)}>{processingId === cashflow.id ? "処理中" : cashflow.direction === "支払い" ? "支払済みにする" : "入金済みにする"}</button> : <span className="muted-cell">閲覧のみ</span>}
+                      {cashflow.status === "完了" ? <span className="completed-label"><CheckCircle2 size={16} />完了</span> : cashflow.kind === "買取代金" && vehicle?.status === "入庫予定" ? <span className="locked-label"><LockKeyhole size={15} />入庫待ち</span> : cashflow.staffSettlementId && !canSettleStaff ? <span className="locked-label"><LockKeyhole size={15} />事業主・経理のみ</span> : canManage ? <button type="button" className="small-action-button" disabled={processingId === cashflow.id} onClick={() => requestCompletion(cashflow.id)}>{processingId === cashflow.id ? "処理中" : cashflow.direction === "支払い" ? "支払済みにする" : "入金済みにする"}</button> : <span className="muted-cell">閲覧のみ</span>}
                     </td>
                   </tr>
                 );
@@ -265,6 +280,34 @@ export function PaymentsPage() {
               <button type="submit" className="primary-button" disabled={submitting}>{submitting ? "登録中" : "登録する"}</button>
             </div>
           </form>
+        </Drawer>
+      ) : null}
+
+      {confirmingCashflow ? (
+        <Drawer
+          title={confirmingCashflow.direction === "支払い" ? "支払い完了を確認" : "入金完了を確認"}
+          subtitle="処理日には本日の日付を記録します。"
+          onClose={() => setConfirmingId(null)}
+        >
+          <div className="form-stack">
+            <section className="form-section">
+              <h3>{confirmingCashflow.description}</h3>
+              <dl className="amount-summary">
+                <div><dt>対象</dt><dd>{confirmingVehicle ? `${confirmingVehicle.managementNumber} ${confirmingVehicle.name}` : "事業全体"}</dd></div>
+                <div><dt>方法</dt><dd>{confirmingCashflow.method}</dd></div>
+                <div><dt>処理前の残額</dt><dd>{formatCurrency(confirmingRemaining)}</dd></div>
+                <div className="total"><dt>今回完了にする金額</dt><dd>{formatCurrency(confirmingRemaining)}</dd></div>
+              </dl>
+              <p className="form-hint">金額と実際の入出金を確認してから確定してください。</p>
+            </section>
+            {listError ? <p className="form-error">{listError}</p> : null}
+            <div className="form-actions">
+              <button type="button" className="secondary-button" disabled={processingId !== null} onClick={() => setConfirmingId(null)}>キャンセル</button>
+              <button type="button" className="primary-button" disabled={processingId !== null} onClick={() => void markCompleted(confirmingCashflow.id)}>
+                {processingId === confirmingCashflow.id ? "処理中" : confirmingCashflow.direction === "支払い" ? "支払済みにする" : "入金済みにする"}
+              </button>
+            </div>
+          </div>
         </Drawer>
       ) : null}
     </>
