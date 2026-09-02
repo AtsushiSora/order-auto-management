@@ -1,6 +1,7 @@
-import { Pencil, Plus, Search } from "lucide-react";
+import { Paperclip, Pencil, Plus, Search } from "lucide-react";
 import { useMemo, useState, type FormEvent } from "react";
 import { Drawer } from "../components/Drawer";
+import { ExpenseEvidenceDrawer } from "../components/ExpenseEvidenceDrawer";
 import { PageHeader } from "../components/PageHeader";
 import { StatusBadge } from "../components/StatusBadge";
 import { formatCurrency, formatDate } from "../lib/format";
@@ -37,12 +38,16 @@ export function ExpensesPage() {
   const { data, saveExpense } = useAppData();
   const { profile } = useAuth();
   const canEdit = profile?.role === "owner" || profile?.role === "regular" || profile?.role === "accounting";
+  const isOwner = profile?.role === "owner";
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [scope, setScope] = useState<"すべて" | "車両" | "事業全体">("すべて");
   const [form, setForm] = useState<SaveExpenseInput>(initialExpense);
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [evidenceExpenseId, setEvidenceExpenseId] = useState<string | null>(null);
+
+  const evidenceExpense = data.expenses.find((expense) => expense.id === evidenceExpenseId) ?? null;
 
   const filtered = useMemo(() => {
     const keyword = search.trim().toLowerCase();
@@ -160,6 +165,7 @@ export function ExpensesPage() {
                 <th>区分</th>
                 <th>支払い</th>
                 <th className="number-cell">金額</th>
+                <th>証憑</th>
                 <th>操作</th>
               </tr>
             </thead>
@@ -178,6 +184,12 @@ export function ExpensesPage() {
                     <td><StatusBadge>{expense.expenseStatus}</StatusBadge></td>
                     <td><StatusBadge>{expense.paymentStatus}</StatusBadge></td>
                     <td className="number-cell"><strong>{formatCurrency(expense.amount)}</strong></td>
+                    <td>
+                      <button type="button" className="table-action-button" onClick={() => setEvidenceExpenseId(expense.id)}>
+                        <Paperclip size={14} />
+                        {data.attachments.filter((item) => item.expenseId === expense.id).length || "追加"}
+                      </button>
+                    </td>
                     <td>{canEdit ? <button type="button" className="text-button" onClick={() => openEdit(expense)}><Pencil size={15} />修正</button> : null}</td>
                   </tr>
                 );
@@ -256,6 +268,16 @@ export function ExpensesPage() {
             </div>
           </form>
         </Drawer>
+      ) : null}
+
+      {evidenceExpense ? (
+        <ExpenseEvidenceDrawer
+          expense={evidenceExpense}
+          attachments={data.attachments.filter((item) => item.expenseId === evidenceExpense.id)}
+          canUpload={canEdit}
+          isOwner={isOwner}
+          onClose={() => setEvidenceExpenseId(null)}
+        />
       ) : null}
     </>
   );

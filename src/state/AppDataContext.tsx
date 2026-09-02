@@ -10,10 +10,12 @@ import {
 import { DataLoadError, SystemLoading } from "../components/SystemState";
 import { seedData } from "../data/seed";
 import { buildAntiqueLedgerEntries } from "../lib/antiqueLedger";
+import { buildExpenseEvidencePath, PRIVATE_BUCKET, validateEvidenceFile } from "../lib/evidence";
 import { supabase } from "../lib/supabase";
 import {
   antiqueLedgerDetailToDb,
   mapApprovalFromDb,
+  mapAttachmentFromDb,
   mapAntiqueLedgerDetailFromDb,
   mapCashflowFromDb,
   mapContractFromDb,
@@ -37,6 +39,8 @@ import {
 } from "../lib/supabaseData";
 import type {
   AppData,
+  Attachment,
+  AttachmentCategory,
   NewCashflowInput,
   NewExpenseInput,
   NewVehicleInput,
@@ -55,10 +59,12 @@ import type {
 import { useAuth } from "./AuthContext";
 
 const STORAGE_KEY = "order-auto-management-demo-v1";
+const demoEvidenceUrls = new Map<string, string>();
 const emptyData: AppData = {
   vehicles: [],
   vehicleDocuments: [],
   expenses: [],
+  attachments: [],
   cashflows: [],
   contracts: [],
   approvals: [],
@@ -81,6 +87,9 @@ type AppDataContextValue = {
   archiveVehicle: (vehicleId: string) => Promise<void>;
   addExpense: (input: NewExpenseInput) => Promise<void>;
   saveExpense: (input: SaveExpenseInput) => Promise<void>;
+  uploadExpenseAttachment: (expenseId: string, category: AttachmentCategory, file: File) => Promise<void>;
+  getAttachmentUrl: (attachmentId: string) => Promise<string>;
+  deleteAttachment: (attachmentId: string) => Promise<void>;
   addCashflow: (input: NewCashflowInput) => Promise<void>;
   completeCashflow: (cashflowId: string, processedOn: string) => Promise<void>;
   savePurchaseContract: (input: PurchaseContractInput) => Promise<void>;
@@ -130,6 +139,7 @@ const loadInitialDemoData = (): AppData => {
         ...expense,
         paymentMethod: expense.paymentMethod ?? "振込",
       })),
+      attachments: parsed.attachments ?? [],
       cashflows: (parsed.cashflows ?? seed.cashflows).map((cashflow) => ({
         ...cashflow,
         kind: cashflow.kind ?? demoCashflowKind(cashflow),
@@ -184,10 +194,11 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     setLoading(true);
     setLoadError(null);
     try {
-      const [vehiclesResult, documentsResult, expensesResult, cashflowsResult, contractsResult, approvalsResult, inquiriesResult, ledgerResult, journalReviewsResult, journalExportsResult] = await Promise.all([
+      const [vehiclesResult, documentsResult, expensesResult, attachmentsResult, cashflowsResult, contractsResult, approvalsResult, inquiriesResult, ledgerResult, journalReviewsResult, journalExportsResult] = await Promise.all([
         supabase.from("vehicles").select("*").is("deleted_at", null).order("created_at", { ascending: false }),
         supabase.from("vehicle_documents").select("*").order("created_at", { ascending: true }),
         supabase.from("expenses").select("*").is("deleted_at", null).order("incurred_on", { ascending: false }),
+        supabase.from("attachments").select("*").order("created_at", { ascending: false }),
         supabase.from("cashflows").select("*").is("deleted_at", null).order("scheduled_on", { ascending: false }),
         supabase.from("contracts").select("*").is("deleted_at", null).order("updated_at", { ascending: false }),
         supabase.from("approvals").select("*").order("created_at", { ascending: false }),
@@ -197,7 +208,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         supabase.from("journal_exports").select("*").order("created_at", { ascending: false }),
       ]);
 
-      const firstError = [vehiclesResult, documentsResult, expensesResult, cashflowsResult, contractsResult, approvalsResult, inquiriesResult, ledgerResult, journalReviewsResult, journalExportsResult]
+      const firstError = [vehiclesResult, documentsResult, expensesResult, attachmentsResult, cashflowsResult, contractsResult, approvalsResult, inquiriesResult, ledgerResult, journalReviewsResult, journalExportsResult]
         .find((result) => result.error)?.error;
       if (firstError) throw firstError;
 
@@ -205,6 +216,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         vehicles: (vehiclesResult.data ?? []).map(mapVehicleFromDb),
         vehicleDocuments: (documentsResult.data ?? []).map(mapVehicleDocumentFromDb),
         expenses: (expensesResult.data ?? []).map(mapExpenseFromDb),
+        attachments: (attachmentsResult.data ?? []).map(mapAttachmentFromDb),
         cashflows: (cashflowsResult.data ?? []).map(mapCashflowFromDb),
         contracts: (contractsResult.data ?? []).map(mapContractFromDb),
         approvals: (approvalsResult.data ?? []).map(mapApprovalFromDb),
@@ -500,6 +512,86 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     },
     addExpense: async (input) => persistExpense({ ...input, expenseId: null }),
     saveExpense: persistExpense,
+    uploadExpenseAttachment: async (expenseId, category, file) => {
+      const expense = data.expenses.find((item) => item.id === expenseId);
+      if (!expense) throw new Error("対象の経費が見つかりません。");
+      const { mimeType, extension } = validateEvidenceFile(file);
+      const attachmentId = crypto.randomUUID();
+      const storagePath = buildExpenseEvidencePath(expenseId, attachmentId, extension);
+
+      if (configured && supabase) {
+        const { error: uploadError } = await supabase.storage
+          .from(PRIVATE_BUCKET)
+          .upload(storagePath, file, { contentType: mimeType, upsert: false });
+        if (uploadError) throw new Error(`ファイルを保存できませんでした：${uploadError.message}`);
+
+        const { data: inserted, error: metadataError } = await supabase
+          .from("attachments")
+          .insert({
+            id: attachmentId,
+            expense_id: expenseId,
+            category,
+            original_file_name: file.name.trim().slice(0, 255) || `証憑.${extension}`,
+            storage_path: storagePath,
+            mime_type: mimeType,
+            byte_size: file.size,
+          })
+          .select("*")
+          .single();
+        if (metadataError) throw new Error(`添付情報を登録できませんでした：${metadataError.message}`);
+        const attachment = mapAttachmentFromDb(inserted);
+        setData((current) => ({ ...current, attachments: [attachment, ...current.attachments] }));
+        return;
+      }
+
+      const objectUrl = URL.createObjectURL(file);
+      demoEvidenceUrls.set(attachmentId, objectUrl);
+      const attachment: Attachment = {
+        id: attachmentId,
+        vehicleId: null,
+        contractId: null,
+        expenseId,
+        category,
+        originalFileName: file.name,
+        storagePath: `demo:${attachmentId}`,
+        mimeType,
+        byteSize: file.size,
+        createdAt: new Date().toISOString(),
+      };
+      setData((current) => ({ ...current, attachments: [attachment, ...current.attachments] }));
+    },
+    getAttachmentUrl: async (attachmentId) => {
+      const attachment = data.attachments.find((item) => item.id === attachmentId);
+      if (!attachment) throw new Error("対象の証憑が見つかりません。");
+      if (configured && supabase) {
+        const { data: signed, error } = await supabase.storage
+          .from(PRIVATE_BUCKET)
+          .createSignedUrl(attachment.storagePath, 60);
+        if (error || !signed?.signedUrl) throw new Error(`証憑を開けませんでした：${error?.message ?? "URLを作成できませんでした。"}`);
+        return signed.signedUrl;
+      }
+      const objectUrl = demoEvidenceUrls.get(attachmentId);
+      if (!objectUrl) throw new Error("デモモードのファイル本体は画面を再読み込みすると消去されます。もう一度添付してください。");
+      return objectUrl;
+    },
+    deleteAttachment: async (attachmentId) => {
+      const attachment = data.attachments.find((item) => item.id === attachmentId);
+      if (!attachment) throw new Error("対象の証憑が見つかりません。");
+      if (configured && supabase) {
+        const { error: metadataError } = await supabase.from("attachments").delete().eq("id", attachmentId);
+        if (metadataError) throw new Error(`添付情報を削除できませんでした：${metadataError.message}`);
+        const { error: storageError } = await supabase.storage.from(PRIVATE_BUCKET).remove([attachment.storagePath]);
+        if (storageError) throw new Error(`添付情報は削除しましたが、ファイルの削除に失敗しました：${storageError.message}`);
+      } else {
+        const objectUrl = demoEvidenceUrls.get(attachmentId);
+        if (objectUrl) URL.revokeObjectURL(objectUrl);
+        demoEvidenceUrls.delete(attachmentId);
+      }
+      setData((current) => ({
+        ...current,
+        attachments: current.attachments.filter((item) => item.id !== attachmentId),
+      }));
+    },
     addCashflow: async (input) => {
       if (configured && supabase) {
         const { data: inserted, error } = await supabase

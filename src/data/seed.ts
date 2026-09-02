@@ -120,6 +120,7 @@ export const seedData: AppData = {
     },
   ],
   vehicleDocuments: [],
+  attachments: [],
   expenses: [
     {
       id: "expense-001",

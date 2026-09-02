@@ -1,6 +1,7 @@
 import type {
   AcquisitionSource,
   AntiqueLedgerDetail,
+  Attachment,
   Approval,
   Cashflow,
   CashflowDirection,
@@ -446,6 +447,22 @@ export const mapExpenseFromDb = (source: unknown): Expense => {
     paymentStatus: paymentStatusFromDb[stringValue(row, "payment_status")] ?? "未払い",
     paymentMethod: paymentMethodFromDb[stringValue(row, "payment_method")] ?? "振込",
     incurredOn: stringValue(row, "incurred_on"),
+    createdAt: stringValue(row, "created_at"),
+  };
+};
+
+export const mapAttachmentFromDb = (source: unknown): Attachment => {
+  const row = source as DbRow;
+  return {
+    id: stringValue(row, "id"),
+    vehicleId: nullableString(row, "vehicle_id"),
+    contractId: nullableString(row, "contract_id"),
+    expenseId: nullableString(row, "expense_id"),
+    category: stringValue(row, "category") as Attachment["category"],
+    originalFileName: stringValue(row, "original_file_name"),
+    storagePath: stringValue(row, "storage_path"),
+    mimeType: stringValue(row, "mime_type"),
+    byteSize: numberValue(row, "byte_size"),
     createdAt: stringValue(row, "created_at"),
   };
 };

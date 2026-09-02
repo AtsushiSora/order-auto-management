@@ -103,6 +103,26 @@ export type Expense = {
   createdAt: string;
 };
 
+export type AttachmentCategory =
+  | "領収書"
+  | "請求書"
+  | "オークション計算書"
+  | "振込明細"
+  | "その他";
+
+export type Attachment = {
+  id: string;
+  vehicleId: string | null;
+  contractId: string | null;
+  expenseId: string | null;
+  category: AttachmentCategory;
+  originalFileName: string;
+  storagePath: string;
+  mimeType: string;
+  byteSize: number;
+  createdAt: string;
+};
+
 export type CashflowDirection = "入金" | "支払い";
 export type CashflowStatus = "未処理" | "一部" | "完了";
 export type CashflowKind = "買取代金" | "販売代金" | "経費支払い" | "返金" | "その他";
@@ -256,6 +276,7 @@ export type AppData = {
   vehicles: Vehicle[];
   vehicleDocuments: VehicleDocument[];
   expenses: Expense[];
+  attachments: Attachment[];
   cashflows: Cashflow[];
   contracts: Contract[];
   approvals: Approval[];

@@ -2719,6 +2719,111 @@ button.mini-summary-card:hover {
   display: none;
 }
 
+.evidence-upload-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.evidence-upload-actions .file-button {
+  width: 100%;
+}
+
+.evidence-count {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--slate-500);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.evidence-list {
+  display: grid;
+  gap: 9px;
+}
+
+.evidence-item {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 11px;
+  padding: 11px;
+  border: 1px solid var(--slate-200);
+  border-radius: 9px;
+  background: var(--slate-100);
+}
+
+.evidence-item > svg {
+  color: var(--blue-600);
+}
+
+.evidence-item-copy {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.evidence-item-copy strong {
+  color: var(--slate-800);
+  font-size: 12px;
+}
+
+.evidence-item-copy span {
+  overflow: hidden;
+  color: var(--slate-600);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.evidence-item-copy small {
+  color: var(--slate-500);
+  font-size: 10px;
+}
+
+.evidence-item-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.evidence-item-actions .icon-button {
+  width: 34px;
+  height: 34px;
+}
+
+.danger-icon-button {
+  color: var(--red-700);
+}
+
+.danger-icon-button:hover {
+  border-color: #f1b9bd;
+  background: var(--red-100);
+}
+
+.evidence-empty {
+  min-height: 135px;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 8px;
+  color: var(--slate-400);
+  text-align: center;
+}
+
+.evidence-empty p {
+  margin: 0;
+  color: var(--slate-500);
+  font-size: 11px;
+}
+
+@media (max-width: 560px) {
+  .evidence-upload-actions {
+    grid-template-columns: 1fr;
+  }
+}
+
 .inspection-read-actions {
   display: flex;
   flex-wrap: wrap;
