@@ -79,9 +79,10 @@ export function AccountingPage() {
   const pending = monthly.length - confirmed.length;
   const exportsForMonth = data.journalExports.filter((item) => item.targetMonth === targetMonth);
   const balanceCheck = data.monthlyBalanceChecks.find((item) => item.targetMonth === targetMonth);
-  const previousCheck = [...data.monthlyBalanceChecks]
-    .filter((item) => item.targetMonth < targetMonth && item.status === "確定")
-    .sort((left, right) => right.targetMonth.localeCompare(left.targetMonth))[0];
+  const previousMonthDate = new Date(`${targetMonth}-01T00:00:00Z`);
+  previousMonthDate.setUTCMonth(previousMonthDate.getUTCMonth() - 1);
+  const previousMonth = previousMonthDate.toISOString().slice(0, 7);
+  const previousCheck = data.monthlyBalanceChecks.find((item) => item.targetMonth === previousMonth && item.status === "確定");
   const movement = useMemo(
     () => calculateMonthlyMovement(data.cashflows, data.cashflowEvents, targetMonth),
     [data.cashflows, data.cashflowEvents, targetMonth],
@@ -106,8 +107,8 @@ export function AccountingPage() {
     } : {
       openingCashBalance: previousCash,
       openingBankBalance: previousBank,
-      actualCashBalance: previousCash + movement.cash,
-      actualBankBalance: previousBank + movement.bank,
+      actualCashBalance: Math.max(0, previousCash + movement.cash),
+      actualBankBalance: Math.max(0, previousBank + movement.bank),
       note: "",
     });
     setBalanceMessage("");
@@ -198,7 +199,7 @@ export function AccountingPage() {
       </section>
 
       <div className="filter-bar panel accounting-filter-bar">
-        <label className="month-field"><span>対象月</span><input type="month" value={targetMonth} onChange={(event) => { setTargetMonth(event.target.value); setStatusFilter("すべて"); }} /></label>
+        <label className="month-field"><span>対象月</span><input type="month" max={new Date().toISOString().slice(0, 7)} value={targetMonth} onChange={(event) => { setTargetMonth(event.target.value); setStatusFilter("すべて"); }} /></label>
         <div className="segmented-control" aria-label="確認状態">
           {(["すべて", "未確認", "確認済み"] as const).map((status) => <button type="button" key={status} className={statusFilter === status ? "active" : ""} onClick={() => setStatusFilter(status)}>{status}</button>)}
         </div>
@@ -232,7 +233,7 @@ export function AccountingPage() {
 
         {movement.excluded > 0 ? <p className="form-warning">ローン・カード・その他の入出金 {formatCurrency(movement.excluded)} は、現金・口座残高の照合対象外です。</p> : null}
         <label className="field-label monthly-balance-note">確認メモ<textarea rows={2} value={balanceForm.note} disabled={!canSaveBalance || balanceCheck?.status === "確定"} onChange={(event) => setBalanceForm({ ...balanceForm, note: event.target.value })} placeholder="差額の確認内容など" /></label>
-        {previousCheck ? <p className="balance-helper">直近の確定月（{previousCheck.targetMonth}）の月末残高を初期値にしています。</p> : <p className="balance-helper">初回は通帳・現金を確認し、対象月の月初残高を入力してください。</p>}
+        {previousCheck ? <p className="balance-helper">前月（{previousCheck.targetMonth}）の確定済み月末残高を初期値にしています。</p> : <p className="balance-helper">前月の確定データがないため、通帳・現金を確認して対象月の月初残高を入力してください。</p>}
         {balanceMessage ? <p className={balanceMessage.includes("できません") || balanceMessage.includes("ください") ? "form-error" : "form-success"}>{balanceMessage}</p> : null}
         <div className="form-actions monthly-balance-actions">
           {balanceCheck?.status === "確定" ? <span className="confirmed-lock"><LockKeyhole size={17} />確定済みのため変更できません</span> : canSaveBalance ? <>
