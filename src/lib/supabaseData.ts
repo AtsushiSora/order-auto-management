@@ -396,12 +396,6 @@ export const spotAssignmentToRpc = (input: SaveSpotAssignmentInput) => ({
   p_referral_note: input.referralNote.trim(),
 });
 
-export const spotReferralToRpc = (businessType: SpotAssignment["businessType"], leadLabel: string, referralNote: string) => ({
-  p_business_type: staffBusinessToDb[businessType],
-  p_lead_label: leadLabel.trim(),
-  p_referral_note: referralNote.trim(),
-});
-
 export const spotPurchaseContractToRpc = (assignmentId: string, input: PurchaseContractInput) => ({
   p_assignment_id: assignmentId,
   ...purchaseContractToRpc(input),

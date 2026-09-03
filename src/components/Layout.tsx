@@ -64,16 +64,20 @@ export function Layout({
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const { profile, signOut, isTestSession, switchTestRole } = useAuth();
   const { isDemo } = useAppData();
-  const visibleNavItems = navItems.filter((item) => {
-    if (profile?.role === "spot") return item.spotOnly || item.id === "staff-settlements";
-    return !item.spotOnly && (!item.ownerOnly || profile?.role === "owner");
-  });
+  const visibleNavItems = navItems
+    .filter((item) => {
+      if (profile?.role === "spot") return item.spotOnly || item.id === "staff-settlements";
+      return !item.spotOnly && (!item.ownerOnly || profile?.role === "owner");
+    })
+    .map((item) => profile?.role === "spot" && item.id === "staff-settlements"
+      ? { ...item, label: "紹介料確認" }
+      : item);
   const userLabel = profile?.displayName ?? "利用者";
   const roleLabel = profile ? staffRoleLabels[profile.role] : "確認中";
   const mobileNavItems = profile?.role === "spot"
     ? [
         { id: "spot-workspace" as PageId, label: "担当案件", icon: BriefcaseBusiness },
-        { id: "staff-settlements" as PageId, label: "精算", icon: Users },
+        { id: "staff-settlements" as PageId, label: "紹介料", icon: Users },
       ]
     : [
         { id: "dashboard" as PageId, label: "TOP", icon: Home },

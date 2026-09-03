@@ -26,7 +26,6 @@ import {
   issueDocumentToRpc,
   staffSettlementToRpc,
   spotAssignmentToRpc,
-  spotReferralToRpc,
 } from "./supabaseData";
 
 describe("Supabaseデータ変換", () => {
@@ -530,10 +529,5 @@ describe("Supabaseデータ変換", () => {
       p_lead_label: "事故車の紹介",
     });
 
-    expect(spotReferralToRpc("買取・オークション", " 紹介先 ", " 内容 ")).toEqual({
-      p_business_type: "purchase_auction",
-      p_lead_label: "紹介先",
-      p_referral_note: "内容",
-    });
   });
 });

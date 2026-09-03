@@ -3,7 +3,6 @@ import {
   ExternalLink,
   FileSignature,
   Handshake,
-  Plus,
   ShoppingCart,
 } from "lucide-react";
 import { useState, type FormEvent } from "react";
@@ -25,14 +24,8 @@ import type {
   PurchaseContractInput,
   SaleContractInput,
   SpotAssignment,
-  StaffBusinessType,
 } from "../types";
 
-const businessTypes: StaffBusinessType[] = [
-  "販売",
-  "買取・オークション",
-  "廃車",
-];
 const acquisitionSources: AcquisitionSource[] = [
   "一般のお客様",
   "オークション",
@@ -71,8 +64,6 @@ export function SpotWorkspacePage() {
   const { profile } = useAuth();
   const {
     data,
-    createSpotReferral,
-    updateSpotReferral,
     saveSpotPurchaseContract,
     saveSpotSaleContract,
     issueContractHandoff,
@@ -83,13 +74,6 @@ export function SpotWorkspacePage() {
   const activeCount = assignments.filter(
     (item) => item.status === "進行中",
   ).length;
-  const [referralOpen, setReferralOpen] = useState(false);
-  const [editingReferral, setEditingReferral] = useState<SpotAssignment | null>(
-    null,
-  );
-  const [businessType, setBusinessType] = useState<StaffBusinessType>("販売");
-  const [leadLabel, setLeadLabel] = useState("");
-  const [referralNote, setReferralNote] = useState("");
   const [contractAssignment, setContractAssignment] =
     useState<SpotAssignment | null>(null);
   const [purchaseForm, setPurchaseForm] =
@@ -111,35 +95,6 @@ export function SpotWorkspacePage() {
     return vehicle
       ? `${vehicle.managementNumber} ${vehicle.name}`
       : "車両登録前";
-  };
-
-  const openReferral = (assignment?: SpotAssignment) => {
-    setEditingReferral(assignment ?? null);
-    setBusinessType(assignment?.businessType ?? "販売");
-    setLeadLabel(assignment?.leadLabel ?? "");
-    setReferralNote(assignment?.referralNote ?? "");
-    setError("");
-    setReferralOpen(true);
-  };
-
-  const submitReferral = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    setBusy(true);
-    setError("");
-    try {
-      if (editingReferral)
-        await updateSpotReferral(editingReferral.id, leadLabel, referralNote);
-      else await createSpotReferral(businessType, leadLabel, referralNote);
-      setReferralOpen(false);
-    } catch (reason) {
-      setError(
-        reason instanceof Error
-          ? reason.message
-          : "紹介を保存できませんでした。",
-      );
-    } finally {
-      setBusy(false);
-    }
   };
 
   const openContract = (assignment: SpotAssignment) => {
@@ -321,17 +276,7 @@ export function SpotWorkspacePage() {
     <>
       <PageHeader
         title="担当案件"
-        description="自分に割り当てられた案件と、自分が登録した紹介だけを表示します。"
-        action={
-          <button
-            type="button"
-            className="primary-button"
-            onClick={() => openReferral()}
-          >
-            <Plus size={20} />
-            紹介を登録
-          </button>
-        }
+        description="事業主から割り当てられた案件の確認と、契約書の作成・署名を行います。"
       />
       <section className="mini-summary-grid">
         <div className="mini-summary-card blue">
@@ -398,16 +343,6 @@ export function SpotWorkspacePage() {
                 <p>{assignment.referralNote}</p>
               ) : null}
               <div className="spot-assignment-actions">
-                {assignment.status === "進行中" &&
-                assignment.engagementType === "紹介のみ" ? (
-                  <button
-                    type="button"
-                    className="secondary-button"
-                    onClick={() => openReferral(assignment)}
-                  >
-                    紹介内容を修正
-                  </button>
-                ) : null}
                 {canContract ? (
                   <button
                     type="button"
@@ -426,73 +361,10 @@ export function SpotWorkspacePage() {
         {!assignments.length ? (
           <div className="panel table-empty spot-assignment-empty">
             <BriefcaseBusiness size={32} />
-            <p>担当案件はまだありません。紹介案件は右上から登録できます。</p>
+            <p>担当案件はまだありません。事業主から割り当てられると、ここに表示されます。</p>
           </div>
         ) : null}
       </section>
-
-      {referralOpen ? (
-        <Drawer
-          title={editingReferral ? "紹介内容を修正" : "紹介を登録"}
-          subtitle="登録した紹介は事業主にも共有されます。"
-          onClose={() => setReferralOpen(false)}
-        >
-          <form className="form-stack" onSubmit={submitReferral}>
-            <section className="form-section">
-              <h3>紹介内容</h3>
-              <label className="field-label">
-                業務区分
-                <select
-                  value={businessType}
-                  disabled={Boolean(editingReferral)}
-                  onChange={(event) =>
-                    setBusinessType(event.target.value as StaffBusinessType)
-                  }
-                >
-                  {businessTypes.map((item) => (
-                    <option key={item}>{item}</option>
-                  ))}
-                </select>
-              </label>
-              <label className="field-label">
-                紹介先・案件名 <span className="required">必須</span>
-                <input
-                  maxLength={160}
-                  value={leadLabel}
-                  onChange={(event) => setLeadLabel(event.target.value)}
-                  placeholder="お客様名・業者名・案件の呼び名"
-                />
-              </label>
-              <label className="field-label">
-                紹介内容
-                <textarea
-                  maxLength={1000}
-                  value={referralNote}
-                  onChange={(event) => setReferralNote(event.target.value)}
-                  placeholder="連絡先を直接書く場合は必要な範囲だけ入力してください"
-                />
-              </label>
-            </section>
-            {error ? <p className="form-error">{error}</p> : null}
-            <div className="form-actions">
-              <button
-                type="button"
-                className="secondary-button"
-                onClick={() => setReferralOpen(false)}
-              >
-                キャンセル
-              </button>
-              <button
-                type="submit"
-                className="primary-button"
-                disabled={busy || !leadLabel.trim()}
-              >
-                {busy ? "保存中" : "保存する"}
-              </button>
-            </div>
-          </form>
-        </Drawer>
-      ) : null}
 
       {contractAssignment && contractAssignment.businessType !== "販売" ? (
         <Drawer

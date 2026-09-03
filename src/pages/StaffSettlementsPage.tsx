@@ -167,6 +167,62 @@ export function StaffSettlementsPage() {
     return vehicle ? `${vehicle.managementNumber} ${vehicle.name}` : "車両情報なし";
   };
 
+  if (profile?.role === "spot") {
+    return (
+      <>
+        <PageHeader
+          title="紹介料・報酬の確認"
+          description="事業主が登録した紹介料・報酬の金額と支払い状況を確認できます。入力や変更はできません。"
+        />
+
+        <section className="mini-summary-grid">
+          <div className="mini-summary-card amber"><small>支給予定・未払い</small><strong>{formatCurrency(totals.payable)}</strong></div>
+          <div className="mini-summary-card blue"><small>請求予定・未回収</small><strong>{formatCurrency(totals.receivable)}</strong></div>
+          <div className="mini-summary-card green"><small>精算済み累計</small><strong>{formatCurrency(totals.settled)}</strong></div>
+        </section>
+
+        <div className="filter-bar panel">
+          <div className="segmented-control" aria-label="紹介料・報酬の状態">
+            {(["すべて", "予定", "確定", "精算済み", "取消"] as const).map((status) => (
+              <button type="button" key={status} className={statusFilter === status ? "active" : ""} onClick={() => setStatusFilter(status)}>{status}</button>
+            ))}
+          </div>
+          <div className="result-count">{visibleSettlements.length}件</div>
+        </div>
+
+        <section className="spot-assignment-grid spot-settlement-review-grid">
+          {visibleSettlements.map((settlement) => (
+            <article className="panel spot-assignment-card spot-settlement-review-card" key={settlement.id}>
+              <div className="spot-assignment-heading">
+                <span><Users size={21} /></span>
+                <div>
+                  <strong>{vehicleLabel(settlement.vehicleId)}</strong>
+                  <small>{settlement.businessType}・{settlement.engagementType}</small>
+                </div>
+                <StatusBadge>{settlement.status}</StatusBadge>
+              </div>
+              <dl>
+                <div><dt>内容</dt><dd>{settlement.direction === "スタッフへ支給" ? "紹介料・報酬" : "合意済み請求"}</dd></div>
+                <div><dt>金額</dt><dd>{formatCurrency(staffSettlementDisplayAmount(settlement))}</dd></div>
+                <div><dt>条件</dt><dd>{staffSettlementCondition(settlement)}</dd></div>
+                <div><dt>精算方法</dt><dd>{settlement.paymentMethod}</dd></div>
+              </dl>
+              {settlement.confirmedAmount !== null && settlement.confirmedAmount !== settlement.plannedAmount ? (
+                <p>予定額は {formatCurrency(settlement.plannedAmount)}、確定額は {formatCurrency(settlement.confirmedAmount)} です。</p>
+              ) : null}
+            </article>
+          ))}
+          {!visibleSettlements.length ? (
+            <div className="panel table-empty spot-assignment-empty">
+              <Users size={32} />
+              <p>確認できる紹介料・報酬はまだありません。</p>
+            </div>
+          ) : null}
+        </section>
+      </>
+    );
+  }
+
   const openAssignment = (assignment?: SpotAssignment) => {
     setAssignmentForm({
       assignmentId: assignment?.id ?? null,
@@ -201,7 +257,7 @@ export function StaffSettlementsPage() {
     <>
       <PageHeader title="スタッフ精算" description="通常・スポットスタッフの担当案件、紹介料、成果報酬、合意済みの例外請求を管理します。" action={isOwner ? <div className="page-header-actions"><button type="button" className="secondary-button" onClick={() => openAssignment()}><BriefcaseBusiness size={20} />担当案件を登録</button><button type="button" className="primary-button" onClick={openNew}><Plus size={20} />精算予定を登録</button></div> : undefined} />
 
-      {isOwner || profile?.role === "accounting" ? <section className="panel spot-management-panel"><div className="section-heading"><div><h2>スポット担当案件</h2><p>本人には、ここで割り当てた案件と本人が登録した紹介だけが表示されます。</p></div></div><div className="spot-management-list">{data.spotAssignments.map((assignment) => <article key={assignment.id}><div><strong>{assignment.leadLabel || (assignment.vehicleId ? vehicleLabel(assignment.vehicleId) : "名称未入力")}</strong><span>{staffName(assignment.staffId)}・{assignment.businessType}・{assignment.engagementType}</span></div><StatusBadge>{assignment.status}</StatusBadge><div className="staff-settlement-actions">{isOwner && assignment.status === "進行中" && !assignment.contractId ? <button type="button" className="table-action-button" onClick={() => openAssignment(assignment)}><Pencil size={14} />修正</button> : null}{isOwner && assignment.status === "進行中" ? <><button type="button" className="table-action-button" onClick={() => void finishAssignment(assignment, false)}>完了</button><button type="button" className="table-action-button danger-table-button" onClick={() => void finishAssignment(assignment, true)}>取消</button></> : null}</div></article>)}{!data.spotAssignments.length ? <div className="table-empty"><BriefcaseBusiness size={27} /><p>スポット担当案件はまだありません。</p></div> : null}</div></section> : null}
+      {isOwner || profile?.role === "accounting" ? <section className="panel spot-management-panel"><div className="section-heading"><div><h2>スポット担当案件</h2><p>本人には、ここで事業主が割り当てた案件だけが表示されます。</p></div></div><div className="spot-management-list">{data.spotAssignments.map((assignment) => <article key={assignment.id}><div><strong>{assignment.leadLabel || (assignment.vehicleId ? vehicleLabel(assignment.vehicleId) : "名称未入力")}</strong><span>{staffName(assignment.staffId)}・{assignment.businessType}・{assignment.engagementType}</span></div><StatusBadge>{assignment.status}</StatusBadge><div className="staff-settlement-actions">{isOwner && assignment.status === "進行中" && !assignment.contractId ? <button type="button" className="table-action-button" onClick={() => openAssignment(assignment)}><Pencil size={14} />修正</button> : null}{isOwner && assignment.status === "進行中" ? <><button type="button" className="table-action-button" onClick={() => void finishAssignment(assignment, false)}>完了</button><button type="button" className="table-action-button danger-table-button" onClick={() => void finishAssignment(assignment, true)}>取消</button></> : null}</div></article>)}{!data.spotAssignments.length ? <div className="table-empty"><BriefcaseBusiness size={27} /><p>スポット担当案件はまだありません。</p></div> : null}</div></section> : null}
 
       <section className="mini-summary-grid">
         <div className="mini-summary-card amber"><small>支給予定・未払い</small><strong>{formatCurrency(totals.payable)}</strong></div>

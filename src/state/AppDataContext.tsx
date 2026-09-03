@@ -56,7 +56,6 @@ import {
   staffSettlementToRpc,
   spotAssignmentToRpc,
   spotPurchaseContractToRpc,
-  spotReferralToRpc,
   spotSaleContractToRpc,
 } from "../lib/supabaseData";
 import type {
@@ -68,7 +67,6 @@ import type {
   SaveStaffSettlementInput,
   SaveSpotAssignmentInput,
   SpotAssignment,
-  StaffBusinessType,
   StaffSettlement,
   NewCashflowInput,
   NewExpenseInput,
@@ -163,8 +161,6 @@ type AppDataContextValue = {
   settleStaffSettlement: (settlementId: string, settledOn: string) => Promise<void>;
   cancelStaffSettlement: (settlementId: string) => Promise<void>;
   saveSpotAssignment: (input: SaveSpotAssignmentInput) => Promise<SpotAssignment>;
-  createSpotReferral: (businessType: StaffBusinessType, leadLabel: string, referralNote: string) => Promise<SpotAssignment>;
-  updateSpotReferral: (assignmentId: string, leadLabel: string, referralNote: string) => Promise<SpotAssignment>;
   finishSpotAssignment: (assignmentId: string, cancel: boolean) => Promise<void>;
   saveSpotPurchaseContract: (assignmentId: string, input: PurchaseContractInput) => Promise<void>;
   saveSpotSaleContract: (assignmentId: string, input: SaleContractInput) => Promise<void>;
@@ -1058,26 +1054,6 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         leadLabel: input.leadLabel.trim(), referralNote: input.referralNote.trim(), status: "進行中",
         createdAt: existing?.createdAt ?? now, updatedAt: now,
       };
-      setData((current) => ({ ...current, spotAssignments: [assignment, ...current.spotAssignments.filter((item) => item.id !== assignment.id)] }));
-      return assignment;
-    },
-    createSpotReferral: async (businessType, leadLabel, referralNote) => {
-      if (!leadLabel.trim()) throw new Error("紹介先・案件名を入力してください。");
-      if (!configured || !supabase || !profile || profile.role !== "spot") throw new Error("スポットスタッフのログイン時だけ紹介を登録できます。");
-      const { data: saved, error } = await supabase.rpc("create_spot_referral", spotReferralToRpc(businessType, leadLabel, referralNote));
-      if (error) throw new Error(error.message);
-      const assignment = mapSpotAssignmentFromDb(Array.isArray(saved) ? saved[0] : saved);
-      setData((current) => ({ ...current, spotAssignments: [assignment, ...current.spotAssignments] }));
-      return assignment;
-    },
-    updateSpotReferral: async (assignmentId, leadLabel, referralNote) => {
-      if (!leadLabel.trim()) throw new Error("紹介先・案件名を入力してください。");
-      if (!configured || !supabase) throw new Error("共有データ接続時だけ紹介を修正できます。");
-      const { data: saved, error } = await supabase.rpc("update_spot_referral", {
-        p_assignment_id: assignmentId, p_lead_label: leadLabel.trim(), p_referral_note: referralNote.trim(),
-      });
-      if (error) throw new Error(error.message);
-      const assignment = mapSpotAssignmentFromDb(Array.isArray(saved) ? saved[0] : saved);
       setData((current) => ({ ...current, spotAssignments: [assignment, ...current.spotAssignments.filter((item) => item.id !== assignment.id)] }));
       return assignment;
     },
