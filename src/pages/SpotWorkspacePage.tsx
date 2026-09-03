@@ -550,7 +550,8 @@ export function SpotWorkspacePage() {
                   <input
                     type="number"
                     min="0"
-                    value={purchaseForm.amount}
+                    inputMode="numeric"
+                    value={purchaseForm.amount || ""}
                     disabled={purchaseForm.status === "契約済み"}
                     onChange={(event) =>
                       setPurchaseForm({
@@ -631,7 +632,8 @@ export function SpotWorkspacePage() {
                   <input
                     type="number"
                     min="0"
-                    value={purchaseForm.askingPrice}
+                    inputMode="numeric"
+                    value={purchaseForm.askingPrice || ""}
                     disabled={purchaseForm.status === "契約済み"}
                     onChange={(event) =>
                       setPurchaseForm({
@@ -793,7 +795,8 @@ export function SpotWorkspacePage() {
                   <input
                     type="number"
                     min="0"
-                    value={saleForm.amount}
+                    inputMode="numeric"
+                    value={saleForm.amount || ""}
                     disabled={saleForm.status === "契約済み"}
                     onChange={(event) =>
                       setSaleForm({
