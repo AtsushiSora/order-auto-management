@@ -35,6 +35,7 @@ describe("Supabaseデータ変換", () => {
       chassisNumber: "ABC-123",
       status: "入庫予定",
       acquisitionSource: "オークション",
+      disposition: "未定",
       purchasePrice: 500000,
       askingPrice: 700000,
       storageLocation: "自宅",
@@ -43,6 +44,7 @@ describe("Supabaseデータ変換", () => {
 
     expect(row.status).toBe("planned_arrival");
     expect(row.acquisition_source).toBe("auction");
+    expect(row.disposition).toBe("undecided");
     expect(row.chassis_number).toBe("ABC-123");
   });
 
@@ -186,6 +188,7 @@ describe("Supabaseデータ変換", () => {
       chassisNumber: "",
       status: "入庫済み",
       acquisitionSource: "一般のお客様",
+      disposition: "未定",
       purchasePrice: 0,
       askingPrice: 100000,
       storageLocation: "自宅",
@@ -193,6 +196,7 @@ describe("Supabaseデータ変換", () => {
     });
 
     expect(row.purchase_price).toBe(0);
+    expect(row.disposition).toBe("undecided");
   });
 
   it("在庫登録前の買取契約を画面用データへ戻す", () => {

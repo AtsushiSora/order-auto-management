@@ -71,6 +71,16 @@ const acquisitionSourceFromDb = Object.fromEntries(
   Object.entries(acquisitionSourceToDb).map(([label, value]) => [value, label]),
 ) as Record<string, AcquisitionSource>;
 
+const vehicleDispositionToDb: Record<Vehicle["disposition"], string> = {
+  未定: "undecided",
+  販売: "retail_sale",
+  オークション: "auction",
+  廃車: "scrap",
+};
+const vehicleDispositionFromDb = Object.fromEntries(
+  Object.entries(vehicleDispositionToDb).map(([label, value]) => [value, label]),
+) as Record<string, Vehicle["disposition"]>;
+
 const vehicleDocumentTypeToDb: Record<VehicleDocumentType, string> = {
   車両本体: "vehicle_body",
   鍵の本数: "keys",
@@ -262,6 +272,7 @@ export const mapVehicleFromDb = (source: unknown): Vehicle => {
     chassisNumber: stringValue(row, "chassis_number"),
     status: vehicleStatusFromDb[stringValue(row, "status")] ?? "入庫予定",
     acquisitionSource: acquisitionSourceFromDb[stringValue(row, "acquisition_source")] ?? "一般のお客様",
+    disposition: vehicleDispositionFromDb[stringValue(row, "disposition")] ?? "未定",
     purchasePrice: numberValue(row, "purchase_price"),
     askingPrice: numberValue(row, "asking_price"),
     salePrice: row.sale_price == null ? null : numberValue(row, "sale_price"),
@@ -556,6 +567,7 @@ export const newVehicleToDb = (input: NewVehicleInput) => ({
   chassis_number: input.chassisNumber || null,
   status: vehicleStatusToDb[input.status],
   acquisition_source: acquisitionSourceToDb[input.acquisitionSource],
+  disposition: vehicleDispositionToDb[input.disposition],
   purchase_price: input.purchasePrice,
   asking_price: input.askingPrice,
   storage_location: input.storageLocation,
@@ -569,6 +581,7 @@ export const vehiclePatchToDb = (patch: Partial<Vehicle>) => {
   if (patch.chassisNumber !== undefined) result.chassis_number = patch.chassisNumber || null;
   if (patch.status !== undefined) result.status = vehicleStatusToDb[patch.status];
   if (patch.acquisitionSource !== undefined) result.acquisition_source = acquisitionSourceToDb[patch.acquisitionSource];
+  if (patch.disposition !== undefined) result.disposition = vehicleDispositionToDb[patch.disposition];
   if (patch.purchasePrice !== undefined) result.purchase_price = patch.purchasePrice;
   if (patch.askingPrice !== undefined) result.asking_price = patch.askingPrice;
   if (patch.salePrice !== undefined) result.sale_price = patch.salePrice;

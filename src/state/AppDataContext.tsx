@@ -239,6 +239,7 @@ const loadInitialDemoData = (): AppData => {
       vehicles: (parsed.vehicles ?? seed.vehicles).map((vehicle) => ({
         ...publicationDefaults(vehicle),
         ...vehicle,
+        disposition: vehicle.disposition ?? "未定",
       })),
       vehicleDocuments: parsed.vehicleDocuments ?? [],
       expenses: (parsed.expenses ?? seed.expenses).map((expense) => ({
@@ -1485,6 +1486,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
           chassisNumber: input.chassisNumber.trim(),
           status: "入庫予定",
           acquisitionSource: input.acquisitionSource,
+          disposition: "未定",
           purchasePrice: input.amount,
           askingPrice: input.askingPrice,
           salePrice: null,

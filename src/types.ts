@@ -127,6 +127,8 @@ export type VehicleStatus =
   | "納車済み"
   | "廃車処分";
 
+export type VehicleDisposition = "未定" | "販売" | "オークション" | "廃車";
+
 export type AcquisitionSource =
   | "一般のお客様"
   | "オークション"
@@ -142,6 +144,7 @@ export type Vehicle = {
   chassisNumber: string;
   status: VehicleStatus;
   acquisitionSource: AcquisitionSource;
+  disposition: VehicleDisposition;
   purchasePrice: number;
   askingPrice: number;
   salePrice: number | null;
@@ -607,6 +610,7 @@ export type NewVehicleInput = Pick<
   | "chassisNumber"
   | "status"
   | "acquisitionSource"
+  | "disposition"
   | "purchasePrice"
   | "askingPrice"
   | "storageLocation"

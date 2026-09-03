@@ -43,11 +43,13 @@ import type {
   VehicleDocument,
   VehicleDocumentInput,
   VehicleDocumentType,
+  VehicleDisposition,
   VehicleStatus,
 } from "../types";
 
 const vehicleStatuses: VehicleStatus[] = ["入庫予定", "入庫済み", "販売中", "売約済み", "納車済み", "廃車処分"];
 const acquisitionSources: AcquisitionSource[] = ["一般のお客様", "オークション", "業者", "保険関係"];
+const vehicleDispositions: VehicleDisposition[] = ["未定", "販売", "オークション", "廃車"];
 const expenseCategories = ["部品代", "外注費", "陸送費", "登録費用", "仕入手数料", "販売手数料", "その他"];
 const expensePaymentMethods: PaymentMethod[] = ["現金", "振込", "ローン会社", "カード", "その他"];
 
@@ -56,6 +58,7 @@ const initialVehicleForm = (): NewVehicleInput => ({
   chassisNumber: "",
   status: "入庫予定",
   acquisitionSource: "一般のお客様",
+  disposition: "未定",
   purchasePrice: 0,
   askingPrice: 0,
   storageLocation: "自宅",
@@ -159,7 +162,7 @@ export function VehiclesPage({
           return (
             <button type="button" className="vehicle-card" key={vehicle.id} onClick={() => { setSelectedVehicleId(vehicle.id); setDrawerMode("detail"); }}>
               <div className="vehicle-card-top"><span className="vehicle-thumbnail"><Car size={31} /></span><StatusBadge>{vehicle.status}</StatusBadge></div>
-              <div className="vehicle-card-title"><small>{vehicle.managementNumber}</small><h2>{vehicle.name}</h2><p>{vehicle.acquisitionSource}</p></div>
+              <div className="vehicle-card-title"><small>{vehicle.managementNumber}</small><h2>{vehicle.name}</h2><p>{vehicle.acquisitionSource}・振り分け {vehicle.disposition}</p></div>
               <dl className="vehicle-card-values"><div><dt>{vehicle.salePrice == null ? "販売予定価格" : "販売価格"}</dt><dd>{formatCurrency(profit.revenueBasis)}</dd></div><div><dt>{profit.isFinal ? "確定粗利" : "予想利益"}</dt><dd className={profit.expectedProfit < 0 ? "negative" : "positive"}>{formatCurrency(profit.isFinal ? profit.provisionalProfit : profit.expectedProfit)}</dd></div></dl>
               <div className={`document-indicator ${vehicle.documentsComplete ? "complete" : "missing"}`}>{vehicle.documentsComplete ? <CheckCircle2 size={17} /> : <FileWarning size={17} />}{vehicle.documentsComplete ? "必要書類 確認済み" : "書類の確認が必要"}</div>
               <span className="vehicle-card-action">詳細を見る</span>
@@ -337,7 +340,7 @@ function VehicleDetailDrawer({
     if (editForm.purchasePrice < 0 || editForm.askingPrice < 0 || (editForm.salePrice ?? 0) < 0) return setUpdateError("金額は0円以上で入力してください。");
     setBusy(true);
     try {
-      await onUpdate({ name: editForm.name.trim(), chassisNumber: editForm.chassisNumber.trim(), acquisitionSource: editForm.acquisitionSource, purchasePrice: editForm.purchasePrice, askingPrice: editForm.askingPrice, salePrice: editForm.salePrice, storageLocation: editForm.storageLocation.trim(), plannedArrivalDate: editForm.plannedArrivalDate, arrivedAt: editForm.arrivedAt, deliveredAt: editForm.deliveredAt });
+      await onUpdate({ name: editForm.name.trim(), chassisNumber: editForm.chassisNumber.trim(), acquisitionSource: editForm.acquisitionSource, disposition: editForm.disposition, purchasePrice: editForm.purchasePrice, askingPrice: editForm.askingPrice, salePrice: editForm.salePrice, storageLocation: editForm.storageLocation.trim(), plannedArrivalDate: editForm.plannedArrivalDate, arrivedAt: editForm.arrivedAt, deliveredAt: editForm.deliveredAt });
       setEditMode(false);
     } catch (reason) { setUpdateError(reason instanceof Error ? reason.message : "車両情報を保存できませんでした。"); }
     finally { setBusy(false); }
@@ -433,8 +436,9 @@ function VehicleDetailDrawer({
           <label className="field-label">車台番号<input value={editForm.chassisNumber} onChange={(event) => setEditForm({ ...editForm, chassisNumber: event.target.value })} /></label>
           <div className="form-row">
             <label className="field-label">仕入れ元<select value={editForm.acquisitionSource} onChange={(event) => setEditForm({ ...editForm, acquisitionSource: event.target.value as AcquisitionSource })}>{acquisitionSources.map((source) => <option key={source}>{source}</option>)}</select></label>
-            <label className="field-label">保管場所<input value={editForm.storageLocation} onChange={(event) => setEditForm({ ...editForm, storageLocation: event.target.value })} /></label>
+            <label className="field-label">買取後の振り分け<select value={editForm.disposition} onChange={(event) => setEditForm({ ...editForm, disposition: event.target.value as VehicleDisposition })}>{vehicleDispositions.map((item) => <option key={item}>{item}</option>)}</select></label>
           </div>
+          <label className="field-label">保管場所<input value={editForm.storageLocation} onChange={(event) => setEditForm({ ...editForm, storageLocation: event.target.value })} /></label>
           <div className="form-row">
             <label className="field-label">仕入額（税込）<input type="number" min="0" value={editForm.purchasePrice} onChange={(event) => setEditForm({ ...editForm, purchasePrice: Number(event.target.value) })} /></label>
             <label className="field-label">販売予定価格（税込）<input type="number" min="0" value={editForm.askingPrice} onChange={(event) => setEditForm({ ...editForm, askingPrice: Number(event.target.value) })} /></label>
@@ -448,7 +452,7 @@ function VehicleDetailDrawer({
           <button type="submit" className="primary-button full-button" disabled={busy}><Save size={17} />{busy ? "保存中" : "変更を保存"}</button>
         </form>
       ) : (
-        <section className="detail-section"><h3>車両情報</h3><dl className="detail-list"><div><dt>車台番号</dt><dd>{vehicle.chassisNumber || "未入力"}</dd></div><div><dt>保管場所</dt><dd>{vehicle.storageLocation}</dd></div><div><dt>入庫予定日</dt><dd>{formatDate(vehicle.plannedArrivalDate)}</dd></div><div><dt>実際の入庫日</dt><dd>{formatDate(vehicle.arrivedAt)}</dd></div><div><dt>納車日</dt><dd>{formatDate(vehicle.deliveredAt)}</dd></div></dl></section>
+        <section className="detail-section"><h3>車両情報</h3><dl className="detail-list"><div><dt>車台番号</dt><dd>{vehicle.chassisNumber || "未入力"}</dd></div><div><dt>買取後の振り分け</dt><dd>{vehicle.disposition}</dd></div><div><dt>保管場所</dt><dd>{vehicle.storageLocation}</dd></div><div><dt>入庫予定日</dt><dd>{formatDate(vehicle.plannedArrivalDate)}</dd></div><div><dt>実際の入庫日</dt><dd>{formatDate(vehicle.arrivedAt)}</dd></div><div><dt>納車日</dt><dd>{formatDate(vehicle.deliveredAt)}</dd></div></dl></section>
       )}
 
       <section className="detail-section">

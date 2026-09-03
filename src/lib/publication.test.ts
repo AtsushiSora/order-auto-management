@@ -9,6 +9,7 @@ const vehicle = (patch: Partial<Vehicle> = {}): Vehicle => ({
   chassisNumber: "PRIVATE-CHASSIS",
   status: "販売中",
   acquisitionSource: "一般のお客様",
+  disposition: "販売",
   purchasePrice: 500000,
   askingPrice: 800000,
   salePrice: null,
