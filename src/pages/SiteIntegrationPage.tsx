@@ -1,9 +1,10 @@
-import { Globe2, Inbox, Pencil, Save } from "lucide-react";
+import { ExternalLink, Globe2, Inbox, Pencil, Save } from "lucide-react";
 import { useMemo, useState, type FormEvent } from "react";
 import { Drawer } from "../components/Drawer";
 import { PageHeader } from "../components/PageHeader";
 import { StatusBadge } from "../components/StatusBadge";
 import { canPublishToSalesSite, getSalesSiteLabel } from "../lib/publication";
+import { externalSites, filterWebsiteInquiries, getInquiryVehicleLabel, type WebsiteInquiryFilter } from "../lib/siteIntegration";
 import { formatCurrency, formatDate } from "../lib/format";
 import { useAppData } from "../state/AppDataContext";
 import { useAuth } from "../state/AuthContext";
@@ -35,6 +36,7 @@ export function SiteIntegrationPage() {
   const [form, setForm] = useState<VehiclePublicationInput | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [inquiryFilter, setInquiryFilter] = useState<WebsiteInquiryFilter>("すべて");
 
   const siteVehicles = useMemo(
     () => data.vehicles.filter((vehicle) => canPublishToSalesSite(vehicle)),
@@ -42,6 +44,12 @@ export function SiteIntegrationPage() {
   );
   const publishedCount = siteVehicles.filter((vehicle) => getSalesSiteLabel(vehicle) !== null).length;
   const newInquiryCount = data.websiteInquiries.filter((inquiry) => inquiry.status === "新着").length;
+  const salesInquiryCount = data.websiteInquiries.filter((inquiry) => inquiry.source === "販売サイト").length;
+  const scrapInquiryCount = data.websiteInquiries.filter((inquiry) => inquiry.source === "廃車サイト").length;
+  const filteredInquiries = useMemo(
+    () => filterWebsiteInquiries(data.websiteInquiries, inquiryFilter),
+    [data.websiteInquiries, inquiryFilter],
+  );
 
   const openPublication = (vehicle: Vehicle) => {
     setSelectedVehicle(vehicle);
@@ -92,6 +100,17 @@ export function SiteIntegrationPage() {
         <div><strong>外部サイトへ渡すのは公開用情報だけです</strong><p>車台番号・仕入額・保管場所・契約相手などの社内情報は公開されません。管理画面が「納車済み」でも、販売サイトは「売約済み」のまま表示できます。</p></div>
       </section>
 
+      <section className="external-site-grid section-block" aria-label="連携サイト">
+        <article className="external-site-card panel">
+          <div><small>公開在庫を自動反映</small><h2>販売サイト</h2><p>管理画面で公開した車両と、売約済み・非表示の設定が反映されます。</p></div>
+          <div className="external-site-card-footer"><span>{publishedCount}台 掲載中</span><a className="secondary-button" href={externalSites.sales.url} target="_blank" rel="noopener noreferrer"><ExternalLink size={16} />サイトを開く</a></div>
+        </article>
+        <article className="external-site-card panel">
+          <div><small>相談フォームを自動取込</small><h2>廃車サイト</h2><p>LINE・メール作成へ進む前の相談内容を、問い合わせ一覧へ記録します。</p></div>
+          <div className="external-site-card-footer"><span>{scrapInquiryCount}件 受信</span><a className="secondary-button" href={externalSites.scrap.url} target="_blank" rel="noopener noreferrer"><ExternalLink size={16} />サイトを開く</a></div>
+        </article>
+      </section>
+
       <section className="table-panel panel section-block">
         <div className="panel-heading"><div><h2>販売サイトの車両</h2><p>公開・非公開と、売れた後に表示を残すかを車両ごとに選べます。</p></div></div>
         <div className="table-scroll">
@@ -117,22 +136,23 @@ export function SiteIntegrationPage() {
       </section>
 
       <section className="table-panel panel">
-        <div className="panel-heading"><div><h2>サイトからの問い合わせ</h2><p>販売サイトと廃車サイトの問い合わせを同じ一覧で確認できます。</p></div></div>
+        <div className="panel-heading site-inquiry-heading"><div><h2>サイトからの問い合わせ</h2><p>販売サイトと廃車サイトの問い合わせを同じ一覧で確認できます。</p></div><div className="site-inquiry-filter" role="group" aria-label="問い合わせ元で絞り込み">{(["すべて", "販売サイト", "廃車サイト"] as WebsiteInquiryFilter[]).map((filter) => <button type="button" key={filter} className={inquiryFilter === filter ? "active" : ""} onClick={() => setInquiryFilter(filter)}>{filter}<span>{filter === "すべて" ? data.websiteInquiries.length : filter === "販売サイト" ? salesInquiryCount : scrapInquiryCount}</span></button>)}</div></div>
         <div className="table-scroll">
           <table className="data-table inquiry-table">
             <thead><tr><th>受信日時</th><th>サイト</th><th>お客様</th><th>連絡先</th><th>内容</th><th>対応状況</th></tr></thead>
             <tbody>
-              {data.websiteInquiries.map((inquiry) => (
-                <tr key={inquiry.id}>
+              {filteredInquiries.map((inquiry) => {
+                const targetVehicle = getInquiryVehicleLabel(inquiry, data.vehicles);
+                return <tr key={inquiry.id}>
                   <td>{formatDate(inquiry.receivedAt)}</td>
                   <td>{inquiry.source}</td>
                   <td>{inquiry.customerName}</td>
                   <td><span className="vehicle-reference"><strong>{inquiry.phone || "電話なし"}</strong><small>{inquiry.email || "メールなし"}</small></span></td>
-                  <td className="inquiry-message">{inquiry.message}</td>
+                  <td className="inquiry-message">{targetVehicle ? <span className="inquiry-vehicle-target">対象車両：{targetVehicle}</span> : null}{inquiry.message}</td>
                   <td>{canHandleInquiry ? <select value={inquiry.status} disabled={busy} onChange={(event) => void changeInquiryStatus(inquiry.id, event.target.value as WebsiteInquiryStatus)}>{inquiryStatuses.map((status) => <option key={status}>{status}</option>)}</select> : <StatusBadge>{inquiry.status}</StatusBadge>}</td>
-                </tr>
-              ))}
-              {!data.websiteInquiries.length ? <tr><td colSpan={6} className="table-empty"><Inbox size={24} /><p>問い合わせはまだありません。</p></td></tr> : null}
+                </tr>;
+              })}
+              {!filteredInquiries.length ? <tr><td colSpan={6} className="table-empty"><Inbox size={24} /><p>{data.websiteInquiries.length ? "このサイトからの問い合わせはありません。" : "問い合わせはまだありません。"}</p></td></tr> : null}
             </tbody>
           </table>
         </div>
