@@ -4046,9 +4046,50 @@ button.mini-summary-card:hover {
   font-size: 11px;
 }
 
+.evidence-preview {
+  display: grid;
+  gap: 14px;
+}
+
+.evidence-preview .section-heading {
+  align-items: flex-start;
+}
+
+.evidence-preview .section-heading p {
+  margin: 4px 0 0;
+  overflow-wrap: anywhere;
+}
+
+.evidence-preview img,
+.evidence-preview iframe {
+  display: block;
+  width: 100%;
+  max-height: 62vh;
+  border: 1px solid var(--slate-200);
+  border-radius: 14px;
+  background: #fff;
+  object-fit: contain;
+}
+
+.evidence-preview iframe {
+  min-height: 520px;
+}
+
+.evidence-preview-external {
+  justify-self: start;
+}
+
 @media (max-width: 560px) {
   .evidence-upload-actions {
     grid-template-columns: 1fr;
+  }
+
+  .evidence-preview .section-heading {
+    align-items: stretch;
+  }
+
+  .evidence-preview iframe {
+    min-height: 420px;
   }
 }
 

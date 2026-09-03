@@ -19,6 +19,7 @@ export function ExpenseEvidenceDrawer({ expense, attachments, canUpload, isOwner
   const [category, setCategory] = useState<AttachmentCategory>("領収書");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [preview, setPreview] = useState<{ attachment: Attachment; url: string } | null>(null);
 
   const upload = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -37,14 +38,14 @@ export function ExpenseEvidenceDrawer({ expense, attachments, canUpload, isOwner
 
   const open = async (attachment: Attachment) => {
     setError("");
-    const newTab = window.open("about:blank", "_blank");
+    setBusy(true);
     try {
       const url = await getAttachmentUrl(attachment.id);
-      if (newTab) newTab.location.href = url;
-      else window.location.assign(url);
+      setPreview({ attachment, url });
     } catch (reason) {
-      newTab?.close();
       setError(reason instanceof Error ? reason.message : "証憑を開けませんでした。");
+    } finally {
+      setBusy(false);
     }
   };
 
@@ -54,6 +55,7 @@ export function ExpenseEvidenceDrawer({ expense, attachments, canUpload, isOwner
     setError("");
     try {
       await deleteAttachment(attachment.id);
+      if (preview?.attachment.id === attachment.id) setPreview(null);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "証憑を削除できませんでした。");
     } finally {
@@ -113,6 +115,26 @@ export function ExpenseEvidenceDrawer({ expense, attachments, canUpload, isOwner
             <div className="evidence-empty"><FileText size={28} /><p>証憑はまだ添付されていません。</p></div>
           )}
         </section>
+
+        {preview ? (
+          <section className="detail-section evidence-preview" aria-label="証憑プレビュー">
+            <div className="section-heading">
+              <div>
+                <h3>{preview.attachment.category}を表示</h3>
+                <p>{preview.attachment.originalFileName}</p>
+              </div>
+              <button type="button" className="secondary-button" onClick={() => setPreview(null)}>表示を閉じる</button>
+            </div>
+            {preview.attachment.mimeType === "application/pdf" ? (
+              <iframe src={preview.url} title={preview.attachment.originalFileName} />
+            ) : (
+              <img src={preview.url} alt={`${preview.attachment.category}：${preview.attachment.originalFileName}`} />
+            )}
+            <a className="secondary-button evidence-preview-external" href={preview.url} target="_blank" rel="noopener noreferrer">
+              <ExternalLink size={17} />別タブで開く
+            </a>
+          </section>
+        ) : null}
 
         {busy ? <p className="form-hint">ファイルを処理しています。画面を閉じずにお待ちください。</p> : null}
         {error ? <p className="form-error">{error}</p> : null}
