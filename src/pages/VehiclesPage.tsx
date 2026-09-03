@@ -4,10 +4,12 @@ import {
   CircleDollarSign,
   FileWarning,
   Filter,
+  Gavel,
   Pencil,
   PackageCheck,
   Plus,
   ReceiptText,
+  Recycle,
   Save,
   ScanLine,
   Search,
@@ -33,6 +35,7 @@ import { useAuth } from "../state/AuthContext";
 import type {
   AcquisitionSource,
   Cashflow,
+  CompleteVehicleDispositionInput,
   Expense,
   ExpenseStatus,
   NewExpenseInput,
@@ -83,7 +86,7 @@ export function VehiclesPage({
   openNewForm?: boolean;
   onNewFormOpened?: () => void;
 }) {
-  const { data, addVehicle, updateVehicle, applyVehicleInspectionImport, markVehicleArrived, markVehicleDelivered, updateVehicleDocument, archiveVehicle, addExpense, completeCashflow } = useAppData();
+  const { data, addVehicle, updateVehicle, completeVehicleDisposition, applyVehicleInspectionImport, markVehicleArrived, markVehicleDelivered, updateVehicleDocument, archiveVehicle, addExpense, completeCashflow } = useAppData();
   const { profile } = useAuth();
   const canEdit = profile?.role === "owner" || profile?.role === "regular";
   const canManagePayments = profile?.role === "owner" || profile?.role === "regular" || profile?.role === "accounting";
@@ -204,14 +207,14 @@ export function VehiclesPage({
         </Drawer>
       ) : null}
 
-      {drawerMode === "detail" && selectedVehicle ? <VehicleDetailDrawer vehicle={selectedVehicle} documents={selectedDocuments} expenses={data.expenses} cashflows={data.cashflows.filter((cashflow) => cashflow.vehicleId === selectedVehicle.id)} canEdit={canEdit} canManagePayments={canManagePayments} isOwner={isOwner} onClose={() => setDrawerMode(null)} onUpdate={(patch) => updateVehicle(selectedVehicle.id, patch)} onMarkArrived={markVehicleArrived} onMarkDelivered={markVehicleDelivered} onDocumentUpdate={updateVehicleDocument} onAddExpense={addExpense} onCompleteCashflow={completeCashflow} onArchive={async () => { await archiveVehicle(selectedVehicle.id); setDrawerMode(null); }} /> : null}
+      {drawerMode === "detail" && selectedVehicle ? <VehicleDetailDrawer vehicle={selectedVehicle} documents={selectedDocuments} expenses={data.expenses} cashflows={data.cashflows.filter((cashflow) => cashflow.vehicleId === selectedVehicle.id)} canEdit={canEdit} canManagePayments={canManagePayments} isOwner={isOwner} onClose={() => setDrawerMode(null)} onUpdate={(patch) => updateVehicle(selectedVehicle.id, patch)} onCompleteDisposition={completeVehicleDisposition} onMarkArrived={markVehicleArrived} onMarkDelivered={markVehicleDelivered} onDocumentUpdate={updateVehicleDocument} onAddExpense={addExpense} onCompleteCashflow={completeCashflow} onArchive={async () => { await archiveVehicle(selectedVehicle.id); setDrawerMode(null); }} /> : null}
       {inspectionImportOpen ? <VehicleInspectionImportDrawer vehicles={data.vehicles} antiqueLedgerDetails={data.antiqueLedgerDetails} onApply={applyVehicleInspectionImport} onClose={() => setInspectionImportOpen(false)} /> : null}
     </>
   );
 }
 
 function VehicleDetailDrawer({
-  vehicle, documents, expenses, cashflows, onClose, onUpdate, onMarkArrived, onMarkDelivered, onDocumentUpdate, onAddExpense, onCompleteCashflow, onArchive, canEdit, canManagePayments, isOwner,
+  vehicle, documents, expenses, cashflows, onClose, onUpdate, onCompleteDisposition, onMarkArrived, onMarkDelivered, onDocumentUpdate, onAddExpense, onCompleteCashflow, onArchive, canEdit, canManagePayments, isOwner,
 }: {
   vehicle: Vehicle;
   documents: VehicleDocument[];
@@ -219,6 +222,7 @@ function VehicleDetailDrawer({
   cashflows: Cashflow[];
   onClose: () => void;
   onUpdate: (patch: Partial<Vehicle>) => Promise<void>;
+  onCompleteDisposition: (input: CompleteVehicleDispositionInput) => Promise<void>;
   onMarkArrived: (vehicleId: string, arrivedOn: string) => Promise<void>;
   onMarkDelivered: (vehicleId: string, deliveredOn: string) => Promise<void>;
   onDocumentUpdate: (input: VehicleDocumentInput) => Promise<VehicleDocument>;
@@ -237,12 +241,17 @@ function VehicleDetailDrawer({
   const saleReceiptRemaining = saleReceipt ? outstandingAmount(saleReceipt.amount, saleReceipt.processedAmount) : 0;
   const [editMode, setEditMode] = useState(false);
   const [expenseMode, setExpenseMode] = useState(false);
+  const [dispositionMode, setDispositionMode] = useState(false);
   const [editForm, setEditForm] = useState<Vehicle>({ ...vehicle });
   const [expenseForm, setExpenseForm] = useState<NewExpenseInput>(initialExpense(vehicle.id));
   const [updateError, setUpdateError] = useState("");
   const [busy, setBusy] = useState(false);
   const [arrivalDate, setArrivalDate] = useState(vehicle.arrivedAt ?? new Date().toISOString().slice(0, 10));
   const [deliveryDate, setDeliveryDate] = useState(vehicle.deliveredAt ?? new Date().toISOString().slice(0, 10));
+  const [dispositionForm, setDispositionForm] = useState<Omit<CompleteVehicleDispositionInput, "vehicleId" | "disposition">>({
+    counterparty: "", proceedsAmount: 0, feeAmount: 0,
+    completedOn: new Date().toISOString().slice(0, 10), incomeMethod: "振込", feePaymentMethod: "振込",
+  });
   const keyDocument = documents.find((document) => document.documentType === "鍵の本数");
   const [keyCount, setKeyCount] = useState(keyDocument?.note ?? "");
   const receiptChecklistComplete = isVehicleReceiptChecklistComplete(documents);
@@ -255,6 +264,7 @@ function VehicleDetailDrawer({
     setArrivalDate(vehicle.arrivedAt ?? new Date().toISOString().slice(0, 10));
     setDeliveryDate(vehicle.deliveredAt ?? new Date().toISOString().slice(0, 10));
     setKeyCount(documents.find((document) => document.documentType === "鍵の本数")?.note ?? "");
+    setDispositionMode(false);
   }, [vehicle, documents]);
 
   const commitUpdate = async (patch: Partial<Vehicle>) => {
@@ -346,6 +356,21 @@ function VehicleDetailDrawer({
     finally { setBusy(false); }
   };
 
+  const submitDisposition = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (vehicle.disposition !== "オークション" && vehicle.disposition !== "廃車") return;
+    setBusy(true);
+    setUpdateError("");
+    try {
+      await onCompleteDisposition({ vehicleId: vehicle.id, disposition: vehicle.disposition, ...dispositionForm });
+      setDispositionMode(false);
+    } catch (reason) {
+      setUpdateError(reason instanceof Error ? reason.message : "振り分け後の処理を完了できませんでした。");
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const updateDocumentStatus = async (documentType: VehicleDocumentType, status: VehicleReceiptStatus) => {
     const current = documents.find((document) => document.documentType === documentType);
     setBusy(true);
@@ -427,6 +452,46 @@ function VehicleDetailDrawer({
         <label className="field-label">車両の状態<select value={vehicle.status} disabled={!canEdit || busy} onChange={(event) => void changeStatus(event.target.value as VehicleStatus)}>{vehicleStatuses.map((status) => <option key={status}>{status}</option>)}</select></label>
         {canEdit && !["売約済み", "納車済み"].includes(vehicle.status) ? <p className="form-hint">売約済みへの変更は、販売契約を「契約済み」にすると自動で行われます。</p> : null}
         {!canEdit ? <p className="form-hint">経理権限では車両情報を閲覧できますが、変更はできません。</p> : null}
+      </section>
+
+      <section className="detail-section disposition-workflow-section">
+        <div className="section-heading"><div><h3>買取後の振り分け</h3><p>契約とは分けて、入庫後の行き先と結果を管理します。</p></div></div>
+        <label className="field-label">振り分け先
+          <select
+            value={vehicle.disposition}
+            disabled={!canEdit || busy || ["納車済み", "廃車処分"].includes(vehicle.status)}
+            onChange={(event) => void commitUpdate({ disposition: event.target.value as VehicleDisposition })}
+          >
+            {vehicleDispositions.map((item) => <option key={item}>{item}</option>)}
+          </select>
+        </label>
+
+        {vehicle.disposition === "未定" ? (
+          <div className="workflow-card warning"><span className="workflow-icon"><Filter size={22} /></span><div className="workflow-content"><strong>振り分けを決めてください</strong><p>販売・オークション・廃車から選択すると、次の操作が表示されます。</p></div></div>
+        ) : vehicle.disposition === "販売" ? (
+          <div className={`workflow-card ${vehicle.status === "販売中" ? "success" : "neutral"}`}><span className="workflow-icon"><Car size={22} /></span><div className="workflow-content"><strong>{vehicle.status === "販売中" ? "販売中です" : "販売の準備"}</strong><p>{vehicle.status === "販売中" ? "販売サイトへの掲載や販売契約へ進めます。" : "入庫確認後、販売中へ変更してください。"}</p>{canEdit && vehicle.status === "入庫済み" ? <div className="workflow-action"><button type="button" className="primary-button" disabled={busy} onClick={() => void commitUpdate({ status: "販売中" })}>販売中にする</button></div> : null}</div></div>
+        ) : ["納車済み", "廃車処分"].includes(vehicle.status) ? (
+          <div className="workflow-card success"><span className="workflow-icon">{vehicle.disposition === "オークション" ? <Gavel size={22} /> : <Recycle size={22} />}</span><div className="workflow-content"><strong>{vehicle.disposition === "オークション" ? "オークション売却・引渡し済み" : "廃車処分済み"}</strong><p>入出金・経費・利益・古物台帳へ反映済みです。</p></div></div>
+        ) : (
+          <div className="workflow-card neutral"><span className="workflow-icon">{vehicle.disposition === "オークション" ? <Gavel size={22} /> : <Recycle size={22} />}</span><div className="workflow-content"><strong>{vehicle.disposition === "オークション" ? "オークション売却を登録" : "廃車処分を登録"}</strong><p>入金額と手数料・処分費を一度入力すると、関連する管理へまとめて反映します。</p>{canEdit && vehicle.status !== "入庫予定" ? <div className="workflow-action"><button type="button" className="primary-button" onClick={() => setDispositionMode((current) => !current)}>{dispositionMode ? "入力を閉じる" : "処理内容を入力"}</button></div> : <p className="form-hint">先に車両・書類の受取確認と入庫確定を行ってください。</p>}</div></div>
+        )}
+
+        {dispositionMode && (vehicle.disposition === "オークション" || vehicle.disposition === "廃車") ? (
+          <form className="form-stack disposition-completion-form" onSubmit={submitDisposition}>
+            <label className="field-label">{vehicle.disposition === "オークション" ? "オークション会場・売却先" : "解体業者・引渡し先"} <span className="required">必須</span><input value={dispositionForm.counterparty} onChange={(event) => setDispositionForm({ ...dispositionForm, counterparty: event.target.value })} /></label>
+            <div className="form-row">
+              <label className="field-label">{vehicle.disposition === "オークション" ? "売却金額" : "受取額・還付金"}（税込）<input type="number" min="0" step="1" inputMode="numeric" value={dispositionForm.proceedsAmount || ""} placeholder="0" onChange={(event) => setDispositionForm({ ...dispositionForm, proceedsAmount: Number(event.target.value) })} /></label>
+              <label className="field-label">入金方法<select value={dispositionForm.incomeMethod} onChange={(event) => setDispositionForm({ ...dispositionForm, incomeMethod: event.target.value as PaymentMethod })}>{expensePaymentMethods.map((method) => <option key={method}>{method}</option>)}</select></label>
+            </div>
+            <div className="form-row">
+              <label className="field-label">{vehicle.disposition === "オークション" ? "オークション手数料" : "廃車処分費"}（税込）<input type="number" min="0" step="1" inputMode="numeric" value={dispositionForm.feeAmount || ""} placeholder="0" onChange={(event) => setDispositionForm({ ...dispositionForm, feeAmount: Number(event.target.value) })} /></label>
+              <label className="field-label">支払い方法<select value={dispositionForm.feePaymentMethod} onChange={(event) => setDispositionForm({ ...dispositionForm, feePaymentMethod: event.target.value as PaymentMethod })}>{expensePaymentMethods.map((method) => <option key={method}>{method}</option>)}</select></label>
+            </div>
+            <label className="field-label">処理日 <span className="required">必須</span><input type="date" max={new Date().toISOString().slice(0, 10)} value={dispositionForm.completedOn} onChange={(event) => setDispositionForm({ ...dispositionForm, completedOn: event.target.value })} /></label>
+            <p className="form-hint">入金・支払いは未処理で登録されるため、実際の着金・支払い後に「入出金」で完了してください。</p>
+            <button type="submit" className="primary-button full-button" disabled={busy}>{busy ? "登録中" : `${vehicle.disposition === "オークション" ? "オークション売却" : "廃車処分"}を確定`}</button>
+          </form>
+        ) : null}
       </section>
 
       {editMode ? (

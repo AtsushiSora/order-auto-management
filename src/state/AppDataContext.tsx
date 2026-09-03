@@ -19,6 +19,7 @@ import { validateStaffInvitationInput, validateStaffProfileUpdate } from "../lib
 import { calculateMonthlyBalance, calculateMonthlyMovement } from "../lib/monthlyBalance";
 import { emptyProductionReadiness, normalizeProductionReadiness, statusToDb } from "../lib/productionReadiness";
 import { isVehicleReceiptChecklistComplete } from "../lib/vehicleReceiptChecklist";
+import { validateVehicleDispositionCompletion } from "../lib/vehicleDisposition";
 import { supabase } from "../lib/supabase";
 import {
   antiqueLedgerDetailToDb,
@@ -58,6 +59,7 @@ import {
   spotAssignmentToRpc,
   spotPurchaseContractToRpc,
   spotSaleContractToRpc,
+  vehicleDispositionCompletionToRpc,
 } from "../lib/supabaseData";
 import type {
   AppData,
@@ -85,6 +87,7 @@ import type {
   WebsiteInquiryStatus,
   CashflowOffset,
   CashflowEvent,
+  CompleteVehicleDispositionInput,
   InviteStaffProfileInput,
   MonthlyBalanceCheck,
   SaveMonthlyBalanceCheckInput,
@@ -144,6 +147,7 @@ type AppDataContextValue = {
   updateStaffProfile: (input: UpdateStaffProfileInput) => Promise<void>;
   addVehicle: (input: NewVehicleInput) => Promise<Vehicle>;
   updateVehicle: (vehicleId: string, patch: Partial<Vehicle>) => Promise<void>;
+  completeVehicleDisposition: (input: CompleteVehicleDispositionInput) => Promise<void>;
   saveVehiclePublication: (input: VehiclePublicationInput) => Promise<void>;
   updateWebsiteInquiryStatus: (inquiryId: string, status: WebsiteInquiryStatus) => Promise<void>;
   markVehicleArrived: (vehicleId: string, arrivedOn: string) => Promise<void>;
@@ -627,6 +631,79 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
           ? { ...vehicle, ...patch, updatedAt: new Date().toISOString() }
           : vehicle),
       }));
+    },
+    completeVehicleDisposition: async (input) => {
+      const target = data.vehicles.find((vehicle) => vehicle.id === input.vehicleId);
+      const validationError = validateVehicleDispositionCompletion(target, input);
+      if (validationError) throw new Error(validationError);
+      if (configured && supabase) {
+        const { error } = await supabase.rpc("complete_vehicle_disposition", vehicleDispositionCompletionToRpc(input));
+        if (error) throw new Error(error.message);
+        await refreshData();
+        return;
+      }
+
+      const now = new Date().toISOString();
+      const expenseId = input.feeAmount > 0 ? crypto.randomUUID() : null;
+      const incoming = input.proceedsAmount > 0 ? {
+        id: crypto.randomUUID(), vehicleId: input.vehicleId, expenseId: null,
+        direction: "入金" as const, kind: input.disposition === "オークション" ? "販売代金" as const : "その他" as const,
+        description: `${input.disposition} ${input.counterparty.trim()}`,
+        amount: input.proceedsAmount, processedAmount: 0, status: "未処理" as const,
+        method: input.incomeMethod, scheduledOn: input.completedOn, processedOn: null, createdAt: now,
+      } : null;
+      const outgoing = expenseId ? {
+        id: crypto.randomUUID(), vehicleId: input.vehicleId, expenseId,
+        direction: "支払い" as const, kind: "経費支払い" as const,
+        description: `${input.disposition === "オークション" ? "オークション手数料" : "廃車処分費"} ${input.counterparty.trim()}`,
+        amount: input.feeAmount, processedAmount: 0, status: "未処理" as const,
+        method: input.feePaymentMethod, scheduledOn: input.completedOn, processedOn: null, createdAt: now,
+      } : null;
+
+      setData((current) => {
+        const currentDetail = current.antiqueLedgerDetails.find((item) => item.vehicleId === input.vehicleId);
+        const ledgerDetail = {
+          id: currentDetail?.id ?? crypto.randomUUID(),
+          vehicleId: input.vehicleId,
+          intakeType: currentDetail?.intakeType ?? "買受け" as const,
+          receivedOnOverride: currentDetail?.receivedOnOverride ?? null,
+          registrationNumber: currentDetail?.registrationNumber ?? "",
+          registeredOwnerName: currentDetail?.registeredOwnerName ?? "",
+          itemFeatures: currentDetail?.itemFeatures ?? "",
+          counterpartyType: currentDetail?.counterpartyType ?? (target?.acquisitionSource === "一般のお客様" ? "個人" as const : target?.acquisitionSource === "オークション" ? "オークション" as const : "法人・業者" as const),
+          sellerNameOverride: currentDetail?.sellerNameOverride ?? "",
+          sellerAddress: currentDetail?.sellerAddress ?? "",
+          sellerOccupation: currentDetail?.sellerOccupation ?? "",
+          sellerAge: currentDetail?.sellerAge ?? null,
+          identityVerificationMethod: currentDetail?.identityVerificationMethod ?? null,
+          identityVerificationNote: currentDetail?.identityVerificationNote ?? "",
+          disposalOnOverride: input.completedOn,
+          disposalTypeOverride: input.disposition === "廃車" ? "廃車" as const : "売却" as const,
+          buyerNameOverride: input.counterparty.trim(),
+          note: currentDetail?.note ?? "",
+          createdAt: currentDetail?.createdAt ?? now,
+          updatedAt: now,
+        };
+        return {
+          ...current,
+          vehicles: current.vehicles.map((vehicle) => vehicle.id === input.vehicleId ? {
+            ...vehicle,
+            salePrice: input.proceedsAmount,
+            status: input.disposition === "廃車" ? "廃車処分" as const : "納車済み" as const,
+            deliveredAt: input.completedOn,
+            updatedAt: now,
+          } : vehicle),
+          expenses: expenseId ? [{
+            id: expenseId, vehicleId: input.vehicleId,
+            category: input.disposition === "オークション" ? "販売手数料" : "外注費",
+            description: `${input.counterparty.trim()} ${input.disposition === "オークション" ? "オークション手数料" : "廃車処分費"}`,
+            amount: input.feeAmount, expenseStatus: "確定" as const, paymentStatus: "未払い" as const,
+            paymentMethod: input.feePaymentMethod, incurredOn: input.completedOn, createdAt: now,
+          }, ...current.expenses] : current.expenses,
+          cashflows: [incoming, outgoing, ...current.cashflows].filter((item): item is NonNullable<typeof item> => Boolean(item)),
+          antiqueLedgerDetails: [ledgerDetail, ...current.antiqueLedgerDetails.filter((item) => item.id !== ledgerDetail.id)],
+        };
+      });
     },
     saveVehiclePublication: async (input) => {
       const target = data.vehicles.find((vehicle) => vehicle.id === input.vehicleId);

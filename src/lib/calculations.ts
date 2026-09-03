@@ -65,6 +65,9 @@ export const getDashboardCounts = (data: AppData) => ({
   pendingApprovals: data.approvals.filter(
     (approval) => approval.status === "承認待ち",
   ).length,
+  undecidedDisposition: data.vehicles.filter(
+    (vehicle) => vehicle.disposition === "未定" && !["納車済み", "廃車処分"].includes(vehicle.status),
+  ).length,
 });
 
 export const outstandingAmount = (amount: number, processedAmount: number) =>

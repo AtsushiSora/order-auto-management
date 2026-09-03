@@ -6,6 +6,7 @@ import type {
   Cashflow,
   CashflowEvent,
   CashflowOffset,
+  CompleteVehicleDispositionInput,
   CashflowDirection,
   CashflowKind,
   CashflowStatus,
@@ -592,6 +593,17 @@ export const vehiclePatchToDb = (patch: Partial<Vehicle>) => {
   if (patch.documentsComplete !== undefined) result.documents_complete = patch.documentsComplete;
   return result;
 };
+
+export const vehicleDispositionCompletionToRpc = (input: CompleteVehicleDispositionInput) => ({
+  p_vehicle_id: input.vehicleId,
+  p_disposition: vehicleDispositionToDb[input.disposition],
+  p_counterparty: input.counterparty.trim(),
+  p_proceeds_amount: input.proceedsAmount,
+  p_fee_amount: input.feeAmount,
+  p_completed_on: input.completedOn,
+  p_income_method: paymentMethodToDb[input.incomeMethod],
+  p_fee_payment_method: paymentMethodToDb[input.feePaymentMethod],
+});
 
 export const mapVehicleDocumentFromDb = (source: unknown): VehicleDocument => {
   const row = source as DbRow;

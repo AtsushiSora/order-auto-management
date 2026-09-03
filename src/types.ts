@@ -636,6 +636,17 @@ export type NewExpenseInput = Omit<Expense, "id" | "createdAt">;
 export type SaveExpenseInput = NewExpenseInput & { expenseId: string | null };
 export type NewCashflowInput = Omit<Cashflow, "id" | "createdAt" | "kind"> & { kind?: CashflowKind };
 
+export type CompleteVehicleDispositionInput = {
+  vehicleId: string;
+  disposition: "オークション" | "廃車";
+  counterparty: string;
+  proceedsAmount: number;
+  feeAmount: number;
+  completedOn: string;
+  incomeMethod: PaymentMethod;
+  feePaymentMethod: PaymentMethod;
+};
+
 export type PurchaseContractInput = {
   contractId: string | null;
   customerLabel: string;

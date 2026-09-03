@@ -8,6 +8,7 @@ import {
   FileWarning,
   Handshake,
   HardDrive,
+  ListTodo,
   Plus,
   WalletCards,
 } from "lucide-react";
@@ -100,6 +101,13 @@ export function DashboardPage({
       value: counts.pendingApprovals,
       icon: AlertTriangle,
       page: "dashboard" as PageId,
+      tone: "warning",
+    },
+    {
+      label: "振り分け未定",
+      value: counts.undecidedDisposition,
+      icon: ListTodo,
+      page: "vehicles" as PageId,
       tone: "warning",
     },
   ];

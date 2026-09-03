@@ -22,6 +22,7 @@ import {
   vehicleDocumentToDb,
   vehicleInspectionImportToRpc,
   vehiclePublicationToRpc,
+  vehicleDispositionCompletionToRpc,
   websiteInquiryStatusToRpc,
   issueDocumentToRpc,
   staffSettlementToRpc,
@@ -197,6 +198,26 @@ describe("Supabaseデータ変換", () => {
 
     expect(row.purchase_price).toBe(0);
     expect(row.disposition).toBe("undecided");
+  });
+
+  it("振り分け完了を入出金・経費連動RPCの引数へ変換する", () => {
+    expect(vehicleDispositionCompletionToRpc({
+      vehicleId: "vehicle-id",
+      disposition: "廃車",
+      counterparty: " テスト解体業者 ",
+      proceedsAmount: 12000,
+      feeAmount: 5000,
+      completedOn: "2026-09-03",
+      incomeMethod: "振込",
+      feePaymentMethod: "現金",
+    })).toMatchObject({
+      p_disposition: "scrap",
+      p_counterparty: "テスト解体業者",
+      p_proceeds_amount: 12000,
+      p_fee_amount: 5000,
+      p_income_method: "bank_transfer",
+      p_fee_payment_method: "cash",
+    });
   });
 
   it("在庫登録前の買取契約を画面用データへ戻す", () => {
