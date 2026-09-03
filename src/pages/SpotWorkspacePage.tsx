@@ -124,7 +124,7 @@ export function SpotWorkspacePage() {
       setPurchaseForm({
         contractId: contract?.id ?? null,
         customerLabel: contract?.customerLabel ?? assignment.leadLabel,
-        amount: contract?.amount ?? 0,
+        amount: contract?.amount ?? assignment.contractAmount ?? 0,
         status:
           contract?.status === "キャンセル済み"
             ? "下書き"
@@ -338,6 +338,12 @@ export function SpotWorkspacePage() {
                   <dt>登録日</dt>
                   <dd>{formatDate(assignment.createdAt)}</dd>
                 </div>
+                {assignment.contractAmount !== null ? (
+                  <div>
+                    <dt>事業主設定の買取額</dt>
+                    <dd>{formatCurrency(assignment.contractAmount)}</dd>
+                  </div>
+                ) : null}
               </dl>
               {assignment.referralNote ? (
                 <p>{assignment.referralNote}</p>
@@ -429,15 +435,10 @@ export function SpotWorkspacePage() {
                     type="number"
                     min="0"
                     inputMode="numeric"
-                    value={purchaseForm.amount || ""}
-                    disabled={purchaseForm.status === "契約済み"}
-                    onChange={(event) =>
-                      setPurchaseForm({
-                        ...purchaseForm,
-                        amount: Number(event.target.value),
-                      })
-                    }
+                    value={purchaseForm.amount}
+                    disabled
                   />
+                  <small>事業主が設定した金額です。</small>
                 </label>
                 <label className="field-label">
                   支払い方法

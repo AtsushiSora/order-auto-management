@@ -1038,6 +1038,9 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       if (input.engagementType === "契約から全て担当" && input.businessType === "販売" && !input.vehicleId) {
         throw new Error("販売を全て担当する案件では対象車両が必要です。");
       }
+      if (input.engagementType === "契約から全て担当" && input.businessType !== "販売" && input.contractAmount === null) {
+        throw new Error("買取・廃車の契約を任せる場合は、事業主が買取金額を入力してください。");
+      }
       if (configured && supabase) {
         const { data: saved, error } = await supabase.rpc("save_spot_assignment", spotAssignmentToRpc(input));
         if (error) throw new Error(error.message);
@@ -1051,6 +1054,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       const assignment: SpotAssignment = {
         id: existing?.id ?? crypto.randomUUID(), staffId: input.staffId, engagementType: input.engagementType,
         businessType: input.businessType, vehicleId: input.vehicleId, contractId: null,
+        contractAmount: input.contractAmount,
         leadLabel: input.leadLabel.trim(), referralNote: input.referralNote.trim(), status: "進行中",
         createdAt: existing?.createdAt ?? now, updatedAt: now,
       };

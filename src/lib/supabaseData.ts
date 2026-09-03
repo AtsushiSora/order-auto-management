@@ -358,6 +358,7 @@ export const mapSpotAssignmentFromDb = (source: unknown): SpotAssignment => {
     businessType: staffBusinessFromDb[stringValue(row, "business_type")] ?? "販売",
     vehicleId: nullableString(row, "vehicle_id"),
     contractId: nullableString(row, "contract_id"),
+    contractAmount: row.contract_amount === null || row.contract_amount === undefined ? null : numberValue(row, "contract_amount"),
     leadLabel: stringValue(row, "lead_label"),
     referralNote: stringValue(row, "referral_note"),
     status: spotAssignmentStatusFromDb[stringValue(row, "status")] ?? "進行中",
@@ -392,6 +393,7 @@ export const spotAssignmentToRpc = (input: SaveSpotAssignmentInput) => ({
   p_engagement_type: staffEngagementToDb[input.engagementType],
   p_business_type: staffBusinessToDb[input.businessType],
   p_vehicle_id: input.vehicleId,
+  p_contract_amount: input.contractAmount,
   p_lead_label: input.leadLabel.trim(),
   p_referral_note: input.referralNote.trim(),
 });

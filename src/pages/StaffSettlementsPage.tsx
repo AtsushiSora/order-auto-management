@@ -61,7 +61,7 @@ export function StaffSettlementsPage() {
   const [assignmentOpen, setAssignmentOpen] = useState(false);
   const [assignmentForm, setAssignmentForm] = useState<SaveSpotAssignmentInput>({
     assignmentId: null, staffId: "", engagementType: "紹介のみ", businessType: "販売",
-    vehicleId: null, leadLabel: "", referralNote: "",
+    vehicleId: null, contractAmount: null, leadLabel: "", referralNote: "",
   });
 
   const roleVisibleSettlements = profile?.role === "spot" ? data.staffSettlements.filter((item) => item.staffId === profile.id) : data.staffSettlements;
@@ -230,6 +230,7 @@ export function StaffSettlementsPage() {
       engagementType: assignment?.engagementType ?? "紹介のみ",
       businessType: assignment?.businessType ?? "販売",
       vehicleId: assignment?.vehicleId ?? null,
+      contractAmount: assignment?.contractAmount ?? null,
       leadLabel: assignment?.leadLabel ?? "",
       referralNote: assignment?.referralNote ?? "",
     });
@@ -257,7 +258,7 @@ export function StaffSettlementsPage() {
     <>
       <PageHeader title="スタッフ精算" description="通常・スポットスタッフの担当案件、紹介料、成果報酬、合意済みの例外請求を管理します。" action={isOwner ? <div className="page-header-actions"><button type="button" className="secondary-button" onClick={() => openAssignment()}><BriefcaseBusiness size={20} />担当案件を登録</button><button type="button" className="primary-button" onClick={openNew}><Plus size={20} />精算予定を登録</button></div> : undefined} />
 
-      {isOwner || profile?.role === "accounting" ? <section className="panel spot-management-panel"><div className="section-heading"><div><h2>スポット担当案件</h2><p>本人には、ここで事業主が割り当てた案件だけが表示されます。</p></div></div><div className="spot-management-list">{data.spotAssignments.map((assignment) => <article key={assignment.id}><div><strong>{assignment.leadLabel || (assignment.vehicleId ? vehicleLabel(assignment.vehicleId) : "名称未入力")}</strong><span>{staffName(assignment.staffId)}・{assignment.businessType}・{assignment.engagementType}</span></div><StatusBadge>{assignment.status}</StatusBadge><div className="staff-settlement-actions">{isOwner && assignment.status === "進行中" && !assignment.contractId ? <button type="button" className="table-action-button" onClick={() => openAssignment(assignment)}><Pencil size={14} />修正</button> : null}{isOwner && assignment.status === "進行中" ? <><button type="button" className="table-action-button" onClick={() => void finishAssignment(assignment, false)}>完了</button><button type="button" className="table-action-button danger-table-button" onClick={() => void finishAssignment(assignment, true)}>取消</button></> : null}</div></article>)}{!data.spotAssignments.length ? <div className="table-empty"><BriefcaseBusiness size={27} /><p>スポット担当案件はまだありません。</p></div> : null}</div></section> : null}
+      {isOwner || profile?.role === "accounting" ? <section className="panel spot-management-panel"><div className="section-heading"><div><h2>スポット担当案件</h2><p>本人には、ここで事業主が割り当てた案件だけが表示されます。</p></div></div><div className="spot-management-list">{data.spotAssignments.map((assignment) => <article key={assignment.id}><div><strong>{assignment.leadLabel || (assignment.vehicleId ? vehicleLabel(assignment.vehicleId) : "名称未入力")}</strong><span>{staffName(assignment.staffId)}・{assignment.businessType}・{assignment.engagementType}{assignment.contractAmount !== null ? `・買取額 ${formatCurrency(assignment.contractAmount)}` : ""}</span></div><StatusBadge>{assignment.status}</StatusBadge><div className="staff-settlement-actions">{isOwner && assignment.status === "進行中" && !assignment.contractId ? <button type="button" className="table-action-button" onClick={() => openAssignment(assignment)}><Pencil size={14} />修正</button> : null}{isOwner && assignment.status === "進行中" ? <><button type="button" className="table-action-button" onClick={() => void finishAssignment(assignment, false)}>完了</button><button type="button" className="table-action-button danger-table-button" onClick={() => void finishAssignment(assignment, true)}>取消</button></> : null}</div></article>)}{!data.spotAssignments.length ? <div className="table-empty"><BriefcaseBusiness size={27} /><p>スポット担当案件はまだありません。</p></div> : null}</div></section> : null}
 
       <section className="mini-summary-grid">
         <div className="mini-summary-card amber"><small>支給予定・未払い</small><strong>{formatCurrency(totals.payable)}</strong></div>
@@ -283,7 +284,93 @@ export function StaffSettlementsPage() {
         </div></td>
       </tr>)}</tbody></table></div>{!visibleSettlements.length ? <div className="table-empty"><Users size={28} /><p>スタッフ精算はまだありません。</p></div> : null}</section>
 
-      {assignmentOpen ? <Drawer title={assignmentForm.assignmentId ? "担当案件を修正" : "スポット担当案件を登録"} subtitle="本人にはこの案件だけが表示されます。" onClose={() => setAssignmentOpen(false)}><form className="form-stack" onSubmit={submitAssignment}><section className="form-section"><h3>担当スタッフと範囲</h3><label className="field-label">スポットスタッフ <span className="required">必須</span><select value={assignmentForm.staffId} onChange={(event) => setAssignmentForm({ ...assignmentForm, staffId: event.target.value })}><option value="">選択してください</option>{spotStaff.map((staff) => <option key={staff.id} value={staff.id}>{staff.displayName}</option>)}</select></label><div className="form-row"><label className="field-label">担当範囲<select value={assignmentForm.engagementType} onChange={(event) => setAssignmentForm({ ...assignmentForm, engagementType: event.target.value as StaffEngagementType })}>{engagementTypes.map((item) => <option key={item}>{item}</option>)}</select></label><label className="field-label">業務区分<select value={assignmentForm.businessType} onChange={(event) => setAssignmentForm({ ...assignmentForm, businessType: event.target.value as StaffBusinessType, vehicleId: null })}>{businessTypes.map((item) => <option key={item}>{item}</option>)}</select></label></div><label className="field-label">対象車両{assignmentForm.engagementType === "契約から全て担当" && assignmentForm.businessType === "販売" ? <span className="required">必須</span> : null}<select value={assignmentForm.vehicleId ?? ""} onChange={(event) => setAssignmentForm({ ...assignmentForm, vehicleId: event.target.value || null })}><option value="">車両登録前・指定なし</option>{data.vehicles.map((vehicle) => <option key={vehicle.id} value={vehicle.id}>{vehicle.managementNumber} {vehicle.name}</option>)}</select></label></section><section className="form-section"><h3>案件内容</h3><label className="field-label">案件名・紹介先<input maxLength={160} value={assignmentForm.leadLabel} onChange={(event) => setAssignmentForm({ ...assignmentForm, leadLabel: event.target.value })} placeholder="お客様名・業者名・案件の呼び名" /></label><label className="field-label">本人への伝達事項<textarea maxLength={1000} value={assignmentForm.referralNote} onChange={(event) => setAssignmentForm({ ...assignmentForm, referralNote: event.target.value })} /></label></section>{error ? <p className="form-error">{error}</p> : null}<div className="form-actions"><button type="button" className="secondary-button" onClick={() => setAssignmentOpen(false)}>キャンセル</button><button type="submit" className="primary-button" disabled={busy || !assignmentForm.staffId || (assignmentForm.engagementType === "契約から全て担当" && assignmentForm.businessType === "販売" && !assignmentForm.vehicleId)}>{busy ? "保存中" : "担当を保存"}</button></div></form></Drawer> : null}
+      {assignmentOpen ? (
+        <Drawer
+          title={assignmentForm.assignmentId ? "担当案件を修正" : "スポット担当案件を登録"}
+          subtitle="契約を任せるか、紹介だけとして記録するかを選びます。"
+          onClose={() => setAssignmentOpen(false)}
+        >
+          <form className="form-stack" onSubmit={submitAssignment}>
+            <section className="form-section">
+              <h3>担当スタッフと流れ</h3>
+              <label className="field-label">スポットスタッフ <span className="required">必須</span>
+                <select value={assignmentForm.staffId} onChange={(event) => setAssignmentForm({ ...assignmentForm, staffId: event.target.value })}>
+                  <option value="">選択してください</option>
+                  {spotStaff.map((staff) => <option key={staff.id} value={staff.id}>{staff.displayName}</option>)}
+                </select>
+              </label>
+              <div className="form-row">
+                <label className="field-label">担当範囲
+                  <select
+                    value={assignmentForm.engagementType}
+                    onChange={(event) => {
+                      const engagementType = event.target.value as StaffEngagementType;
+                      setAssignmentForm({ ...assignmentForm, engagementType, contractAmount: engagementType === "紹介のみ" ? null : assignmentForm.contractAmount });
+                    }}
+                  >
+                    {engagementTypes.map((item) => <option key={item}>{item}</option>)}
+                  </select>
+                </label>
+                <label className="field-label">業務区分
+                  <select
+                    value={assignmentForm.businessType}
+                    onChange={(event) => {
+                      const businessType = event.target.value as StaffBusinessType;
+                      setAssignmentForm({ ...assignmentForm, businessType, vehicleId: null, contractAmount: businessType === "販売" ? null : assignmentForm.contractAmount });
+                    }}
+                  >
+                    {businessTypes.map((item) => <option key={item}>{item}</option>)}
+                  </select>
+                </label>
+              </div>
+              {assignmentForm.engagementType === "契約から全て担当" && assignmentForm.businessType === "販売" ? (
+                <label className="field-label">販売する在庫車両 <span className="required">必須</span>
+                  <select value={assignmentForm.vehicleId ?? ""} onChange={(event) => setAssignmentForm({ ...assignmentForm, vehicleId: event.target.value || null })}>
+                    <option value="">在庫から選択してください</option>
+                    {data.vehicles.map((vehicle) => <option key={vehicle.id} value={vehicle.id}>{vehicle.managementNumber} {vehicle.name}</option>)}
+                  </select>
+                </label>
+              ) : null}
+              {assignmentForm.engagementType === "契約から全て担当" && assignmentForm.businessType !== "販売" ? (
+                <label className="field-label">事業主が決めた買取金額（税込） <span className="required">必須</span>
+                  <input
+                    type="number"
+                    min="0"
+                    step="1"
+                    inputMode="numeric"
+                    value={assignmentForm.contractAmount ?? ""}
+                    onChange={(event) => setAssignmentForm({ ...assignmentForm, contractAmount: event.target.value === "" ? null : Number(event.target.value) })}
+                    placeholder="0円買取の場合は0"
+                  />
+                </label>
+              ) : null}
+              {assignmentForm.engagementType === "紹介のみ" ? (
+                <p className="form-hint">販売・買取の契約は事業主が行い、紹介料も事業主が登録・振込します。</p>
+              ) : null}
+            </section>
+            <section className="form-section">
+              <h3>案件内容</h3>
+              <label className="field-label">案件名・紹介先
+                <input maxLength={160} value={assignmentForm.leadLabel} onChange={(event) => setAssignmentForm({ ...assignmentForm, leadLabel: event.target.value })} placeholder="お客様名・業者名・案件の呼び名" />
+              </label>
+              <label className="field-label">本人への伝達事項
+                <textarea maxLength={1000} value={assignmentForm.referralNote} onChange={(event) => setAssignmentForm({ ...assignmentForm, referralNote: event.target.value })} />
+              </label>
+            </section>
+            {error ? <p className="form-error">{error}</p> : null}
+            <div className="form-actions">
+              <button type="button" className="secondary-button" onClick={() => setAssignmentOpen(false)}>キャンセル</button>
+              <button
+                type="submit"
+                className="primary-button"
+                disabled={busy || !assignmentForm.staffId || (assignmentForm.engagementType === "契約から全て担当" && assignmentForm.businessType === "販売" && !assignmentForm.vehicleId) || (assignmentForm.engagementType === "契約から全て担当" && assignmentForm.businessType !== "販売" && assignmentForm.contractAmount === null)}
+              >
+                {busy ? "保存中" : "担当を保存"}
+              </button>
+            </div>
+          </form>
+        </Drawer>
+      ) : null}
 
       {formOpen ? <Drawer title={form.settlementId ? "精算予定を修正" : "精算予定を登録"} subtitle="登録時点の条件を保存し、粗利が変わっても自動変更しません。" onClose={() => setFormOpen(false)}><form className="form-stack" onSubmit={submit}>
         <section className="form-section"><h3>スタッフと担当内容</h3>

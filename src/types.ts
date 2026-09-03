@@ -82,6 +82,7 @@ export type SpotAssignment = {
   businessType: StaffBusinessType;
   vehicleId: string | null;
   contractId: string | null;
+  contractAmount: number | null;
   leadLabel: string;
   referralNote: string;
   status: SpotAssignmentStatus;

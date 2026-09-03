@@ -521,11 +521,13 @@ describe("Supabaseデータ変換", () => {
       engagementType: "紹介のみ",
       businessType: "廃車",
       vehicleId: null,
+      contractAmount: null,
       leadLabel: " 事故車の紹介 ",
       referralNote: " 事業主へ連絡済み ",
     })).toMatchObject({
       p_engagement_type: "referral_only",
       p_business_type: "scrap",
+      p_contract_amount: null,
       p_lead_label: "事故車の紹介",
     });
 
