@@ -3954,8 +3954,42 @@ button.mini-summary-card:hover {
   margin-bottom: 12px;
 }
 
+.evidence-upload-actions .primary-button,
 .evidence-upload-actions .file-button {
   width: 100%;
+}
+
+.evidence-camera-panel {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 12px;
+  padding: 12px;
+  border: 1px solid var(--slate-200);
+  border-radius: 12px;
+  background: var(--slate-900);
+}
+
+.evidence-camera-panel video {
+  display: block;
+  width: 100%;
+  max-height: 56vh;
+  aspect-ratio: 4 / 3;
+  border-radius: 9px;
+  background: #000;
+  object-fit: cover;
+}
+
+.evidence-camera-panel p {
+  margin: 0;
+  color: #fff;
+  font-size: 12px;
+  text-align: center;
+}
+
+.evidence-camera-actions {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 9px;
 }
 
 .evidence-count {
@@ -4081,6 +4115,10 @@ button.mini-summary-card:hover {
 
 @media (max-width: 560px) {
   .evidence-upload-actions {
+    grid-template-columns: 1fr;
+  }
+
+  .evidence-camera-actions {
     grid-template-columns: 1fr;
   }
 
