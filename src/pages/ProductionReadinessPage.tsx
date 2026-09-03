@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { AlertTriangle, CheckCircle2, Circle, Rocket, RotateCcw, Save, ShieldCheck, Wrench } from "lucide-react";
+import { AlertTriangle, ArrowRight, CheckCircle2, Circle, ListChecks, Rocket, RotateCcw, Save, ShieldCheck, Wrench } from "lucide-react";
 import { PageHeader } from "../components/PageHeader";
 import { formatDateTime } from "../lib/format";
 import { productionReadinessItems, readinessProgress } from "../lib/productionReadiness";
@@ -12,10 +12,13 @@ const statuses: Array<{ value: ReadinessCheckStatus; label: string }> = [
   { value: "要修正", label: "要修正" },
 ];
 
-function ReadinessItem({ checkKey, title, description }: {
+function ReadinessItem({ checkKey, title, description, steps, targetPage, targetLabel }: {
   checkKey: ProductionReadinessCheckKey;
   title: string;
   description: string;
+  steps: string[];
+  targetPage?: string;
+  targetLabel?: string;
 }) {
   const { productionReadiness, saveProductionReadinessCheck } = useAppData();
   const saved = productionReadiness.checks[checkKey];
@@ -53,6 +56,11 @@ function ReadinessItem({ checkKey, title, description }: {
         <span className="readiness-status-icon"><Icon size={22} /></span>
         <div><strong>{title}</strong><p>{description}</p></div>
       </div>
+      <details className="readiness-steps">
+        <summary><ListChecks size={16} />確認手順を表示</summary>
+        <ol>{steps.map((step) => <li key={step}>{step}</li>)}</ol>
+        {targetPage ? <a className="readiness-target-link" href={`#/${targetPage}`}>{targetLabel ?? "対象画面を開く"}<ArrowRight size={15} /></a> : null}
+      </details>
       <div className="readiness-item-fields">
         <label className="field-label">確認結果
           <select value={status} onChange={(event) => { setStatus(event.target.value as ReadinessCheckStatus); setMessage(null); }}>
@@ -104,6 +112,11 @@ export function ProductionReadinessPage() {
     <>
       <PageHeader title="本番前チェック" description="架空データで一連の業務と安全性を確認し、本番利用の開始判断を記録します。" />
 
+      <section className="integration-note panel readiness-automation-note">
+        <ShieldCheck size={24} />
+        <div><strong>公開のたびに自動テストを実行しています</strong><p>計算・連携・入力制限などは自動確認済みです。ここでは自動テストだけでは判断できない実際の操作、表示、端末での結果を1項目ずつ記録します。</p></div>
+      </section>
+
       <section className={`panel readiness-summary ${approved ? "approved" : "reviewing"}`}>
         <div className="readiness-summary-main">
           <span className="readiness-summary-icon">{approved ? <ShieldCheck size={30} /> : <AlertTriangle size={30} />}</span>
@@ -132,7 +145,7 @@ export function ProductionReadinessPage() {
           <div className="section-heading"><div><h2>{category}</h2><p>実際の運用と同じ順番で、架空データを使用して確認します。</p></div></div>
           <div className="readiness-list">
             {productionReadinessItems.filter((item) => item.category === category).map((item) => (
-              <ReadinessItem key={item.key} checkKey={item.key} title={item.title} description={item.description} />
+              <ReadinessItem key={item.key} checkKey={item.key} title={item.title} description={item.description} steps={item.steps} targetPage={item.targetPage} targetLabel={item.targetLabel} />
             ))}
           </div>
         </section>

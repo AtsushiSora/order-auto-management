@@ -27,4 +27,12 @@ describe("production readiness", () => {
     expect(statusToDb("確認済み")).toBe("passed");
     expect(statusToDb("要修正")).toBe("needs_fix");
   });
+
+  it("すべての確認項目に具体的な手順と重複しないキーがある", () => {
+    expect(new Set(productionReadinessItems.map((item) => item.key)).size).toBe(productionReadinessItems.length);
+    for (const item of productionReadinessItems) {
+      expect(item.steps.length).toBeGreaterThanOrEqual(3);
+      expect(item.steps.every((step) => step.trim().length > 0)).toBe(true);
+    }
+  });
 });
