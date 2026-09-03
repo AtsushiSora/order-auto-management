@@ -33,25 +33,34 @@ Deno.serve(async (request: Request) => {
 
   const supabaseUrl = Deno.env.get("SUPABASE_URL");
   const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  const anonKey = Deno.env.get("SUPABASE_ANON_KEY");
   const authorization = request.headers.get("Authorization") ?? "";
   const accessToken = authorization.startsWith("Bearer ") ? authorization.slice(7) : "";
-  if (!supabaseUrl || !serviceRoleKey || !accessToken) {
+  if (!supabaseUrl || !serviceRoleKey || !anonKey || !accessToken) {
     return response(responseOrigin, { error: "ログイン状態を確認できません。" }, 401);
   }
 
   const admin = createClient(supabaseUrl, serviceRoleKey, {
     auth: { persistSession: false, autoRefreshToken: false },
   });
+  const userClient = createClient(supabaseUrl, anonKey, {
+    auth: { persistSession: false, autoRefreshToken: false },
+    global: { headers: { Authorization: authorization } },
+  });
   const { data: userResult, error: userError } = await admin.auth.getUser(accessToken);
   if (userError || !userResult.user) {
     return response(responseOrigin, { error: "ログインし直してください。" }, 401);
   }
 
-  const { data: caller } = await admin
+  // 管理画面と同じログインJWTで、RLSを含めて事業主権限を確認する。
+  const { data: caller, error: callerError } = await userClient
     .from("staff_profiles")
     .select("role, is_active")
     .eq("id", userResult.user.id)
     .maybeSingle();
+  if (callerError) {
+    return response(responseOrigin, { error: "利用者権限を確認できませんでした。ログインし直してください。" }, 401);
+  }
   if (!caller?.is_active || caller.role !== "owner") {
     return response(responseOrigin, { error: "利用者を招待できるのは事業主だけです。" }, 403);
   }
@@ -86,12 +95,10 @@ Deno.serve(async (request: Request) => {
     }, duplicate ? 409 : 500);
   }
 
-  const { error: profileError } = await admin.from("staff_profiles").insert({
-    id: invited.user.id,
-    display_name: displayName,
-    role,
-    is_active: true,
-    deactivated_at: null,
+  const { error: profileError } = await userClient.rpc("register_invited_staff_profile", {
+    p_staff_id: invited.user.id,
+    p_display_name: displayName,
+    p_role: role,
   });
   if (profileError) {
     await admin.auth.admin.deleteUser(invited.user.id);
