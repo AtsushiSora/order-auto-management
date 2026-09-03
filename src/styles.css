@@ -4183,6 +4183,14 @@ button.mini-summary-card:hover {
   font-size: 10px;
 }
 
+.spot-management-list .spot-next-step {
+  display: block;
+  margin-top: 7px;
+  color: var(--blue-700);
+  font-size: 10px;
+  font-weight: 750;
+}
+
 .spot-assignment-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -4252,6 +4260,25 @@ button.mini-summary-card:hover {
   color: var(--slate-600);
   font-size: 11px;
   line-height: 1.7;
+}
+
+.spot-next-step-note,
+.spot-flow-preview {
+  display: grid;
+  gap: 4px;
+  padding: 11px 12px;
+  border: 1px solid #b9d8f6;
+  border-radius: 9px;
+  color: var(--slate-700);
+  background: #f3f8fe;
+  font-size: 10px;
+  line-height: 1.55;
+}
+
+.spot-next-step-note strong,
+.spot-flow-preview strong {
+  color: var(--blue-700);
+  font-size: 10px;
 }
 
 .spot-assignment-actions {

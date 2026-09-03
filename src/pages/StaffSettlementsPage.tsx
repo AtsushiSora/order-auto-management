@@ -6,6 +6,12 @@ import { StatusBadge } from "../components/StatusBadge";
 import { calculateVehicleProfit } from "../lib/calculations";
 import { formatCurrency } from "../lib/format";
 import { calculateStaffPlannedAmount, staffSettlementCondition, staffSettlementDisplayAmount } from "../lib/staffSettlements";
+import {
+  requiresOwnerPurchaseAmount,
+  requiresSpotSaleVehicle,
+  spotAssignmentNextStep,
+  validateSpotAssignment,
+} from "../lib/spotAssignments";
 import { useAppData } from "../state/AppDataContext";
 import { useAuth } from "../state/AuthContext";
 import type {
@@ -240,6 +246,8 @@ export function StaffSettlementsPage() {
 
   const submitAssignment = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    const validationError = validateSpotAssignment(assignmentForm);
+    if (validationError) return setError(validationError);
     setBusy(true); setError("");
     try { await saveSpotAssignment(assignmentForm); setAssignmentOpen(false); }
     catch (reason) { setError(reason instanceof Error ? reason.message : "担当案件を保存できませんでした。"); }
@@ -258,7 +266,28 @@ export function StaffSettlementsPage() {
     <>
       <PageHeader title="スタッフ精算" description="通常・スポットスタッフの担当案件、紹介料、成果報酬、合意済みの例外請求を管理します。" action={isOwner ? <div className="page-header-actions"><button type="button" className="secondary-button" onClick={() => openAssignment()}><BriefcaseBusiness size={20} />担当案件を登録</button><button type="button" className="primary-button" onClick={openNew}><Plus size={20} />精算予定を登録</button></div> : undefined} />
 
-      {isOwner || profile?.role === "accounting" ? <section className="panel spot-management-panel"><div className="section-heading"><div><h2>スポット担当案件</h2><p>本人には、ここで事業主が割り当てた案件だけが表示されます。</p></div></div><div className="spot-management-list">{data.spotAssignments.map((assignment) => <article key={assignment.id}><div><strong>{assignment.leadLabel || (assignment.vehicleId ? vehicleLabel(assignment.vehicleId) : "名称未入力")}</strong><span>{staffName(assignment.staffId)}・{assignment.businessType}・{assignment.engagementType}{assignment.contractAmount !== null ? `・買取額 ${formatCurrency(assignment.contractAmount)}` : ""}</span></div><StatusBadge>{assignment.status}</StatusBadge><div className="staff-settlement-actions">{isOwner && assignment.status === "進行中" && !assignment.contractId ? <button type="button" className="table-action-button" onClick={() => openAssignment(assignment)}><Pencil size={14} />修正</button> : null}{isOwner && assignment.status === "進行中" ? <><button type="button" className="table-action-button" onClick={() => void finishAssignment(assignment, false)}>完了</button><button type="button" className="table-action-button danger-table-button" onClick={() => void finishAssignment(assignment, true)}>取消</button></> : null}</div></article>)}{!data.spotAssignments.length ? <div className="table-empty"><BriefcaseBusiness size={27} /><p>スポット担当案件はまだありません。</p></div> : null}</div></section> : null}
+      {isOwner || profile?.role === "accounting" ? (
+        <section className="panel spot-management-panel">
+          <div className="section-heading"><div><h2>スポット担当案件</h2><p>本人には、ここで事業主が割り当てた案件だけが表示されます。</p></div></div>
+          <div className="spot-management-list">
+            {data.spotAssignments.map((assignment) => (
+              <article key={assignment.id}>
+                <div>
+                  <strong>{assignment.leadLabel || (assignment.vehicleId ? vehicleLabel(assignment.vehicleId) : "名称未入力")}</strong>
+                  <span>{staffName(assignment.staffId)}・{assignment.businessType}・{assignment.engagementType}{assignment.contractAmount !== null ? `・買取額 ${formatCurrency(assignment.contractAmount)}` : ""}</span>
+                  <small className="spot-next-step">{assignment.status === "進行中" ? spotAssignmentNextStep(assignment, "owner") : assignment.status === "完了" ? "対応完了" : "取り消し済み"}</small>
+                </div>
+                <StatusBadge>{assignment.status}</StatusBadge>
+                <div className="staff-settlement-actions">
+                  {isOwner && assignment.status === "進行中" && !assignment.contractId ? <button type="button" className="table-action-button" onClick={() => openAssignment(assignment)}><Pencil size={14} />修正</button> : null}
+                  {isOwner && assignment.status === "進行中" ? <><button type="button" className="table-action-button" onClick={() => void finishAssignment(assignment, false)}>完了</button><button type="button" className="table-action-button danger-table-button" onClick={() => void finishAssignment(assignment, true)}>取消</button></> : null}
+                </div>
+              </article>
+            ))}
+            {!data.spotAssignments.length ? <div className="table-empty"><BriefcaseBusiness size={27} /><p>スポット担当案件はまだありません。</p></div> : null}
+          </div>
+        </section>
+      ) : null}
 
       <section className="mini-summary-grid">
         <div className="mini-summary-card amber"><small>支給予定・未払い</small><strong>{formatCurrency(totals.payable)}</strong></div>
@@ -323,7 +352,7 @@ export function StaffSettlementsPage() {
                   </select>
                 </label>
               </div>
-              {assignmentForm.engagementType === "契約から全て担当" && assignmentForm.businessType === "販売" ? (
+              {requiresSpotSaleVehicle(assignmentForm) ? (
                 <label className="field-label">販売する在庫車両 <span className="required">必須</span>
                   <select value={assignmentForm.vehicleId ?? ""} onChange={(event) => setAssignmentForm({ ...assignmentForm, vehicleId: event.target.value || null })}>
                     <option value="">在庫から選択してください</option>
@@ -331,7 +360,7 @@ export function StaffSettlementsPage() {
                   </select>
                 </label>
               ) : null}
-              {assignmentForm.engagementType === "契約から全て担当" && assignmentForm.businessType !== "販売" ? (
+              {requiresOwnerPurchaseAmount(assignmentForm) ? (
                 <label className="field-label">事業主が決めた買取金額（税込） <span className="required">必須</span>
                   <input
                     type="number"
@@ -347,6 +376,10 @@ export function StaffSettlementsPage() {
               {assignmentForm.engagementType === "紹介のみ" ? (
                 <p className="form-hint">販売・買取の契約は事業主が行い、紹介料も事業主が登録・振込します。</p>
               ) : null}
+              <div className="spot-flow-preview">
+                <strong>保存後の流れ</strong>
+                <span>{spotAssignmentNextStep(assignmentForm, "owner")}</span>
+              </div>
             </section>
             <section className="form-section">
               <h3>案件内容</h3>
@@ -363,7 +396,7 @@ export function StaffSettlementsPage() {
               <button
                 type="submit"
                 className="primary-button"
-                disabled={busy || !assignmentForm.staffId || (assignmentForm.engagementType === "契約から全て担当" && assignmentForm.businessType === "販売" && !assignmentForm.vehicleId) || (assignmentForm.engagementType === "契約から全て担当" && assignmentForm.businessType !== "販売" && assignmentForm.contractAmount === null)}
+                disabled={busy || !assignmentForm.staffId || Boolean(validateSpotAssignment(assignmentForm))}
               >
                 {busy ? "保存中" : "担当を保存"}
               </button>

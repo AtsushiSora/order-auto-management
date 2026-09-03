@@ -15,6 +15,7 @@ import {
   isSameOriginContractHandoff,
 } from "../lib/contractHandoff";
 import { formatCurrency, formatDate } from "../lib/format";
+import { spotAssignmentNextStep } from "../lib/spotAssignments";
 import { useAppData } from "../state/AppDataContext";
 import { useAuth } from "../state/AuthContext";
 import type {
@@ -348,6 +349,16 @@ export function SpotWorkspacePage() {
               {assignment.referralNote ? (
                 <p>{assignment.referralNote}</p>
               ) : null}
+              <div className="spot-next-step-note">
+                <strong>{assignment.status === "進行中" ? "次にすること" : "現在の状態"}</strong>
+                <span>
+                  {assignment.status === "進行中"
+                    ? spotAssignmentNextStep(assignment, "spot")
+                    : assignment.status === "完了"
+                      ? "この案件は完了しています。"
+                      : "この案件は取り消されています。"}
+                </span>
+              </div>
               <div className="spot-assignment-actions">
                 {canContract ? (
                   <button
@@ -357,7 +368,7 @@ export function SpotWorkspacePage() {
                   >
                     {assignment.contractId
                       ? "契約を確認・修正"
-                      : `${assignment.businessType === "販売" ? "販売" : "買取"}契約を入力`}
+                      : `${assignment.businessType === "販売" ? "販売" : "買取"}契約を開始`}
                   </button>
                 ) : null}
               </div>

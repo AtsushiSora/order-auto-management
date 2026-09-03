@@ -14,6 +14,7 @@ import { buildAntiqueLedgerEntries } from "../lib/antiqueLedger";
 import { buildExpenseEvidencePath, PRIVATE_BUCKET, validateEvidenceFile } from "../lib/evidence";
 import { canIssueDocument, findCompletedSaleReceipt, includedTaxAmount, nextDemoDocumentNumber } from "../lib/issuedDocuments";
 import { calculateStaffPlannedAmount } from "../lib/staffSettlements";
+import { validateSpotAssignment } from "../lib/spotAssignments";
 import { validateStaffInvitationInput, validateStaffProfileUpdate } from "../lib/staffProfiles";
 import { calculateMonthlyBalance, calculateMonthlyMovement } from "../lib/monthlyBalance";
 import { emptyProductionReadiness, normalizeProductionReadiness, statusToDb } from "../lib/productionReadiness";
@@ -1035,12 +1036,8 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     saveSpotAssignment: async (input) => {
       const staff = data.staffProfiles.find((item) => item.id === input.staffId && item.role === "spot" && item.isActive);
       if (!staff) throw new Error("有効なスポットスタッフを選択してください。");
-      if (input.engagementType === "契約から全て担当" && input.businessType === "販売" && !input.vehicleId) {
-        throw new Error("販売を全て担当する案件では対象車両が必要です。");
-      }
-      if (input.engagementType === "契約から全て担当" && input.businessType !== "販売" && input.contractAmount === null) {
-        throw new Error("買取・廃車の契約を任せる場合は、事業主が買取金額を入力してください。");
-      }
+      const validationError = validateSpotAssignment(input);
+      if (validationError) throw new Error(validationError);
       if (configured && supabase) {
         const { data: saved, error } = await supabase.rpc("save_spot_assignment", spotAssignmentToRpc(input));
         if (error) throw new Error(error.message);
