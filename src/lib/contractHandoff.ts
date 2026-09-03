@@ -11,8 +11,14 @@ export type SaleContractHandoff = {
   customerName: string;
   contractDate: string;
   vehicleName: string;
+  vehicleMaker: string;
+  vehicleGrade: string;
+  vehicleYear: string;
   chassisNumber: string;
   managementNumber: string;
+  vehicleMileage: string;
+  vehicleColor: string;
+  inspectionDate: string;
   amount: number;
   paymentMethod: PaymentMethod;
 };

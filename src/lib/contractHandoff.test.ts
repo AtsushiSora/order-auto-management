@@ -23,7 +23,9 @@ describe("contract handoff", () => {
     const token = "11111111-1111-4111-8111-111111111111";
     const result = createContractHandoff(storage, "sale", {
       assignmentId: "assignment-1", completionToken: "a".repeat(64), customerName: "山田 太郎", contractDate: "2026-09-02",
-      vehicleName: "テスト車", chassisNumber: "ABC-123", managementNumber: "26-0001",
+      vehicleName: "テスト車", vehicleMaker: "トヨタ", vehicleGrade: "G", vehicleYear: "2022",
+      chassisNumber: "ABC-123", managementNumber: "26-0001", vehicleMileage: "12,000",
+      vehicleColor: "白", inspectionDate: "2027-03",
       amount: 1_000_000, paymentMethod: "振込",
     }, { now: 1_000, token });
 
@@ -32,6 +34,7 @@ describe("contract handoff", () => {
     expect(result.url).not.toContain("a".repeat(64));
     const saved = JSON.parse(storage.getItem(`${CONTRACT_HANDOFF_PREFIX}${token}`) ?? "null");
     expect(saved.payload.customerName).toBe("山田 太郎");
+    expect(saved.payload.vehicleGrade).toBe("G");
     expect(Date.parse(saved.expiresAt) - Date.parse(saved.createdAt)).toBe(CONTRACT_HANDOFF_TTL_MS);
   });
 
