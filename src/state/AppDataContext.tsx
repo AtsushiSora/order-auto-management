@@ -1332,8 +1332,10 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       if (!canSave) throw new Error("月次残高を保存する権限がありません。");
       if (input.confirm && !canConfirm) throw new Error("月次確定は事業主または経理担当だけができます。");
       const existing = data.monthlyBalanceChecks.find((item) => item.targetMonth === input.targetMonth);
-      if (existing?.status === "確定") throw new Error("確定済みの月は変更できません。");
       const movement = calculateMonthlyMovement(data.cashflows, data.cashflowEvents, input.targetMonth);
+      if (existing?.status === "確定" && existing.cashMovement === movement.cash && existing.bankMovement === movement.bank) {
+        throw new Error("確定済みの月は変更できません。");
+      }
       const calculated = calculateMonthlyBalance(input, movement);
 
       if (configured && supabase) {

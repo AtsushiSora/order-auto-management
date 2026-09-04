@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Cashflow, CashflowEvent } from "../types";
-import { calculateMonthlyBalance, calculateMonthlyMovement } from "./monthlyBalance";
+import { calculateMonthlyBalance, calculateMonthlyMovement, monthlyBalanceNeedsRecheck } from "./monthlyBalance";
 
 const cashflows = [
   { id: "in", direction: "入金", method: "現金" },
@@ -49,5 +49,21 @@ describe("calculateMonthlyBalance", () => {
       { ...input, actualCashBalance: 100_000 },
       { cash: 100_000, bank: -30_000, excluded: 0 },
     )).toThrow("差額が0円");
+  });
+});
+
+describe("monthlyBalanceNeedsRecheck", () => {
+  const confirmed = {
+    status: "確定",
+    cashMovement: 15_000,
+    bankMovement: 200_000,
+  } as Parameters<typeof monthlyBalanceNeedsRecheck>[0];
+
+  it("確定後に現金または口座の増減が変わった場合は再確認にする", () => {
+    expect(monthlyBalanceNeedsRecheck(confirmed, { cash: 15_000, bank: 455_000, excluded: 0 })).toBe(true);
+  });
+
+  it("確定時と増減が同じ場合は確定を維持する", () => {
+    expect(monthlyBalanceNeedsRecheck(confirmed, { cash: 15_000, bank: 200_000, excluded: 0 })).toBe(false);
   });
 });

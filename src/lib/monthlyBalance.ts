@@ -1,10 +1,22 @@
-import type { Cashflow, CashflowEvent, SaveMonthlyBalanceCheckInput } from "../types";
+import type { Cashflow, CashflowEvent, MonthlyBalanceCheck, SaveMonthlyBalanceCheckInput } from "../types";
 
 export type MonthlyMovement = {
   cash: number;
   bank: number;
   excluded: number;
 };
+
+/**
+ * 月次確定後に入出金が追加・訂正された場合は、以前の確定をそのまま
+ * 信用せず、実残高との照合をやり直す。
+ */
+export function monthlyBalanceNeedsRecheck(
+  check: MonthlyBalanceCheck | undefined,
+  movement: MonthlyMovement,
+) {
+  return check?.status === "確定"
+    && (check.cashMovement !== movement.cash || check.bankMovement !== movement.bank);
+}
 
 export function calculateMonthlyMovement(
   cashflows: Cashflow[],

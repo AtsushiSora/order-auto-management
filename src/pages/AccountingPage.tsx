@@ -14,7 +14,7 @@ import { Drawer } from "../components/Drawer";
 import { PageHeader } from "../components/PageHeader";
 import { buildJournalCandidates, createJournalCsv, taxTreatmentLabels } from "../lib/accounting";
 import { formatCurrency, formatDate } from "../lib/format";
-import { calculateMonthlyBalance, calculateMonthlyMovement } from "../lib/monthlyBalance";
+import { calculateMonthlyBalance, calculateMonthlyMovement, monthlyBalanceNeedsRecheck } from "../lib/monthlyBalance";
 import { useAppData } from "../state/AppDataContext";
 import { useAuth } from "../state/AuthContext";
 import type {
@@ -94,6 +94,8 @@ export function AccountingPage() {
       return null;
     }
   }, [balanceForm, movement, targetMonth]);
+  const balanceNeedsRecheck = monthlyBalanceNeedsRecheck(balanceCheck, movement);
+  const balanceLocked = balanceCheck?.status === "確定" && !balanceNeedsRecheck;
 
   useEffect(() => {
     const previousCash = previousCheck?.actualCashBalance ?? 0;
@@ -142,7 +144,7 @@ export function AccountingPage() {
 
   const downloadCsv = async () => {
     if (!confirmed.length) return;
-    if (balanceCheck?.status !== "確定") {
+    if (balanceCheck?.status !== "確定" || balanceNeedsRecheck) {
       setPageMessage("月次残高を確定してからCSVを出力してください。");
       return;
     }
@@ -184,7 +186,7 @@ export function AccountingPage() {
       <PageHeader
         title="経理・仕訳候補"
         description="元取引から候補を作り、確認済みのものだけ月別CSVへ出力します。"
-        action={canReview ? <button type="button" className="primary-button" disabled={busy || !confirmed.length || balanceCheck?.status !== "確定"} onClick={() => void downloadCsv()}><Download size={18} />確認済みをCSV出力</button> : undefined}
+        action={canReview ? <button type="button" className="primary-button" disabled={busy || !confirmed.length || balanceCheck?.status !== "確定" || balanceNeedsRecheck} onClick={() => void downloadCsv()}><Download size={18} />確認済みをCSV出力</button> : undefined}
       />
 
       <section className="integration-note panel accounting-note">
@@ -209,7 +211,7 @@ export function AccountingPage() {
       <section className="panel monthly-balance-panel">
         <div className="monthly-balance-heading">
           <div><span className="eyebrow">月次残高確認</span><h2>{targetMonth} 現金・事業用口座</h2><p>相殺は含めず、実際に動いたお金だけを照合します。</p></div>
-          <span className={`status-badge ${balanceCheck?.status === "確定" ? "green" : "amber"}`}>{balanceCheck?.status ?? "未保存"}</span>
+          <span className={`status-badge ${balanceLocked ? "green" : "amber"}`}>{balanceNeedsRecheck ? "再確認が必要" : balanceCheck?.status ?? "未保存"}</span>
         </div>
 
         <div className="monthly-balance-grid">
@@ -223,20 +225,21 @@ export function AccountingPage() {
             const difference = key === "Cash" ? balancePreview?.cashDifference : balancePreview?.bankDifference;
             return <article className="balance-channel-card" key={key}>
               <div className="balance-channel-title"><Icon size={21} /><strong>{label}</strong></div>
-              <label className="field-label">月初残高<input type="number" min="0" step="1" value={balanceForm[openingKey]} disabled={!canSaveBalance || balanceCheck?.status === "確定"} onChange={(event) => setBalanceForm({ ...balanceForm, [openingKey]: Number(event.target.value) })} /></label>
+              <label className="field-label">月初残高<input type="number" min="0" step="1" value={balanceForm[openingKey]} disabled={!canSaveBalance || balanceLocked} onChange={(event) => setBalanceForm({ ...balanceForm, [openingKey]: Number(event.target.value) })} /></label>
               <dl className="balance-calculation"><div><dt>当月の増減</dt><dd>{formatCurrency(channelMovement)}</dd></div><div><dt>システム上の月末残高</dt><dd>{systemBalance == null ? "—" : formatCurrency(systemBalance)}</dd></div></dl>
-              <label className="field-label">実際の月末残高<input type="number" min="0" step="1" value={balanceForm[actualKey]} disabled={!canSaveBalance || balanceCheck?.status === "確定"} onChange={(event) => setBalanceForm({ ...balanceForm, [actualKey]: Number(event.target.value) })} /></label>
+              <label className="field-label">実際の月末残高<input type="number" min="0" step="1" value={balanceForm[actualKey]} disabled={!canSaveBalance || balanceLocked} onChange={(event) => setBalanceForm({ ...balanceForm, [actualKey]: Number(event.target.value) })} /></label>
               <div className={`balance-difference ${difference === 0 ? "matched" : "unmatched"}`}><span>差額</span><strong>{difference == null ? "—" : formatCurrency(difference)}</strong></div>
             </article>;
           })}
         </div>
 
         {movement.excluded > 0 ? <p className="form-warning">ローン・カード・その他の入出金 {formatCurrency(movement.excluded)} は、現金・口座残高の照合対象外です。</p> : null}
-        <label className="field-label monthly-balance-note">確認メモ<textarea rows={2} value={balanceForm.note} disabled={!canSaveBalance || balanceCheck?.status === "確定"} onChange={(event) => setBalanceForm({ ...balanceForm, note: event.target.value })} placeholder="差額の確認内容など" /></label>
+        {balanceNeedsRecheck ? <p className="form-warning">月次確定後に入出金が追加または訂正されました。現在の実残高を確認し、もう一度月次確定してください。</p> : null}
+        <label className="field-label monthly-balance-note">確認メモ<textarea rows={2} value={balanceForm.note} disabled={!canSaveBalance || balanceLocked} onChange={(event) => setBalanceForm({ ...balanceForm, note: event.target.value })} placeholder="差額の確認内容など" /></label>
         {previousCheck ? <p className="balance-helper">前月（{previousCheck.targetMonth}）の確定済み月末残高を初期値にしています。</p> : <p className="balance-helper">前月の確定データがないため、通帳・現金を確認して対象月の月初残高を入力してください。</p>}
         {balanceMessage ? <p className={balanceMessage.includes("できません") || balanceMessage.includes("ください") ? "form-error" : "form-success"}>{balanceMessage}</p> : null}
         <div className="form-actions monthly-balance-actions">
-          {balanceCheck?.status === "確定" ? <span className="confirmed-lock"><LockKeyhole size={17} />確定済みのため変更できません</span> : canSaveBalance ? <>
+          {balanceLocked ? <span className="confirmed-lock"><LockKeyhole size={17} />確定済みのため変更できません</span> : canSaveBalance ? <>
             <button type="button" className="secondary-button" disabled={balanceBusy} onClick={() => void saveBalance(false)}><Save size={17} />確認中で保存</button>
             {canReview ? <button type="button" className="primary-button" disabled={balanceBusy || !balancePreview || balancePreview.cashDifference !== 0 || balancePreview.bankDifference !== 0} onClick={() => void saveBalance(true)}><LockKeyhole size={17} />差額0円で月次確定</button> : null}
           </> : null}
