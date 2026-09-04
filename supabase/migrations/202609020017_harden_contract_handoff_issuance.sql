@@ -1,5 +1,7 @@
 -- 完了連携の発行履歴を監査対象にし、販売金額0円の連携を発行前に防ぐ。
 
+-- 015で作成済みの新規構築と、過去の環境の両方で安全に適用できるよう再作成する。
+drop trigger if exists contract_handoffs_audit on public.contract_handoffs;
 create trigger contract_handoffs_audit after insert or update or delete on public.contract_handoffs
 for each row execute function private.write_audit_log();
 
