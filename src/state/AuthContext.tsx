@@ -15,9 +15,13 @@ import type { StaffProfile, StaffRole } from "../types";
 
 const INACTIVITY_LIMIT_MS = 30 * 60 * 1000;
 const TEST_SESSION_KEY = "order-auto-test-session";
+export const isTestLoginEnabled =
+  import.meta.env.DEV || import.meta.env.VITE_ENABLE_TEST_LOGIN === "true";
 
 const hasStoredTestSession = () =>
-  typeof window !== "undefined" && window.sessionStorage.getItem(TEST_SESSION_KEY) === "active";
+  isTestLoginEnabled
+  && typeof window !== "undefined"
+  && window.sessionStorage.getItem(TEST_SESSION_KEY) === "active";
 
 type AuthContextValue = {
   configured: boolean;
@@ -216,6 +220,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (signInError) throw new Error("メールアドレスまたはパスワードを確認してください。");
     },
     testSignIn: () => {
+      if (!isTestLoginEnabled) return;
       window.sessionStorage.setItem(TEST_SESSION_KEY, "active");
       setError(null);
       setProfile(demoProfile);

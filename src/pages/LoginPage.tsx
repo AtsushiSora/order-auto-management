@@ -1,11 +1,9 @@
 import { useState, type FormEvent } from "react";
 import { CarFront, FlaskConical, KeyRound, LoaderCircle, ShieldCheck } from "lucide-react";
-import { useAuth } from "../state/AuthContext";
+import { isTestLoginEnabled, useAuth } from "../state/AuthContext";
 
 export function LoginPage() {
   const { signIn, testSignIn } = useAuth();
-  const testLoginEnabled =
-    import.meta.env.DEV || import.meta.env.VITE_ENABLE_TEST_LOGIN === "true";
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -61,7 +59,7 @@ export function LoginPage() {
           </button>
         </form>
 
-        {testLoginEnabled ? (
+        {isTestLoginEnabled ? (
           <div className="test-login-area">
             <div className="login-divider"><span>または</span></div>
             <button type="button" className="test-login-button" onClick={testSignIn}>

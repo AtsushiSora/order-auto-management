@@ -98,7 +98,7 @@ import type {
   ProductionReadinessCheckKey,
   ReadinessCheckStatus,
 } from "../types";
-import { useAuth } from "./AuthContext";
+import { isTestLoginEnabled, useAuth } from "./AuthContext";
 
 const STORAGE_KEY = "order-auto-management-demo-v1";
 const READINESS_STORAGE_KEY = "order-auto-management-readiness-v1";
@@ -317,7 +317,6 @@ const errorMessage = (error: unknown) => {
 
 export function AppDataProvider({ children }: { children: ReactNode }) {
   const { configured, session, profile, refreshProfile, signOut, testSignIn } = useAuth();
-  const testLoginEnabled = import.meta.env.DEV || import.meta.env.VITE_ENABLE_TEST_LOGIN === "true";
   const [data, setData] = useState<AppData>(() => configured ? emptyData : loadInitialDemoData());
   const [productionReadiness, setProductionReadiness] = useState<ProductionReadiness>(() => configured ? emptyProductionReadiness() : loadInitialDemoReadiness());
   const [loading, setLoading] = useState(configured);
@@ -1810,7 +1809,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       message={loadError}
       onRetry={() => void refreshData()}
       onLogout={() => void signOut()}
-      onUseTestMode={testLoginEnabled ? testSignIn : undefined}
+      onUseTestMode={isTestLoginEnabled ? testSignIn : undefined}
     />
   );
 

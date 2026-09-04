@@ -21,9 +21,8 @@ jobs:
       VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
       VITE_SUPABASE_PUBLISHABLE_KEY: ${{ vars.VITE_SUPABASE_PUBLISHABLE_KEY }}
       VITE_GOOGLE_CLIENT_ID: ${{ vars.VITE_GOOGLE_CLIENT_ID }}
-      # 開発中は公開ページでも架空データ専用のテストログインを使用する。
-      # 完成前の本番移行時に false へ戻す。
-      VITE_ENABLE_TEST_LOGIN: "true"
+      # 公開版ではメール・パスワード認証だけを許可する。
+      VITE_ENABLE_TEST_LOGIN: "false"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
