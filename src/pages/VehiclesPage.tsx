@@ -21,6 +21,7 @@ import { Drawer } from "../components/Drawer";
 import { PageHeader } from "../components/PageHeader";
 import { StatusBadge } from "../components/StatusBadge";
 import { VehicleInspectionImportDrawer } from "../components/VehicleInspectionImportDrawer";
+import { VehicleQrReaderDrawer } from "../components/VehicleQrReaderDrawer";
 import { calculateVehicleProfit, outstandingAmount } from "../lib/calculations";
 import { formatCurrency, formatDate } from "../lib/format";
 import {
@@ -48,6 +49,8 @@ import type {
   VehicleDocumentType,
   VehicleDisposition,
   VehicleStatus,
+  VehicleInspectionData,
+  VehicleModelOption,
 } from "../types";
 
 const vehicleStatuses: VehicleStatus[] = ["入庫予定", "入庫済み", "販売中", "売約済み", "納車済み", "廃車処分"];
@@ -55,10 +58,21 @@ const acquisitionSources: AcquisitionSource[] = ["一般のお客様", "オー�
 const vehicleDispositions: VehicleDisposition[] = ["未定", "販売", "オークション", "廃車"];
 const expenseCategories = ["部品代", "外注費", "陸送費", "登録費用", "仕入手数料", "販売手数料", "その他"];
 const expensePaymentMethods: PaymentMethod[] = ["現金", "振込", "ローン会社", "カード", "その他"];
+const vehicleMakers = ["トヨタ", "レクサス", "日産", "ホンダ", "マツダ", "スバル", "スズキ", "ダイハツ", "三菱", "いすゞ", "日野", "メルセデス・ベンツ", "BMW", "MINI", "アウディ", "フォルクスワーゲン", "ボルボ", "プジョー", "シトロエン", "ルノー", "フィアット", "ジープ", "テスラ", "その他"];
+const vehicleDisplayName = (maker: string, model: string, grade: string) => [maker, model, grade].map((value) => value.trim()).filter(Boolean).join(" ");
 
 const initialVehicleForm = (): NewVehicleInput => ({
   name: "",
+  maker: "",
+  model: "",
+  grade: "",
   chassisNumber: "",
+  modelType: "",
+  registrationNumber: "",
+  firstRegistration: "",
+  inspectionExpiry: "",
+  bodyColor: "",
+  mileage: "",
   status: "入庫予定",
   acquisitionSource: "一般のお客様",
   disposition: "未定",
@@ -86,7 +100,7 @@ export function VehiclesPage({
   openNewForm?: boolean;
   onNewFormOpened?: () => void;
 }) {
-  const { data, addVehicle, updateVehicle, completeVehicleDisposition, applyVehicleInspectionImport, markVehicleArrived, markVehicleDelivered, updateVehicleDocument, archiveVehicle, addExpense, completeCashflow } = useAppData();
+  const { data, addVehicle, updateVehicle, rememberVehicleModelOption, updateVehicleModelOption, deleteVehicleModelOption, completeVehicleDisposition, applyVehicleInspectionImport, markVehicleArrived, markVehicleDelivered, updateVehicleDocument, archiveVehicle, addExpense, completeCashflow } = useAppData();
   const { profile } = useAuth();
   const canEdit = profile?.role === "owner" || profile?.role === "regular";
   const canManagePayments = profile?.role === "owner" || profile?.role === "regular" || profile?.role === "accounting";
@@ -99,12 +113,16 @@ export function VehiclesPage({
   const [formError, setFormError] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [inspectionImportOpen, setInspectionImportOpen] = useState(false);
+  const [registrationQrOpen, setRegistrationQrOpen] = useState(false);
+  const [modelOptionsOpen, setModelOptionsOpen] = useState(false);
+
+  const modelSuggestions = useMemo(() => [...new Set(data.vehicleModelOptions.filter((item) => !form.maker || item.maker === form.maker).map((item) => item.model))], [data.vehicleModelOptions, form.maker]);
 
   const filteredVehicles = useMemo(() => {
     const keyword = search.trim().toLowerCase();
     return data.vehicles.filter((vehicle) => {
       const matchesStatus = statusFilter === "すべて" || vehicle.status === statusFilter;
-      const matchesKeyword = !keyword || vehicle.managementNumber.toLowerCase().includes(keyword) || vehicle.name.toLowerCase().includes(keyword) || vehicle.chassisNumber.toLowerCase().includes(keyword);
+      const matchesKeyword = !keyword || [vehicle.managementNumber, vehicle.name, vehicle.maker, vehicle.model, vehicle.grade, vehicle.chassisNumber].some((value) => value.toLowerCase().includes(keyword));
       return matchesStatus && matchesKeyword;
     });
   }, [data.vehicles, search, statusFilter]);
@@ -128,13 +146,14 @@ export function VehiclesPage({
 
   const submitVehicle = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!form.name.trim()) return setFormError("車両名を入力してください。");
+    if (!form.maker.trim()) return setFormError("メーカーを選択してください。");
+    if (!form.model.trim()) return setFormError("車種を入力してください。");
     if (!form.storageLocation.trim()) return setFormError("保管場所を入力してください。");
     if (!form.plannedArrivalDate) return setFormError("入庫予定日を入力してください。");
     if (form.purchasePrice < 0 || form.askingPrice < 0) return setFormError("金額は0円以上で入力してください。");
     setSubmitting(true);
     try {
-      const vehicle = await addVehicle({ ...form, name: form.name.trim(), chassisNumber: form.chassisNumber.trim(), storageLocation: form.storageLocation.trim() });
+      const vehicle = await addVehicle({ ...form, name: vehicleDisplayName(form.maker, form.model, form.grade), maker: form.maker.trim(), model: form.model.trim(), grade: form.grade.trim(), chassisNumber: form.chassisNumber.trim(), storageLocation: form.storageLocation.trim() });
       setSelectedVehicleId(vehicle.id);
       setDrawerMode("detail");
     } catch (reason) {
@@ -146,10 +165,10 @@ export function VehiclesPage({
 
   return (
     <>
-      <PageHeader title="在庫" description="入庫予定から納車済みまで、車両ごとの取引を管理します。" action={canEdit ? <div className="page-header-actions"><button type="button" className="secondary-button" onClick={() => setInspectionImportOpen(true)}><ScanLine size={19} />車検証を読み取る</button><button type="button" className="primary-button vehicle-header-register" onClick={openNewVehicle}><Plus size={20} />車両を登録</button></div> : undefined} />
+      <PageHeader title="在庫" description="入庫予定から納車済みまで、車両ごとの取引を管理します。" action={canEdit ? <div className="page-header-actions">{isOwner ? <button type="button" className="secondary-button" onClick={() => setModelOptionsOpen(true)}>車種候補を管理</button> : null}<button type="button" className="secondary-button" onClick={() => setInspectionImportOpen(true)}><ScanLine size={19} />車検証を読み取る</button><button type="button" className="primary-button vehicle-header-register" onClick={openNewVehicle}><Plus size={20} />車両を登録</button></div> : undefined} />
 
       <div className="filter-bar panel">
-        <label className="search-field"><Search size={19} /><input type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="管理番号・車両名・車台番号で検索" /></label>
+        <label className="search-field"><Search size={19} /><input type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="管理番号・メーカー・車種・グレード・車台番号で検索" /></label>
         <label className="select-field compact vehicle-status-select"><Filter size={18} /><select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as VehicleStatus | "すべて")}><option value="すべて">すべての状態</option>{vehicleStatuses.map((status) => <option key={status}>{status}</option>)}</select></label>
         <div className="mobile-status-filter" aria-label="車両状態で絞り込む">
           {["すべて" as const, ...vehicleStatuses].map((status) => (
@@ -182,9 +201,17 @@ export function VehiclesPage({
         <Drawer title="車両を登録" subtitle="0円買取の場合は仕入額を0円で登録できます。" onClose={() => setDrawerMode(null)}>
           <form className="form-stack" onSubmit={submitVehicle}>
             <div className="form-section">
-              <h3>基本情報</h3>
-              <label className="field-label">車両名 <span className="required">必須</span><input value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} placeholder="例：メーカー 車種 グレード" autoFocus /></label>
+              <div className="section-heading"><h3>基本情報</h3><button type="button" className="secondary-button" onClick={() => setRegistrationQrOpen(true)}><ScanLine size={18} />QRコードを読み込む</button></div>
+              <div className="form-row">
+                <label className="field-label">メーカー <span className="required">必須</span><select value={form.maker} onChange={(event) => setForm({ ...form, maker: event.target.value })} autoFocus><option value="">選択してください</option>{vehicleMakers.map((maker) => <option key={maker}>{maker}</option>)}</select></label>
+                <label className="field-label">車種 <span className="required">必須</span><input list="vehicle-model-options" value={form.model} onChange={(event) => setForm({ ...form, model: event.target.value })} placeholder="例：プリウス" /><datalist id="vehicle-model-options">{modelSuggestions.map((model) => <option value={model} key={model} />)}</datalist></label>
+              </div>
+              <label className="field-label">グレード<input value={form.grade} onChange={(event) => setForm({ ...form, grade: event.target.value })} placeholder="例：S ツーリングセレクション" /></label>
+              <p className="form-hint">表示名：{vehicleDisplayName(form.maker, form.model, form.grade) || "メーカー・車種・グレードから自動作成します"}</p>
               <label className="field-label">車台番号<input value={form.chassisNumber} onChange={(event) => setForm({ ...form, chassisNumber: event.target.value })} placeholder="入庫後の入力・修正もできます" /></label>
+              <div className="form-row"><label className="field-label">型式<input value={form.modelType} onChange={(event) => setForm({ ...form, modelType: event.target.value })} /></label><label className="field-label">登録番号<input value={form.registrationNumber} onChange={(event) => setForm({ ...form, registrationNumber: event.target.value })} /></label></div>
+              <div className="form-row"><label className="field-label">初度登録年月<input type="month" value={form.firstRegistration} onChange={(event) => setForm({ ...form, firstRegistration: event.target.value })} /></label><label className="field-label">車検満了日<input type="date" value={form.inspectionExpiry} onChange={(event) => setForm({ ...form, inspectionExpiry: event.target.value })} /></label></div>
+              <div className="form-row"><label className="field-label">車体色<input value={form.bodyColor} onChange={(event) => setForm({ ...form, bodyColor: event.target.value })} /></label><label className="field-label">走行距離<input inputMode="numeric" value={form.mileage} onChange={(event) => setForm({ ...form, mileage: event.target.value })} placeholder="例：38000km" /></label></div>
               <div className="form-row">
                 <label className="field-label">仕入れ元<select value={form.acquisitionSource} onChange={(event) => setForm({ ...form, acquisitionSource: event.target.value as AcquisitionSource })}>{acquisitionSources.map((source) => <option key={source}>{source}</option>)}</select></label>
                 <label className="field-label">状態<select value={form.status} onChange={(event) => setForm({ ...form, status: event.target.value as VehicleStatus })}>{vehicleStatuses.map((status) => <option key={status}>{status}</option>)}</select></label>
@@ -209,8 +236,29 @@ export function VehiclesPage({
 
       {drawerMode === "detail" && selectedVehicle ? <VehicleDetailDrawer vehicle={selectedVehicle} documents={selectedDocuments} expenses={data.expenses} cashflows={data.cashflows.filter((cashflow) => cashflow.vehicleId === selectedVehicle.id)} canEdit={canEdit} canManagePayments={canManagePayments} isOwner={isOwner} onClose={() => setDrawerMode(null)} onUpdate={(patch) => updateVehicle(selectedVehicle.id, patch)} onCompleteDisposition={completeVehicleDisposition} onMarkArrived={markVehicleArrived} onMarkDelivered={markVehicleDelivered} onDocumentUpdate={updateVehicleDocument} onAddExpense={addExpense} onCompleteCashflow={completeCashflow} onArchive={async () => { await archiveVehicle(selectedVehicle.id); setDrawerMode(null); }} /> : null}
       {inspectionImportOpen ? <VehicleInspectionImportDrawer vehicles={data.vehicles} antiqueLedgerDetails={data.antiqueLedgerDetails} onApply={applyVehicleInspectionImport} onClose={() => setInspectionImportOpen(false)} /> : null}
+      {registrationQrOpen ? <VehicleQrReaderDrawer onRead={(result: VehicleInspectionData) => setForm((current) => ({ ...current, maker: result.vehicleName || current.maker, chassisNumber: result.chassisNumber || current.chassisNumber, registrationNumber: result.registrationNumber || current.registrationNumber, firstRegistration: result.firstRegistration || current.firstRegistration, inspectionExpiry: result.inspectionExpiry || current.inspectionExpiry, modelType: result.modelType || current.modelType }))} onClose={() => setRegistrationQrOpen(false)} /> : null}
+      {modelOptionsOpen ? <VehicleModelOptionsDrawer options={data.vehicleModelOptions} onAdd={rememberVehicleModelOption} onUpdate={updateVehicleModelOption} onDelete={deleteVehicleModelOption} onClose={() => setModelOptionsOpen(false)} /> : null}
     </>
   );
+}
+
+function VehicleModelOptionsDrawer({ options, onAdd, onUpdate, onDelete, onClose }: { options: VehicleModelOption[]; onAdd: (maker: string, model: string) => Promise<void>; onUpdate: (id: string, maker: string, model: string) => Promise<void>; onDelete: (id: string) => Promise<void>; onClose: () => void }) {
+  const [maker, setMaker] = useState("");
+  const [model, setModel] = useState("");
+  const [editing, setEditing] = useState<Record<string, { maker: string; model: string }>>({});
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  const editValue = (option: VehicleModelOption) => editing[option.id] ?? { maker: option.maker, model: option.model };
+
+  const add = async (event: FormEvent) => {
+    event.preventDefault();
+    setBusy(true); setError("");
+    try { await onAdd(maker, model); setMaker(""); setModel(""); }
+    catch (reason) { setError(reason instanceof Error ? reason.message : "候補を追加できませんでした。"); }
+    finally { setBusy(false); }
+  };
+
+  return <Drawer title="車種候補を管理" subtitle="この画面は事業主だけが変更できます" onClose={onClose}><div className="form-stack"><form className="form-section" onSubmit={add}><h3>候補を追加</h3><div className="form-row"><label className="field-label">メーカー<select value={maker} onChange={(event) => setMaker(event.target.value)}><option value="">選択してください</option>{vehicleMakers.map((item) => <option key={item}>{item}</option>)}</select></label><label className="field-label">車種<input value={model} onChange={(event) => setModel(event.target.value)} /></label></div><button className="primary-button" disabled={busy || !maker.trim() || !model.trim()}>追加</button></form><section className="form-section"><h3>登録済み候補</h3>{options.length ? options.map((option) => { const value = editValue(option); return <div className="model-option-row" key={option.id}><select value={value.maker} onChange={(event) => setEditing({ ...editing, [option.id]: { ...value, maker: event.target.value } })}>{vehicleMakers.map((item) => <option key={item}>{item}</option>)}</select><input value={value.model} onChange={(event) => setEditing({ ...editing, [option.id]: { ...value, model: event.target.value } })} /><button type="button" className="secondary-button" disabled={busy} onClick={() => void onUpdate(option.id, value.maker, value.model).catch((reason) => setError(reason instanceof Error ? reason.message : "保存できませんでした。"))}>保存</button><button type="button" className="danger-button" disabled={busy} onClick={() => { if (window.confirm(`${option.maker} ${option.model}を候補から削除しますか？`)) void onDelete(option.id).catch((reason) => setError(reason instanceof Error ? reason.message : "削除できませんでした。")); }}><Trash2 size={16} /></button></div>; }) : <p className="form-hint">車両登録時に入力した車種が自動で候補になります。</p>}</section>{error ? <p className="form-error">{error}</p> : null}</div></Drawer>;
 }
 
 function VehicleDetailDrawer({
@@ -346,11 +394,11 @@ function VehicleDetailDrawer({
 
   const saveVehicle = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!editForm.name.trim() || !editForm.storageLocation.trim() || !editForm.plannedArrivalDate) return setUpdateError("車両名・保管場所・入庫予定日は必ず入力してください。");
+    if (!editForm.maker.trim() || !editForm.model.trim() || !editForm.storageLocation.trim() || !editForm.plannedArrivalDate) return setUpdateError("メーカー・車種・保管場所・入庫予定日は必ず入力してください。");
     if (editForm.purchasePrice < 0 || editForm.askingPrice < 0 || (editForm.salePrice ?? 0) < 0) return setUpdateError("金額は0円以上で入力してください。");
     setBusy(true);
     try {
-      await onUpdate({ name: editForm.name.trim(), chassisNumber: editForm.chassisNumber.trim(), acquisitionSource: editForm.acquisitionSource, disposition: editForm.disposition, purchasePrice: editForm.purchasePrice, askingPrice: editForm.askingPrice, salePrice: editForm.salePrice, storageLocation: editForm.storageLocation.trim(), plannedArrivalDate: editForm.plannedArrivalDate, arrivedAt: editForm.arrivedAt, deliveredAt: editForm.deliveredAt });
+      await onUpdate({ name: vehicleDisplayName(editForm.maker, editForm.model, editForm.grade), maker: editForm.maker.trim(), model: editForm.model.trim(), grade: editForm.grade.trim(), chassisNumber: editForm.chassisNumber.trim(), modelType: editForm.modelType.trim(), registrationNumber: editForm.registrationNumber.trim(), firstRegistration: editForm.firstRegistration.trim(), inspectionExpiry: editForm.inspectionExpiry.trim(), bodyColor: editForm.bodyColor.trim(), mileage: editForm.mileage.trim(), acquisitionSource: editForm.acquisitionSource, disposition: editForm.disposition, purchasePrice: editForm.purchasePrice, askingPrice: editForm.askingPrice, salePrice: editForm.salePrice, storageLocation: editForm.storageLocation.trim(), plannedArrivalDate: editForm.plannedArrivalDate, arrivedAt: editForm.arrivedAt, deliveredAt: editForm.deliveredAt });
       setEditMode(false);
     } catch (reason) { setUpdateError(reason instanceof Error ? reason.message : "車両情報を保存できませんでした。"); }
     finally { setBusy(false); }
@@ -497,8 +545,13 @@ function VehicleDetailDrawer({
       {editMode ? (
         <form className="detail-section" onSubmit={saveVehicle}>
           <h3>車両情報を編集</h3>
-          <label className="field-label">車両名 <span className="required">必須</span><input value={editForm.name} onChange={(event) => setEditForm({ ...editForm, name: event.target.value })} /></label>
+          <div className="form-row"><label className="field-label">メーカー <span className="required">必須</span><select value={editForm.maker} onChange={(event) => setEditForm({ ...editForm, maker: event.target.value })}><option value="">選択してください</option>{vehicleMakers.map((maker) => <option key={maker}>{maker}</option>)}</select></label><label className="field-label">車種 <span className="required">必須</span><input value={editForm.model} onChange={(event) => setEditForm({ ...editForm, model: event.target.value })} /></label></div>
+          <label className="field-label">グレード<input value={editForm.grade} onChange={(event) => setEditForm({ ...editForm, grade: event.target.value })} /></label>
+          <p className="form-hint">表示名：{vehicleDisplayName(editForm.maker, editForm.model, editForm.grade)}</p>
           <label className="field-label">車台番号<input value={editForm.chassisNumber} onChange={(event) => setEditForm({ ...editForm, chassisNumber: event.target.value })} /></label>
+          <div className="form-row"><label className="field-label">型式<input value={editForm.modelType} onChange={(event) => setEditForm({ ...editForm, modelType: event.target.value })} /></label><label className="field-label">登録番号<input value={editForm.registrationNumber} onChange={(event) => setEditForm({ ...editForm, registrationNumber: event.target.value })} /></label></div>
+          <div className="form-row"><label className="field-label">初度登録年月<input type="month" value={editForm.firstRegistration} onChange={(event) => setEditForm({ ...editForm, firstRegistration: event.target.value })} /></label><label className="field-label">車検満了日<input type="date" value={editForm.inspectionExpiry} onChange={(event) => setEditForm({ ...editForm, inspectionExpiry: event.target.value })} /></label></div>
+          <div className="form-row"><label className="field-label">車体色<input value={editForm.bodyColor} onChange={(event) => setEditForm({ ...editForm, bodyColor: event.target.value })} /></label><label className="field-label">走行距離<input value={editForm.mileage} onChange={(event) => setEditForm({ ...editForm, mileage: event.target.value })} /></label></div>
           <div className="form-row">
             <label className="field-label">仕入れ元<select value={editForm.acquisitionSource} onChange={(event) => setEditForm({ ...editForm, acquisitionSource: event.target.value as AcquisitionSource })}>{acquisitionSources.map((source) => <option key={source}>{source}</option>)}</select></label>
             <label className="field-label">買取後の振り分け<select value={editForm.disposition} onChange={(event) => setEditForm({ ...editForm, disposition: event.target.value as VehicleDisposition })}>{vehicleDispositions.map((item) => <option key={item}>{item}</option>)}</select></label>
@@ -517,7 +570,7 @@ function VehicleDetailDrawer({
           <button type="submit" className="primary-button full-button" disabled={busy}><Save size={17} />{busy ? "保存中" : "変更を保存"}</button>
         </form>
       ) : (
-        <section className="detail-section"><h3>車両情報</h3><dl className="detail-list"><div><dt>車台番号</dt><dd>{vehicle.chassisNumber || "未入力"}</dd></div><div><dt>買取後の振り分け</dt><dd>{vehicle.disposition}</dd></div><div><dt>保管場所</dt><dd>{vehicle.storageLocation}</dd></div><div><dt>入庫予定日</dt><dd>{formatDate(vehicle.plannedArrivalDate)}</dd></div><div><dt>実際の入庫日</dt><dd>{formatDate(vehicle.arrivedAt)}</dd></div><div><dt>納車日</dt><dd>{formatDate(vehicle.deliveredAt)}</dd></div></dl></section>
+        <section className="detail-section"><h3>車両情報</h3><dl className="detail-list"><div><dt>メーカー</dt><dd>{vehicle.maker || "未入力"}</dd></div><div><dt>車種</dt><dd>{vehicle.model || "未入力"}</dd></div><div><dt>グレード</dt><dd>{vehicle.grade || "未入力"}</dd></div><div><dt>車台番号</dt><dd>{vehicle.chassisNumber || "未入力"}</dd></div><div><dt>型式</dt><dd>{vehicle.modelType || "未入力"}</dd></div><div><dt>登録番号</dt><dd>{vehicle.registrationNumber || "未入力"}</dd></div><div><dt>初度登録年月</dt><dd>{vehicle.firstRegistration || "未入力"}</dd></div><div><dt>車検満了日</dt><dd>{formatDate(vehicle.inspectionExpiry)}</dd></div><div><dt>車体色</dt><dd>{vehicle.bodyColor || "未入力"}</dd></div><div><dt>走行距離</dt><dd>{vehicle.mileage || "未入力"}</dd></div><div><dt>買取後の振り分け</dt><dd>{vehicle.disposition}</dd></div><div><dt>保管場所</dt><dd>{vehicle.storageLocation}</dd></div><div><dt>入庫予定日</dt><dd>{formatDate(vehicle.plannedArrivalDate)}</dd></div><div><dt>実際の入庫日</dt><dd>{formatDate(vehicle.arrivedAt)}</dd></div><div><dt>納車日</dt><dd>{formatDate(vehicle.deliveredAt)}</dd></div></dl></section>
       )}
 
       <section className="detail-section">

@@ -41,6 +41,7 @@ import {
   mapStaffSettlementFromDb,
   mapSpotAssignmentFromDb,
   mapVehicleFromDb,
+  mapVehicleModelOptionFromDb,
   mapVehicleDocumentFromDb,
   mapWebsiteInquiryFromDb,
   expenseToRpc,
@@ -121,6 +122,7 @@ const emptyData: AppData = {
   spotAssignments: [],
   contractHandoffs: [],
   vehicles: [],
+  vehicleModelOptions: [],
   vehicleDocuments: [],
   expenses: [],
   attachments: [],
@@ -147,6 +149,9 @@ type AppDataContextValue = {
   updateStaffProfile: (input: UpdateStaffProfileInput) => Promise<void>;
   addVehicle: (input: NewVehicleInput) => Promise<Vehicle>;
   updateVehicle: (vehicleId: string, patch: Partial<Vehicle>) => Promise<void>;
+  rememberVehicleModelOption: (maker: string, model: string) => Promise<void>;
+  updateVehicleModelOption: (optionId: string, maker: string, model: string) => Promise<void>;
+  deleteVehicleModelOption: (optionId: string) => Promise<void>;
   completeVehicleDisposition: (input: CompleteVehicleDispositionInput) => Promise<void>;
   saveVehiclePublication: (input: VehiclePublicationInput) => Promise<void>;
   updateWebsiteInquiryStatus: (inquiryId: string, status: WebsiteInquiryStatus) => Promise<void>;
@@ -240,9 +245,19 @@ const loadInitialDemoData = (): AppData => {
       staffProfiles: parsed.staffProfiles ?? seed.staffProfiles,
       spotAssignments: parsed.spotAssignments ?? [],
       contractHandoffs: parsed.contractHandoffs ?? [],
+      vehicleModelOptions: parsed.vehicleModelOptions ?? [],
       vehicles: (parsed.vehicles ?? seed.vehicles).map((vehicle) => ({
         ...publicationDefaults(vehicle),
         ...vehicle,
+        maker: vehicle.maker ?? vehicle.publicMaker ?? "",
+        model: vehicle.model ?? vehicle.name ?? "",
+        grade: vehicle.grade ?? vehicle.publicGrade ?? "",
+        modelType: vehicle.modelType ?? "",
+        registrationNumber: vehicle.registrationNumber ?? "",
+        firstRegistration: vehicle.firstRegistration ?? "",
+        inspectionExpiry: vehicle.inspectionExpiry ?? "",
+        bodyColor: vehicle.bodyColor ?? vehicle.publicColor ?? "",
+        mileage: vehicle.mileage ?? "",
         disposition: vehicle.disposition ?? "未定",
       })),
       vehicleDocuments: parsed.vehicleDocuments ?? [],
@@ -355,6 +370,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         client.from("spot_assignments").select("*").order("created_at", { ascending: false }),
         client.from("contract_handoffs").select("*").order("issued_at", { ascending: false }),
         client.from("vehicles").select("*").is("deleted_at", null).order("created_at", { ascending: false }),
+        client.from("vehicle_model_options").select("*").order("maker", { ascending: true }).order("model", { ascending: true }),
         client.from("vehicle_documents").select("*").order("created_at", { ascending: true }),
         client.from("expenses").select("*").is("deleted_at", null).order("incurred_on", { ascending: false }),
         client.from("attachments").select("*").order("created_at", { ascending: false }),
@@ -387,13 +403,14 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
 
       if (!requestIsCurrent()) return;
 
-      const [staffResult, spotAssignmentsResult, contractHandoffsResult, vehiclesResult, documentsResult, expensesResult, attachmentsResult, issuedDocumentsResult, staffSettlementsResult, cashflowsResult, cashflowOffsetsResult, cashflowEventsResult, monthlyBalanceChecksResult, systemBackupsResult, contractsResult, approvalsResult, inquiriesResult, ledgerResult, journalReviewsResult, journalExportsResult, readinessResult] = results;
+      const [staffResult, spotAssignmentsResult, contractHandoffsResult, vehiclesResult, vehicleModelsResult, documentsResult, expensesResult, attachmentsResult, issuedDocumentsResult, staffSettlementsResult, cashflowsResult, cashflowOffsetsResult, cashflowEventsResult, monthlyBalanceChecksResult, systemBackupsResult, contractsResult, approvalsResult, inquiriesResult, ledgerResult, journalReviewsResult, journalExportsResult, readinessResult] = results;
 
       setData({
         staffProfiles: (staffResult.data ?? []).map(mapStaffProfileFromDb),
         spotAssignments: (spotAssignmentsResult.data ?? []).map(mapSpotAssignmentFromDb),
         contractHandoffs: (contractHandoffsResult.data ?? []).map(mapContractHandoffFromDb),
         vehicles: (vehiclesResult.data ?? []).map(mapVehicleFromDb),
+        vehicleModelOptions: (vehicleModelsResult.data ?? []).map(mapVehicleModelOptionFromDb),
         vehicleDocuments: (documentsResult.data ?? []).map(mapVehicleDocumentFromDb),
         expenses: (expensesResult.data ?? []).map(mapExpenseFromDb),
         attachments: (attachmentsResult.data ?? []).map(mapAttachmentFromDb),
@@ -587,6 +604,13 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
           .single();
         if (error) throw new Error(error.message);
         const vehicle = mapVehicleFromDb(inserted);
+        if (input.maker.trim() && input.model.trim()) {
+          const { error: optionError } = await supabase.from("vehicle_model_options").upsert({
+            maker: input.maker.trim(),
+            model: input.model.trim(),
+          }, { onConflict: "maker,model", ignoreDuplicates: true });
+          if (optionError) console.warn("車種候補を保存できませんでした。", optionError.message);
+        }
         setData((current) => ({ ...current, vehicles: [vehicle, ...current.vehicles] }));
         return vehicle;
       }
@@ -604,7 +628,13 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         createdAt: now,
         updatedAt: now,
       };
-      setData((current) => ({ ...current, vehicles: [vehicle, ...current.vehicles] }));
+      setData((current) => ({
+        ...current,
+        vehicles: [vehicle, ...current.vehicles],
+        vehicleModelOptions: input.maker.trim() && input.model.trim() && !current.vehicleModelOptions.some((item) => item.maker === input.maker.trim() && item.model === input.model.trim())
+          ? [{ id: crypto.randomUUID(), maker: input.maker.trim(), model: input.model.trim(), createdAt: now, updatedAt: now }, ...current.vehicleModelOptions]
+          : current.vehicleModelOptions,
+      }));
       return vehicle;
     },
     updateVehicle: async (vehicleId, patch) => {
@@ -630,6 +660,43 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
           ? { ...vehicle, ...patch, updatedAt: new Date().toISOString() }
           : vehicle),
       }));
+    },
+    rememberVehicleModelOption: async (maker, model) => {
+      const cleanMaker = maker.trim();
+      const cleanModel = model.trim();
+      if (!cleanMaker || !cleanModel) return;
+      if (configured && supabase) {
+        const { error } = await supabase.from("vehicle_model_options").upsert({ maker: cleanMaker, model: cleanModel }, { onConflict: "maker,model", ignoreDuplicates: true });
+        if (error) throw new Error(error.message);
+        await refreshData();
+        return;
+      }
+      const now = new Date().toISOString();
+      setData((current) => current.vehicleModelOptions.some((item) => item.maker === cleanMaker && item.model === cleanModel) ? current : ({
+        ...current,
+        vehicleModelOptions: [{ id: crypto.randomUUID(), maker: cleanMaker, model: cleanModel, createdAt: now, updatedAt: now }, ...current.vehicleModelOptions],
+      }));
+    },
+    updateVehicleModelOption: async (optionId, maker, model) => {
+      const cleanMaker = maker.trim();
+      const cleanModel = model.trim();
+      if (!cleanMaker || !cleanModel) throw new Error("メーカーと車種を入力してください。");
+      if (configured && supabase) {
+        const { error } = await supabase.from("vehicle_model_options").update({ maker: cleanMaker, model: cleanModel }).eq("id", optionId);
+        if (error) throw new Error(error.message);
+        await refreshData();
+        return;
+      }
+      setData((current) => ({ ...current, vehicleModelOptions: current.vehicleModelOptions.map((item) => item.id === optionId ? { ...item, maker: cleanMaker, model: cleanModel, updatedAt: new Date().toISOString() } : item) }));
+    },
+    deleteVehicleModelOption: async (optionId) => {
+      if (configured && supabase) {
+        const { error } = await supabase.from("vehicle_model_options").delete().eq("id", optionId);
+        if (error) throw new Error(error.message);
+        await refreshData();
+        return;
+      }
+      setData((current) => ({ ...current, vehicleModelOptions: current.vehicleModelOptions.filter((item) => item.id !== optionId) }));
     },
     completeVehicleDisposition: async (input) => {
       const target = data.vehicles.find((vehicle) => vehicle.id === input.vehicleId);
@@ -1561,7 +1628,16 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
           id: vehicleId,
           managementNumber: nextManagementNumber(current.vehicles),
           name: input.vehicleName.trim(),
+          maker: "",
+          model: input.vehicleName.trim(),
+          grade: "",
           chassisNumber: input.chassisNumber.trim(),
+          modelType: "",
+          registrationNumber: "",
+          firstRegistration: "",
+          inspectionExpiry: "",
+          bodyColor: "",
+          mileage: "",
           status: "入庫予定",
           acquisitionSource: input.acquisitionSource,
           disposition: "未定",
@@ -1701,13 +1777,13 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     applyVehicleInspectionImport: async (input) => {
       const vehicle = data.vehicles.find((item) => item.id === input.vehicleId);
       if (!vehicle) throw new Error("対象車両が見つかりません。");
-      if (![input.vehicleName, input.chassisNumber, input.registrationNumber, input.registeredOwnerName].some((value) => value.trim())) {
+      if (![input.vehicleName, input.chassisNumber, input.registrationNumber, input.registeredOwnerName, input.firstRegistration, input.inspectionExpiry, input.modelType].some((value) => value.trim())) {
         throw new Error("反映する車検証情報を1項目以上入力してください。");
       }
 
       if (configured && supabase) {
         const { error } = await supabase.rpc(
-          "apply_vehicle_inspection_import",
+          "apply_vehicle_inspection_import_v2",
           vehicleInspectionImportToRpc(input),
         );
         if (error) throw new Error(error.message);
@@ -1733,7 +1809,12 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
           vehicles: current.vehicles.map((item) => item.id === input.vehicleId ? {
             ...item,
             name: input.vehicleName.trim() || item.name,
+            model: input.vehicleName.trim() || item.model,
             chassisNumber: input.chassisNumber.trim() || item.chassisNumber,
+            registrationNumber: input.registrationNumber.trim() || item.registrationNumber,
+            firstRegistration: input.firstRegistration.trim() || item.firstRegistration,
+            inspectionExpiry: input.inspectionExpiry.trim() || item.inspectionExpiry,
+            modelType: input.modelType.trim() || item.modelType,
             updatedAt: now,
           } : item),
           antiqueLedgerDetails: [

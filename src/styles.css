@@ -4682,3 +4682,16 @@ button.mini-summary-card:hover {
     width: 100%;
   }
 }
+.model-option-row {
+  display: grid;
+  grid-template-columns: minmax(130px, 0.8fr) minmax(160px, 1fr) auto auto;
+  gap: 0.55rem;
+  align-items: center;
+  margin-top: 0.7rem;
+}
+
+@media (max-width: 640px) {
+  .model-option-row {
+    grid-template-columns: 1fr 1fr;
+  }
+}

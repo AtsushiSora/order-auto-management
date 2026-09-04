@@ -33,6 +33,7 @@ describe("Supabaseデータ変換", () => {
   it("車両の日本語表示値をDB値へ変換する", () => {
     const row = newVehicleToDb({
       name: "テスト車両",
+      maker: "トヨタ", model: "テスト車両", grade: "G", modelType: "", registrationNumber: "", firstRegistration: "", inspectionExpiry: "", bodyColor: "", mileage: "",
       chassisNumber: "ABC-123",
       status: "入庫予定",
       acquisitionSource: "オークション",
@@ -111,12 +112,18 @@ describe("Supabaseデータ変換", () => {
       chassisNumber: " ABC-123 ",
       registrationNumber: " 品川 300 あ 12-34 ",
       registeredOwnerName: " 山田 太郎 ",
+      firstRegistration: "2024-05",
+      inspectionExpiry: "2026-05-10",
+      modelType: "6AA-ZVW60",
     })).toEqual({
       p_vehicle_id: "vehicle-id",
       p_vehicle_name: "トヨタ",
       p_chassis_number: "ABC-123",
       p_registration_number: "品川 300 あ 12-34",
       p_registered_owner_name: "山田 太郎",
+      p_first_registration: "2024-05",
+      p_inspection_expiry: "2026-05-10",
+      p_model_type: "6AA-ZVW60",
     });
   });
 
@@ -186,6 +193,7 @@ describe("Supabaseデータ変換", () => {
   it("0円買取は車両に保存でき、支払い行は0円で作らない", () => {
     const row = newVehicleToDb({
       name: "0円買取車",
+      maker: "トヨタ", model: "0円買取車", grade: "", modelType: "", registrationNumber: "", firstRegistration: "", inspectionExpiry: "", bodyColor: "", mileage: "",
       chassisNumber: "",
       status: "入庫済み",
       acquisitionSource: "一般のお客様",

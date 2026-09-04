@@ -203,6 +203,9 @@ export function VehicleInspectionImportDrawer({
         chassisNumber: result.chassisNumber,
         registrationNumber: result.registrationNumber,
         registeredOwnerName: result.registeredOwnerName,
+        firstRegistration: result.firstRegistration,
+        inspectionExpiry: result.inspectionExpiry,
+        modelType: result.modelType,
       });
       setMessage("車両情報と古物台帳へ反映しました。");
       window.setTimeout(onClose, 500);
@@ -241,7 +244,7 @@ export function VehicleInspectionImportDrawer({
             </div>
           ) : (
             <div className="inspection-read-panel qr-panel">
-              <div><strong>券面のQRコード</strong><p>複数ある場合は、QR2の①→②、続けてQR3の③→④→⑤の順に読み取ります。読み取り後も必ず内容を確認してください。</p></div>
+              <div><strong>券面のQRコード</strong><p>複数ある場合は、QR2の①→②、続けてQR3の③→④→⑤の順に読み取ります。</p></div>
               <video ref={videoRef} className={`inspection-camera ${scanning ? "" : "hidden"}`} muted playsInline />
               <div className="inspection-read-actions">
                 <button type="button" className={scanning ? "secondary-button" : "primary-button"} disabled={busy} onClick={() => void (scanning ? stopCamera() : startCamera())}><Camera size={18} />{scanning ? "カメラを止める" : qrPayloads.length ? "別のQRを読む" : "カメラで読む"}</button>
@@ -261,7 +264,7 @@ export function VehicleInspectionImportDrawer({
             <label className="field-label">登録番号・車両番号<input value={result.registrationNumber} onChange={(event) => setResult({ ...result, registrationNumber: event.target.value })} /></label>
             <label className="field-label">車検証上の所有者<input value={result.registeredOwnerName} onChange={(event) => setResult({ ...result, registeredOwnerName: event.target.value })} /></label>
             {(result.firstRegistration || result.inspectionExpiry || result.modelType) ? <dl className="inspection-reference"><div><dt>初度登録・検査</dt><dd>{result.firstRegistration || "—"}</dd></div><div><dt>車検満了日</dt><dd>{result.inspectionExpiry || "—"}</dd></div><div><dt>型式</dt><dd>{result.modelType || "—"}</dd></div></dl> : null}
-            <p className="form-hint">初度登録・車検満了日・型式は今回の確認用です。保存項目への追加は次の工程で対応できます。</p>
+            <p className="form-hint">読み取れた項目だけを保存し、入力済みの項目は消しません。</p>
           </section>
         ) : null}
 

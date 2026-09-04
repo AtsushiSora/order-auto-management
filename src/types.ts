@@ -141,7 +141,16 @@ export type Vehicle = {
   id: string;
   managementNumber: string;
   name: string;
+  maker: string;
+  model: string;
+  grade: string;
   chassisNumber: string;
+  modelType: string;
+  registrationNumber: string;
+  firstRegistration: string;
+  inspectionExpiry: string;
+  bodyColor: string;
+  mileage: string;
   status: VehicleStatus;
   acquisitionSource: AcquisitionSource;
   disposition: VehicleDisposition;
@@ -164,6 +173,14 @@ export type Vehicle = {
   publicPrice: number;
   publicDescription: string;
   publicImageUrl: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type VehicleModelOption = {
+  id: string;
+  maker: string;
+  model: string;
   createdAt: string;
   updatedAt: string;
 };
@@ -486,7 +503,7 @@ export type VehicleInspectionData = {
 
 export type VehicleInspectionImportInput = Pick<
   VehicleInspectionData,
-  "vehicleName" | "chassisNumber" | "registrationNumber" | "registeredOwnerName"
+  "vehicleName" | "chassisNumber" | "registrationNumber" | "registeredOwnerName" | "firstRegistration" | "inspectionExpiry" | "modelType"
 > & {
   vehicleId: string;
 };
@@ -514,6 +531,7 @@ export type AppData = {
   spotAssignments: SpotAssignment[];
   contractHandoffs: ContractHandoff[];
   vehicles: Vehicle[];
+  vehicleModelOptions: VehicleModelOption[];
   vehicleDocuments: VehicleDocument[];
   expenses: Expense[];
   attachments: Attachment[];
@@ -607,7 +625,16 @@ export type VehicleDocumentInput = Omit<VehicleDocument, "id" | "createdAt" | "u
 export type NewVehicleInput = Pick<
   Vehicle,
   | "name"
+  | "maker"
+  | "model"
+  | "grade"
   | "chassisNumber"
+  | "modelType"
+  | "registrationNumber"
+  | "firstRegistration"
+  | "inspectionExpiry"
+  | "bodyColor"
+  | "mileage"
   | "status"
   | "acquisitionSource"
   | "disposition"

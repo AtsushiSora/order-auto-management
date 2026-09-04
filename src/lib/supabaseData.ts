@@ -38,6 +38,7 @@ import type {
   SaveJournalCandidateReviewInput,
   TaxTreatment,
   Vehicle,
+  VehicleModelOption,
   VehicleInspectionImportInput,
   VehiclePublicationInput,
   VehicleDocument,
@@ -270,7 +271,16 @@ export const mapVehicleFromDb = (source: unknown): Vehicle => {
     id: stringValue(row, "id"),
     managementNumber: stringValue(row, "management_number"),
     name: stringValue(row, "name"),
+    maker: stringValue(row, "maker"),
+    model: stringValue(row, "model"),
+    grade: stringValue(row, "grade"),
     chassisNumber: stringValue(row, "chassis_number"),
+    modelType: stringValue(row, "model_type"),
+    registrationNumber: stringValue(row, "registration_number"),
+    firstRegistration: stringValue(row, "first_registration"),
+    inspectionExpiry: stringValue(row, "inspection_expiry"),
+    bodyColor: stringValue(row, "body_color"),
+    mileage: stringValue(row, "mileage"),
     status: vehicleStatusFromDb[stringValue(row, "status")] ?? "入庫予定",
     acquisitionSource: acquisitionSourceFromDb[stringValue(row, "acquisition_source")] ?? "一般のお客様",
     disposition: vehicleDispositionFromDb[stringValue(row, "disposition")] ?? "未定",
@@ -293,6 +303,17 @@ export const mapVehicleFromDb = (source: unknown): Vehicle => {
     publicPrice: numberValue(row, "public_price"),
     publicDescription: stringValue(row, "public_description"),
     publicImageUrl: stringValue(row, "public_image_url"),
+    createdAt: stringValue(row, "created_at"),
+    updatedAt: stringValue(row, "updated_at"),
+  };
+};
+
+export const mapVehicleModelOptionFromDb = (source: unknown): VehicleModelOption => {
+  const row = source as DbRow;
+  return {
+    id: stringValue(row, "id"),
+    maker: stringValue(row, "maker"),
+    model: stringValue(row, "model"),
     createdAt: stringValue(row, "created_at"),
     updatedAt: stringValue(row, "updated_at"),
   };
@@ -446,6 +467,9 @@ export const vehicleInspectionImportToRpc = (input: VehicleInspectionImportInput
   p_chassis_number: input.chassisNumber.trim() || null,
   p_registration_number: input.registrationNumber.trim() || null,
   p_registered_owner_name: input.registeredOwnerName.trim() || null,
+  p_first_registration: input.firstRegistration?.trim() || null,
+  p_inspection_expiry: input.inspectionExpiry?.trim() || null,
+  p_model_type: input.modelType?.trim() || null,
 });
 
 export const mapWebsiteInquiryFromDb = (source: unknown): WebsiteInquiry => {
@@ -565,7 +589,16 @@ export const mapJournalExportFromDb = (source: unknown): JournalExport => {
 
 export const newVehicleToDb = (input: NewVehicleInput) => ({
   name: input.name,
+  maker: input.maker,
+  model: input.model,
+  grade: input.grade,
   chassis_number: input.chassisNumber || null,
+  model_type: input.modelType || null,
+  registration_number: input.registrationNumber || null,
+  first_registration: input.firstRegistration || null,
+  inspection_expiry: input.inspectionExpiry || null,
+  body_color: input.bodyColor || null,
+  mileage: input.mileage || null,
   status: vehicleStatusToDb[input.status],
   acquisition_source: acquisitionSourceToDb[input.acquisitionSource],
   disposition: vehicleDispositionToDb[input.disposition],
@@ -579,7 +612,16 @@ export const newVehicleToDb = (input: NewVehicleInput) => ({
 export const vehiclePatchToDb = (patch: Partial<Vehicle>) => {
   const result: DbRow = {};
   if (patch.name !== undefined) result.name = patch.name;
+  if (patch.maker !== undefined) result.maker = patch.maker;
+  if (patch.model !== undefined) result.model = patch.model;
+  if (patch.grade !== undefined) result.grade = patch.grade;
   if (patch.chassisNumber !== undefined) result.chassis_number = patch.chassisNumber || null;
+  if (patch.modelType !== undefined) result.model_type = patch.modelType || null;
+  if (patch.registrationNumber !== undefined) result.registration_number = patch.registrationNumber || null;
+  if (patch.firstRegistration !== undefined) result.first_registration = patch.firstRegistration || null;
+  if (patch.inspectionExpiry !== undefined) result.inspection_expiry = patch.inspectionExpiry || null;
+  if (patch.bodyColor !== undefined) result.body_color = patch.bodyColor || null;
+  if (patch.mileage !== undefined) result.mileage = patch.mileage || null;
   if (patch.status !== undefined) result.status = vehicleStatusToDb[patch.status];
   if (patch.acquisitionSource !== undefined) result.acquisition_source = acquisitionSourceToDb[patch.acquisitionSource];
   if (patch.disposition !== undefined) result.disposition = vehicleDispositionToDb[patch.disposition];
