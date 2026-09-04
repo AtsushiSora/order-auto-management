@@ -647,6 +647,10 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
           .single();
         if (error) throw new Error(error.message);
         const vehicle = mapVehicleFromDb(updated);
+        if (vehicle.maker.trim() && vehicle.model.trim()) {
+          const { error: optionError } = await supabase.from("vehicle_model_options").upsert({ maker: vehicle.maker.trim(), model: vehicle.model.trim() }, { onConflict: "maker,model", ignoreDuplicates: true });
+          if (optionError) console.warn("車種候補を保存できませんでした。", optionError.message);
+        }
         setData((current) => ({
           ...current,
           vehicles: current.vehicles.map((item) => item.id === vehicleId ? vehicle : item),
@@ -654,12 +658,17 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         return;
       }
 
-      setData((current) => ({
-        ...current,
-        vehicles: current.vehicles.map((vehicle) => vehicle.id === vehicleId
-          ? { ...vehicle, ...patch, updatedAt: new Date().toISOString() }
-          : vehicle),
-      }));
+      setData((current) => {
+        const now = new Date().toISOString();
+        const vehicles = current.vehicles.map((vehicle) => vehicle.id === vehicleId ? { ...vehicle, ...patch, updatedAt: now } : vehicle);
+        const updated = vehicles.find((vehicle) => vehicle.id === vehicleId);
+        const hasOption = updated && current.vehicleModelOptions.some((item) => item.maker === updated.maker.trim() && item.model === updated.model.trim());
+        return {
+          ...current,
+          vehicles,
+          vehicleModelOptions: updated?.maker.trim() && updated.model.trim() && !hasOption ? [{ id: crypto.randomUUID(), maker: updated.maker.trim(), model: updated.model.trim(), createdAt: now, updatedAt: now }, ...current.vehicleModelOptions] : current.vehicleModelOptions,
+        };
+      });
     },
     rememberVehicleModelOption: async (maker, model) => {
       const cleanMaker = maker.trim();
