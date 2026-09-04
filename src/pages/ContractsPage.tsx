@@ -67,6 +67,62 @@ export function ContractsPage({ type }: { type: "買取" | "販売" }) {
     }
   };
 
+  const resumeSelectedContract = async () => {
+    const contract = selectedContract;
+    if (!contract || contract.status !== "署名待ち") return;
+    const target = contract.type === "買取" ? "purchase" : "sale";
+    if (!ensurePublicOrigin(target)) return;
+
+    const vehicle = contract.vehicleId ? data.vehicles.find((item) => item.id === contract.vehicleId) : undefined;
+    if (target === "sale" && !vehicle) {
+      setError("販売する車両が見つかりません。在庫を確認してください。");
+      return;
+    }
+
+    setSubmitting(true);
+    setError("");
+    let storageKey = "";
+    try {
+      const completion = await issueDirectContractHandoff(contract.id);
+      const handoff = target === "purchase"
+        ? createContractHandoff(window.sessionStorage, "purchase", {
+            assignmentId: null,
+            completionToken: completion.completionToken,
+            customerName: contract.customerLabel === "契約サイトで入力" ? "" : contract.customerLabel,
+            contractDate: contract.contractedOn,
+            vehicleName: contract.vehicleName === "車両情報入力待ち" ? "" : contract.vehicleName ?? "",
+            chassisNumber: contract.chassisNumber ?? "",
+            amount: contract.amount,
+            plannedArrivalDate: contract.plannedArrivalDate ?? today(),
+            storageLocation: contract.storageLocation ?? "自宅",
+            paymentMethod: contract.paymentMethod ?? "振込",
+          })
+        : createContractHandoff(window.sessionStorage, "sale", {
+            assignmentId: null,
+            completionToken: completion.completionToken,
+            customerName: contract.customerLabel === "契約サイトで入力" ? "" : contract.customerLabel,
+            contractDate: contract.contractedOn,
+            vehicleName: vehicle!.model || vehicle!.name,
+            vehicleMaker: vehicle!.maker || vehicle!.publicMaker,
+            vehicleGrade: vehicle!.grade || vehicle!.publicGrade,
+            vehicleYear: vehicle!.firstRegistration || vehicle!.publicYear,
+            chassisNumber: vehicle!.chassisNumber,
+            managementNumber: vehicle!.managementNumber,
+            vehicleMileage: vehicle!.mileage || vehicle!.publicMileage,
+            vehicleColor: vehicle!.bodyColor || vehicle!.publicColor,
+            inspectionDate: vehicle!.inspectionExpiry || vehicle!.publicInspection,
+            amount: contract.amount,
+            paymentMethod: contract.salePaymentMethod ?? "振込",
+          });
+      storageKey = handoff.storageKey;
+      window.location.assign(handoff.url);
+    } catch (reason) {
+      if (storageKey) window.sessionStorage.removeItem(storageKey);
+      setError(reason instanceof Error ? reason.message : "契約サイトで入力を再開できませんでした。");
+      setSubmitting(false);
+    }
+  };
+
   const startNew = () => {
     setError("");
     if (type === "買取") void openPurchaseSite();
@@ -82,6 +138,6 @@ export function ContractsPage({ type }: { type: "買取" | "販売" }) {
 
     {saleDrawerOpen ? <Drawer title="販売する車両を選択" subtitle="お客様情報と販売金額は販売契約サイトで入力します" onClose={() => setSaleDrawerOpen(false)}><div className="form-stack"><section className="form-section"><label className="field-label">対象車両 <span className="required">必須</span><select value={saleVehicleId} onChange={(event) => setSaleVehicleId(event.target.value)}><option value="">選択してください</option>{availableSaleVehicles.map((vehicle) => <option key={vehicle.id} value={vehicle.id}>{vehicle.managementNumber}　{vehicle.name}（{vehicle.status}）</option>)}</select></label>{availableSaleVehicles.length === 0 ? <p className="form-hint">入庫済みまたは販売中の車両がありません。</p> : null}</section>{error ? <p className="form-error">{error}</p> : null}<div className="form-actions"><button type="button" className="secondary-button" onClick={() => setSaleDrawerOpen(false)}>キャンセル</button><button type="button" className="primary-button" disabled={submitting || !saleVehicleId} onClick={() => void openSaleSite()}><ExternalLink size={18} />{submitting ? "準備中" : "販売契約サイトへ進む"}</button></div></div></Drawer> : null}
 
-    {selectedContract ? <Drawer title={`${selectedContract.type}契約を確認`} subtitle={selectedContract.status} onClose={() => setSelectedContract(null)}><div className="form-stack"><section className="detail-section"><dl className="detail-list"><div><dt>契約日</dt><dd>{formatDate(selectedContract.contractedOn)}</dd></div><div><dt>お客様・取引先</dt><dd>{selectedContract.customerLabel}</dd></div><div><dt>車両</dt><dd>{data.vehicles.find((item) => item.id === selectedContract.vehicleId)?.name || selectedContract.vehicleName || "入力中"}</dd></div><div><dt>契約金額</dt><dd>{formatCurrency(selectedContract.amount)}</dd></div><div><dt>状態</dt><dd>{selectedContract.status}</dd></div></dl></section><a className="primary-button full-button" href={getContractAppUrl(selectedContract.type === "買取" ? "purchase" : "sale")}><ExternalLink size={18} />契約サイトで確認・修正</a><p className="form-hint">契約サイトで修正して保存すると、契約履歴が残ります。</p></div></Drawer> : null}
+    {selectedContract ? <Drawer title={`${selectedContract.type}契約を確認`} subtitle={selectedContract.status} onClose={() => setSelectedContract(null)}><div className="form-stack"><section className="detail-section"><dl className="detail-list"><div><dt>契約日</dt><dd>{formatDate(selectedContract.contractedOn)}</dd></div><div><dt>お客様・取引先</dt><dd>{selectedContract.customerLabel}</dd></div><div><dt>車両</dt><dd>{data.vehicles.find((item) => item.id === selectedContract.vehicleId)?.name || selectedContract.vehicleName || "入力中"}</dd></div><div><dt>契約金額</dt><dd>{formatCurrency(selectedContract.amount)}</dd></div><div><dt>状態</dt><dd>{selectedContract.status}</dd></div></dl></section>{selectedContract.status === "署名待ち" ? <button type="button" className="primary-button full-button" disabled={submitting} onClick={() => void resumeSelectedContract()}><ExternalLink size={18} />{submitting ? "準備中" : "契約サイトで入力を再開"}</button> : <a className="primary-button full-button" href={getContractAppUrl(selectedContract.type === "買取" ? "purchase" : "sale")}><ExternalLink size={18} />契約サイトで確認・修正</a>}<p className="form-hint">{selectedContract.status === "署名待ち" ? "以前の連携は無効にし、この契約の新しい連携を発行します。空の契約は増えません。" : "契約サイトで修正して保存すると、契約履歴が残ります。"}</p>{error ? <p className="form-error">{error}</p> : null}</div></Drawer> : null}
   </>;
 }
