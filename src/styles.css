@@ -2734,6 +2734,16 @@ button.mini-summary-card:hover {
     width: 100%;
   }
 
+  .page-header-action {
+    display: flex;
+    justify-content: center;
+  }
+
+  .page-header-action .primary-button {
+    margin-inline: auto;
+    text-align: center;
+  }
+
   .alerts-grid,
   .vehicle-card-grid,
   .mini-summary-grid,
