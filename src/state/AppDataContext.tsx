@@ -646,7 +646,11 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       const current = data.staffProfiles.find((staff) => staff.id === input.staffId)
         ?? (profile?.id === input.staffId ? profile : undefined);
       if (!current) throw new Error("対象のスタッフが見つかりません。");
-      if (profile?.id !== input.staffId && profile?.role !== "owner") throw new Error("このスタッフ情報は変更できません。");
+      const isOwner = profile?.role === "owner" && profile.isActive;
+      const isOwnInitialRegistration = profile?.id === input.staffId && !current.profileCompletedAt;
+      if (!isOwner && !isOwnInitialRegistration) {
+        throw new Error("スタッフ情報を変更できるのは事業主だけです。");
+      }
       const checked = validateStaffDetails(input, current, licenseFront, licenseBack);
 
       if (configured && supabase) {
