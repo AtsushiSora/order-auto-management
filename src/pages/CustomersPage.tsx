@@ -13,10 +13,11 @@ import {
   UserRound,
   UsersRound,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Drawer } from "../components/Drawer";
 import { PageHeader } from "../components/PageHeader";
 import { formatCurrency, formatDate } from "../lib/format";
+import { formatPostalCode, lookupPostalAddress, postalCodeDigits } from "../lib/postalCode";
 import { useAppData } from "../state/AppDataContext";
 import { useAuth } from "../state/AuthContext";
 import type {
@@ -39,6 +40,8 @@ const blankCustomer = (): SaveCustomerInput => ({
   entityType: "個人",
   category: "一般のお客様",
   displayName: "",
+  lastName: "",
+  firstName: "",
   kana: "",
   birthDate: null,
   contactPerson: "",
@@ -56,6 +59,15 @@ const categories: CustomerCategory[] = ["一般のお客様", "オークショ�
 const channels: CustomerContactChannel[] = ["電話", "LINE", "メール", "対面", "その他"];
 const normalizePhone = (value: string) => value.replace(/[^0-9]/g, "");
 const csvCell = (value: unknown) => `"${String(value ?? "").replace(/"/g, '""')}"`;
+const currentYear = new Date().getFullYear();
+const birthYears = Array.from({ length: currentYear - 1899 }, (_, index) => String(currentYear - index));
+const birthMonths = Array.from({ length: 12 }, (_, index) => String(index + 1).padStart(2, "0"));
+type BirthParts = { year: string; month: string; day: string };
+const emptyBirthParts = (): BirthParts => ({ year: "", month: "", day: "" });
+const parseBirthDate = (value: string | null): BirthParts => {
+  const [year = "", month = "", day = ""] = value?.split("-") ?? [];
+  return { year, month, day };
+};
 
 export function CustomersPage({ onNavigate }: { onNavigate: (page: PageId) => void }) {
   const {
@@ -80,6 +92,32 @@ export function CustomersPage({ onNavigate }: { onNavigate: (page: PageId) => vo
   const [contactNote, setContactNote] = useState("");
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
+  const [birthParts, setBirthParts] = useState<BirthParts>(emptyBirthParts);
+  const [postalStatus, setPostalStatus] = useState<"idle" | "loading" | "found" | "not-found">("idle");
+  const [postalMessage, setPostalMessage] = useState("");
+  const lastPostalLookup = useRef("");
+
+  useEffect(() => {
+    if (!formOpen) return;
+    const digits = postalCodeDigits(form.postalCode);
+    if (digits.length !== 7 || digits === lastPostalLookup.current) return;
+    lastPostalLookup.current = digits;
+    const controller = new AbortController();
+    setPostalStatus("loading");
+    setPostalMessage("住所を検索しています…");
+    const timer = window.setTimeout(() => {
+      void lookupPostalAddress(digits, controller.signal).then((result) => {
+        setForm((current) => ({ ...current, postalCode: result.postalCode, address: result.address }));
+        setPostalStatus("found");
+        setPostalMessage("住所を自動入力しました。番地・建物名を続けて入力してください。");
+      }).catch((reason: unknown) => {
+        if (reason instanceof DOMException && reason.name === "AbortError") return;
+        setPostalStatus("not-found");
+        setPostalMessage(reason instanceof Error ? reason.message : "住所を検索できませんでした。");
+      });
+    }, 350);
+    return () => { window.clearTimeout(timer); controller.abort(); };
+  }, [form.postalCode, formOpen]);
 
   const transactionsByCustomer = useMemo(() => {
     const result = new Map<string, typeof data.contracts>();
@@ -112,13 +150,23 @@ export function CustomersPage({ onNavigate }: { onNavigate: (page: PageId) => vo
     return samePhone || sameEmail;
   });
 
-  const openNew = () => { setForm(blankCustomer()); setError(""); setFormOpen(true); };
+  const openNew = () => {
+    setForm(blankCustomer());
+    setBirthParts(emptyBirthParts());
+    lastPostalLookup.current = "";
+    setPostalStatus("idle");
+    setPostalMessage("");
+    setError("");
+    setFormOpen(true);
+  };
   const openEdit = (customer: Customer) => {
     setForm({
       customerId: customer.id,
       entityType: customer.entityType,
       category: customer.category,
       displayName: customer.displayName,
+      lastName: customer.lastName,
+      firstName: customer.firstName,
       kana: customer.kana,
       birthDate: customer.birthDate,
       contactPerson: customer.contactPerson,
@@ -131,8 +179,23 @@ export function CustomersPage({ onNavigate }: { onNavigate: (page: PageId) => vo
       memo: customer.memo,
       isActive: customer.isActive,
     });
+    setBirthParts(parseBirthDate(customer.birthDate));
+    lastPostalLookup.current = postalCodeDigits(customer.postalCode);
+    setPostalStatus("idle");
+    setPostalMessage("");
     setError("");
     setFormOpen(true);
+  };
+
+  const updateBirthPart = (part: keyof BirthParts, value: string) => {
+    let next = { ...birthParts, [part]: value };
+    if (next.year && next.month && next.day) {
+      const maxDay = new Date(Number(next.year), Number(next.month), 0).getDate();
+      if (Number(next.day) > maxDay) next = { ...next, day: String(maxDay).padStart(2, "0") };
+    }
+    setBirthParts(next);
+    const birthDate = next.year && next.month && next.day ? `${next.year}-${next.month}-${next.day}` : null;
+    setForm((current) => ({ ...current, birthDate }));
   };
 
   const submitCustomer = async () => {
@@ -158,11 +221,11 @@ export function CustomersPage({ onNavigate }: { onNavigate: (page: PageId) => vo
   };
 
   const exportCsv = () => {
-    const header = ["顧客番号", "区分", "種別", "氏名・会社名", "フリガナ", "担当者", "生年月日", "郵便番号", "住所", "電話番号", "メール", "登録番号", "状態", "取引件数", "最終取引日", "メモ"];
+    const header = ["顧客番号", "区分", "種別", "氏名・会社名", "名字", "名前", "フリガナ", "担当者", "生年月日", "郵便番号", "住所", "電話番号", "メール", "登録番号", "状態", "取引件数", "最終取引日", "メモ"];
     const rows = filtered.map((customer) => {
       const contracts = transactionsByCustomer.get(customer.id) ?? [];
       const latest = [...contracts].sort((a, b) => b.contractedOn.localeCompare(a.contractedOn))[0];
-      return [customer.customerNumber, customer.entityType, customer.category, customer.displayName, customer.kana, customer.contactPerson, customer.birthDate ?? "", customer.postalCode, customer.address, customer.phone, customer.email, customer.invoiceRegistrationNumber, customer.isActive ? "利用中" : "利用停止", contracts.length, latest?.contractedOn ?? "", customer.memo];
+      return [customer.customerNumber, customer.entityType, customer.category, customer.displayName, customer.lastName, customer.firstName, customer.kana, customer.contactPerson, customer.birthDate ?? "", customer.postalCode, customer.address, customer.phone, customer.email, customer.invoiceRegistrationNumber, customer.isActive ? "利用中" : "利用停止", contracts.length, latest?.contractedOn ?? "", customer.memo];
     });
     const blob = new Blob(["\ufeff", [header, ...rows].map((row) => row.map(csvCell).join(",")).join("\r\n")], { type: "text/csv;charset=utf-8" });
     const url = URL.createObjectURL(blob);
@@ -215,12 +278,19 @@ export function CustomersPage({ onNavigate }: { onNavigate: (page: PageId) => vo
         <section className="form-section"><h3>基本情報</h3><div className="form-grid two-columns">
           <label className="field-label">個人・法人 <span className="required">必須</span><select value={form.entityType} onChange={(event) => setForm((current) => ({ ...current, entityType: event.target.value as CustomerEntityType }))}><option>個人</option><option>法人・業者</option></select></label>
           <label className="field-label">顧客区分 <span className="required">必須</span><select value={form.category} onChange={(event) => setForm((current) => ({ ...current, category: event.target.value as CustomerCategory }))}>{categories.map((item) => <option key={item}>{item}</option>)}</select></label>
-          <label className="field-label">{form.entityType === "個人" ? "氏名" : "会社名・業者名"} <span className="required">必須</span><input value={form.displayName} onChange={(event) => setForm((current) => ({ ...current, displayName: event.target.value }))} /></label>
+          {form.entityType === "個人" ? <>
+            <label className="field-label">名字 <span className="required">必須</span><input value={form.lastName} onChange={(event) => setForm((current) => ({ ...current, lastName: event.target.value }))} autoComplete="family-name" /></label>
+            <label className="field-label">名前 <span className="required">必須</span><input value={form.firstName} onChange={(event) => setForm((current) => ({ ...current, firstName: event.target.value }))} autoComplete="given-name" /></label>
+          </> : <label className="field-label">会社名・業者名 <span className="required">必須</span><input value={form.displayName} onChange={(event) => setForm((current) => ({ ...current, displayName: event.target.value }))} /></label>}
           <label className="field-label">フリガナ<input value={form.kana} onChange={(event) => setForm((current) => ({ ...current, kana: event.target.value }))} /></label>
-          {form.entityType === "個人" ? <label className="field-label">生年月日<input type="date" value={form.birthDate ?? ""} onChange={(event) => setForm((current) => ({ ...current, birthDate: event.target.value || null }))} /></label> : <><label className="field-label">担当者名<input value={form.contactPerson} onChange={(event) => setForm((current) => ({ ...current, contactPerson: event.target.value }))} /></label><label className="field-label">適格請求書発行事業者 登録番号<input value={form.invoiceRegistrationNumber} onChange={(event) => setForm((current) => ({ ...current, invoiceRegistrationNumber: event.target.value }))} placeholder="任意" /></label></>}
+          {form.entityType === "個人" ? <div className="field-label full-span">生年月日<div className="birth-date-selects">
+            <select aria-label="生まれた年" value={birthParts.year} onChange={(event) => updateBirthPart("year", event.target.value)}><option value="">年</option>{birthYears.map((year) => <option key={year} value={year}>{year}年</option>)}</select>
+            <select aria-label="生まれた月" value={birthParts.month} onChange={(event) => updateBirthPart("month", event.target.value)}><option value="">月</option>{birthMonths.map((month) => <option key={month} value={month}>{Number(month)}月</option>)}</select>
+            <select aria-label="生まれた日" value={birthParts.day} onChange={(event) => updateBirthPart("day", event.target.value)}><option value="">日</option>{Array.from({ length: birthParts.year && birthParts.month ? new Date(Number(birthParts.year), Number(birthParts.month), 0).getDate() : 31 }, (_, index) => String(index + 1).padStart(2, "0")).map((day) => <option key={day} value={day}>{Number(day)}日</option>)}</select>
+          </div><small className="field-help">年・月・日をスクロールして選択できます。</small></div> : <><label className="field-label">担当者名<input value={form.contactPerson} onChange={(event) => setForm((current) => ({ ...current, contactPerson: event.target.value }))} /></label><label className="field-label">適格請求書発行事業者 登録番号<input value={form.invoiceRegistrationNumber} onChange={(event) => setForm((current) => ({ ...current, invoiceRegistrationNumber: event.target.value }))} placeholder="任意" /></label></>}
         </div></section>
         <section className="form-section"><h3>住所・連絡先</h3><div className="form-grid two-columns">
-          <label className="field-label">郵便番号<input value={form.postalCode} onChange={(event) => setForm((current) => ({ ...current, postalCode: event.target.value }))} inputMode="numeric" /></label>
+          <label className="field-label postal-code-field">郵便番号<input value={form.postalCode} onChange={(event) => { lastPostalLookup.current = ""; setPostalStatus("idle"); setPostalMessage(""); setForm((current) => ({ ...current, postalCode: formatPostalCode(event.target.value) })); }} inputMode="numeric" autoComplete="postal-code" placeholder="123-4567" maxLength={8} />{postalMessage ? <small className={`postal-lookup-status ${postalStatus}`}>{postalMessage}</small> : null}</label>
           <label className="field-label">電話番号<input value={form.phone} onChange={(event) => setForm((current) => ({ ...current, phone: event.target.value }))} inputMode="tel" /></label>
           <label className="field-label full-span">住所<input value={form.address} onChange={(event) => setForm((current) => ({ ...current, address: event.target.value }))} /></label>
           <label className="field-label full-span">メールアドレス<input type="email" value={form.email} onChange={(event) => setForm((current) => ({ ...current, email: event.target.value }))} /></label>
@@ -234,7 +304,7 @@ export function CustomersPage({ onNavigate }: { onNavigate: (page: PageId) => vo
     {selected ? <Drawer title={selected.displayName} subtitle={`${selected.customerNumber}　${selected.category}`} onClose={() => setSelected(null)}>
       <div className="form-stack customer-detail">
         {!selected.isActive ? <div className="integration-banner warning"><Archive size={21} /><div><strong>利用停止中</strong><span>過去の情報と取引履歴は保持されています。</span></div></div> : null}
-        <section className="detail-section"><div className="detail-section-heading"><h3>顧客情報</h3>{canEdit ? <button type="button" className="table-action-button" onClick={() => openEdit(selected)}><Pencil size={16} />修正</button> : null}</div><dl className="detail-list"><div><dt>個人・法人</dt><dd>{selected.entityType}</dd></div>{selected.contactPerson ? <div><dt>担当者</dt><dd>{selected.contactPerson}</dd></div> : null}<div><dt>住所</dt><dd>〒{selected.postalCode || "—"} {selected.address || "未登録"}</dd></div><div><dt>電話</dt><dd>{selected.phone ? <a href={`tel:${selected.phone}`}><Phone size={15} />{selected.phone}</a> : "未登録"}</dd></div><div><dt>メール</dt><dd>{selected.email ? <a href={`mailto:${selected.email}`}><Mail size={15} />{selected.email}</a> : "未登録"}</dd></div>{selected.birthDate ? <div><dt>生年月日</dt><dd>{formatDate(selected.birthDate)}</dd></div> : null}</dl></section>
+        <section className="detail-section"><div className="detail-section-heading"><h3>顧客情報</h3>{canEdit ? <button type="button" className="table-action-button" onClick={() => openEdit(selected)}><Pencil size={16} />修正</button> : null}</div><dl className="detail-list"><div><dt>個人・法人</dt><dd>{selected.entityType}</dd></div>{selected.entityType === "個人" ? <><div><dt>名字</dt><dd>{selected.lastName || "—"}</dd></div><div><dt>名前</dt><dd>{selected.firstName || "—"}</dd></div></> : null}{selected.contactPerson ? <div><dt>担当者</dt><dd>{selected.contactPerson}</dd></div> : null}<div><dt>住所</dt><dd>〒{selected.postalCode || "—"} {selected.address || "未登録"}</dd></div><div><dt>電話</dt><dd>{selected.phone ? <a href={`tel:${selected.phone}`}><Phone size={15} />{selected.phone}</a> : "未登録"}</dd></div><div><dt>メール</dt><dd>{selected.email ? <a href={`mailto:${selected.email}`}><Mail size={15} />{selected.email}</a> : "未登録"}</dd></div>{selected.birthDate ? <div><dt>生年月日</dt><dd>{formatDate(selected.birthDate)}</dd></div> : null}</dl></section>
         {selected.importantNote || selected.memo ? <section className="detail-section customer-notes"><h3>社内メモ</h3>{selected.importantNote ? <div><strong>重要メモ・対応時の注意事項</strong><p>{selected.importantNote}</p></div> : null}{selected.memo ? <div><strong>メモ</strong><p>{selected.memo}</p></div> : null}</section> : null}
         <section className="detail-section"><div className="detail-section-heading"><h3>取引内容</h3><span>{selectedTransactions.length}件</span></div>{selectedTransactions.length ? <div className="customer-history-list">{selectedTransactions.map((contract) => { const vehicle = data.vehicles.find((item) => item.id === contract.vehicleId); const cashflow = data.cashflows.find((item) => item.vehicleId === contract.vehicleId && item.kind === (contract.type === "販売" ? "販売代金" : "買取代金")); const staffAssignment = data.spotAssignments.find((item) => item.contractId === contract.id); const staff = data.staffProfiles.find((item) => item.id === staffAssignment?.staffId); const docs = data.issuedDocuments.filter((item) => item.contractId === contract.id && item.status === "有効"); return <article key={contract.id}><div><strong>{contract.type}　{formatDate(contract.contractedOn)}</strong><span className="status-badge">{contract.status}</span></div><p>{vehicle ? `${vehicle.managementNumber}　${vehicle.maker} ${vehicle.model || vehicle.name} ${vehicle.grade}` : contract.vehicleName || "車両登録前"}</p><dl><div><dt>契約金額</dt><dd>{formatCurrency(contract.amount)}</dd></div><div><dt>入出金</dt><dd>{cashflow?.status ?? "未作成"}</dd></div><div><dt>担当</dt><dd>{staff?.displayName ?? "事業主・通常スタッフ"}</dd></div></dl><div className="customer-history-actions"><button type="button" className="text-button" onClick={() => onNavigate(contract.type === "販売" ? "sales-contracts" : "purchase-contracts")}>契約を開く</button>{docs.length ? <button type="button" className="text-button" onClick={() => onNavigate("issued-documents")}>S・Rを開く（{docs.length}）</button> : null}</div></article>; })}</div> : <p className="table-empty compact">紐付いた取引はありません。</p>}</section>
         <section className="detail-section"><div className="detail-section-heading"><h3>連絡履歴</h3><button type="button" className="table-action-button" onClick={() => { setError(""); setContactOpen(true); }}><MessageSquarePlus size={16} />追加</button></div>{selectedLogs.length ? <div className="contact-log-list">{selectedLogs.map((log) => <article key={log.id}><strong>{new Date(log.contactedAt).toLocaleString("ja-JP")}　{log.channel}</strong><p>{log.note}</p><small>{data.staffProfiles.find((staff) => staff.id === log.staffId)?.displayName ?? "担当者"}</small></article>)}</div> : <p className="table-empty compact">連絡履歴はありません。</p>}</section>

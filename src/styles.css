@@ -3999,6 +3999,26 @@ button.mini-summary-card:hover {
   grid-column: 1 / -1;
 }
 
+.birth-date-selects {
+  display: grid;
+  grid-template-columns: 1.35fr 1fr 1fr;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.field-help,
+.postal-lookup-status {
+  display: block;
+  margin-top: 7px;
+  color: var(--slate-500);
+  font-size: 10px;
+  font-weight: 500;
+  line-height: 1.5;
+}
+
+.postal-lookup-status.found { color: var(--teal-700); }
+.postal-lookup-status.not-found { color: #b25b00; }
+
 .duplicate-customer-warning {
   display: grid;
   gap: 8px;

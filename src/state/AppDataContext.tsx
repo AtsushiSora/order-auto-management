@@ -623,7 +623,8 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       }));
     },
     saveCustomer: async (input) => {
-      if (!input.displayName.trim()) throw new Error(input.entityType === "個人" ? "氏名を入力してください。" : "会社名・業者名を入力してください。");
+      if (input.entityType === "個人" && (!input.lastName.trim() || !input.firstName.trim())) throw new Error("名字と名前を入力してください。");
+      if (input.entityType === "法人・業者" && !input.displayName.trim()) throw new Error("会社名・業者名を入力してください。");
       if (!input.phone.trim() && !input.email.trim()) throw new Error("電話番号またはメールアドレスを入力してください。");
       if (profile?.role === "spot") throw new Error("顧客情報を登録・修正できるのは事業主または通常スタッフです。");
       if (configured && supabase) {
@@ -641,11 +642,16 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       }
       const now = new Date().toISOString();
       const existing = input.customerId ? data.customers.find((customer) => customer.id === input.customerId) : null;
+      const displayName = input.entityType === "個人"
+        ? [input.lastName.trim(), input.firstName.trim()].filter(Boolean).join(" ")
+        : input.displayName.trim();
       const customer: Customer = {
         ...input,
         id: existing?.id ?? crypto.randomUUID(),
         customerNumber: existing?.customerNumber ?? nextCustomerNumber(data.customers),
-        displayName: input.displayName.trim(),
+        displayName,
+        lastName: input.entityType === "個人" ? input.lastName.trim() : "",
+        firstName: input.entityType === "個人" ? input.firstName.trim() : "",
         kana: input.kana.trim(),
         contactPerson: input.contactPerson.trim(),
         postalCode: input.postalCode.trim(),

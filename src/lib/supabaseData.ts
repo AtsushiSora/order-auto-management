@@ -925,6 +925,8 @@ export const mapCustomerFromDb = (source: unknown): Customer => {
     entityType: customerEntityTypeFromDb[stringValue(row, "entity_type")] ?? "個人",
     category: customerCategoryFromDb[stringValue(row, "category")] ?? "一般のお客様",
     displayName: stringValue(row, "display_name"),
+    lastName: stringValue(row, "last_name"),
+    firstName: stringValue(row, "first_name"),
     kana: stringValue(row, "kana"),
     birthDate: nullableString(row, "birth_date"),
     contactPerson: stringValue(row, "contact_person"),
@@ -944,7 +946,11 @@ export const mapCustomerFromDb = (source: unknown): Customer => {
 export const customerToDb = (input: SaveCustomerInput) => ({
   entity_type: customerEntityTypeToDb[input.entityType],
   category: customerCategoryToDb[input.category],
-  display_name: input.displayName.trim(),
+  display_name: input.entityType === "個人"
+    ? [input.lastName.trim(), input.firstName.trim()].filter(Boolean).join(" ")
+    : input.displayName.trim(),
+  last_name: input.entityType === "個人" ? input.lastName.trim() : "",
+  first_name: input.entityType === "個人" ? input.firstName.trim() : "",
   kana: input.kana.trim(),
   birth_date: input.entityType === "個人" ? input.birthDate || null : null,
   contact_person: input.entityType === "法人・業者" ? input.contactPerson.trim() : "",

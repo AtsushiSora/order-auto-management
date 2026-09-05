@@ -36,6 +36,8 @@ export type Customer = {
   entityType: CustomerEntityType;
   category: CustomerCategory;
   displayName: string;
+  lastName: string;
+  firstName: string;
   kana: string;
   birthDate: string | null;
   contactPerson: string;
