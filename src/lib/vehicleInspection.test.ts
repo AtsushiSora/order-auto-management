@@ -76,6 +76,18 @@ describe("vehicle inspection import", () => {
     expect(result.modelType).toBe("ABCDEF12345");
   });
 
+  it("reads light-vehicle code 3 and code 2 in the guided order", () => {
+    const result = parseQrPayloads([
+      "K32/123/123451234/270707/2307/5BA-LA350S/0450/-/-/0430/28/076/-/-/-/----/-----/01/999",
+      "K22/広島　　５８０あ１２３４/1/LA350S-1234567/KF/1",
+    ]);
+    expect(result.registrationNumber).toBe("広島 ５８０あ１２３４");
+    expect(result.chassisNumber).toBe("LA350S-1234567");
+    expect(result.inspectionExpiry).toBe("2027-07-07");
+    expect(result.firstRegistration).toBe("2023-07");
+    expect(result.modelType).toBe("5BA-LA350S");
+  });
+
   it("joins the current five-part registered-vehicle QR3 and QR2 payloads", () => {
     const result = parseQrPayloads([
       "2/-  /175740019/251231/2004/6AA",

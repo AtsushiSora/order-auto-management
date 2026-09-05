@@ -214,30 +214,33 @@ const parseVersion2RegisteredVehicleQr = (payloads: string[]): Partial<VehicleIn
   return result;
 };
 
-/** 旧実装で扱っていた識別子付きデータも、既存の読取結果との互換性のため残す。 */
+/** 軽自動車のコード2（K22）・コード3（K32）を、読み取り順に依存せず取り出す。 */
+const markedQrFields = (joined: string, marker: "K22/" | "K32/") => {
+  const start = joined.indexOf(marker);
+  if (start < 0) return [];
+  const nextStarts = (["K22/", "K32/"] as const)
+    .map((candidate) => joined.indexOf(candidate, start + marker.length))
+    .filter((position) => position >= 0);
+  const end = nextStarts.length ? Math.min(...nextStarts) : joined.length;
+  return joined.slice(start, end).split("/");
+};
+
 const parseRegisteredVehicleQr = (payloads: string[]): Partial<VehicleInspectionData> => {
   const version2 = parseVersion2RegisteredVehicleQr(payloads);
-  const joined = payloads.join("");
-  const qr2Start = joined.indexOf("K22/");
-  const qr3Start = joined.indexOf("K32/");
+  const joined = joinQrParts(payloads);
+  const qr2Fields = markedQrFields(joined, "K22/");
+  const qr3Fields = markedQrFields(joined, "K32/");
   const result: Partial<VehicleInspectionData> = { ...version2 };
 
-  if (qr2Start >= 0) {
-    const end = qr3Start > qr2Start ? qr3Start : joined.length;
-    const fields = joined.slice(qr2Start, end).split("/");
-    if (fields[0] === "K22") {
-      result.registrationNumber ||= cleanQrValue(fields[1]);
-      result.chassisNumber ||= cleanQrValue(fields[3]);
-    }
+  if (qr2Fields[0] === "K22") {
+    result.registrationNumber ||= cleanQrValue(qr2Fields[1]);
+    result.chassisNumber ||= cleanQrValue(qr2Fields[3]);
   }
 
-  if (qr3Start >= 0) {
-    const fields = joined.slice(qr3Start).split("/");
-    if (fields[0] === "K32") {
-      result.inspectionExpiry ||= qrDate(cleanQrValue(fields[3]), true);
-      result.firstRegistration ||= qrDate(cleanQrValue(fields[4]), false);
-      result.modelType ||= cleanQrValue(fields[5]);
-    }
+  if (qr3Fields[0] === "K32") {
+    result.inspectionExpiry ||= qrDate(cleanQrValue(qr3Fields[3]), true);
+    result.firstRegistration ||= qrDate(cleanQrValue(qr3Fields[4]), false);
+    result.modelType ||= cleanQrValue(qr3Fields[5]);
   }
   return result;
 };
