@@ -1762,6 +1762,250 @@ button.mini-summary-card:hover {
   box-shadow: var(--shadow-md);
 }
 
+.expense-request-panel {
+  margin-bottom: 19px;
+  padding: 18px;
+}
+
+.expense-request-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 14px;
+}
+
+.expense-request-heading h2,
+.expense-request-heading p {
+  margin: 0;
+}
+
+.expense-request-heading h2 {
+  color: var(--slate-900);
+  font-size: 17px;
+}
+
+.expense-request-heading p {
+  margin-top: 4px;
+  color: var(--slate-600);
+  font-size: 11px;
+}
+
+.expense-request-counts {
+  display: flex;
+  gap: 9px;
+  margin-bottom: 12px;
+}
+
+.expense-request-counts span {
+  padding: 7px 10px;
+  border-radius: 8px;
+  color: var(--slate-600);
+  background: var(--slate-100);
+  font-size: 11px;
+}
+
+.expense-request-counts strong {
+  color: var(--slate-900);
+  font-size: 14px;
+}
+
+.expense-request-list {
+  display: grid;
+  gap: 8px;
+}
+
+.expense-request-row {
+  width: 100%;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto auto;
+  align-items: center;
+  gap: 13px;
+  padding: 12px 13px;
+  border: 1px solid var(--slate-200);
+  border-radius: 9px;
+  background: #fff;
+  text-align: left;
+  cursor: pointer;
+}
+
+.expense-request-row:hover {
+  border-color: var(--blue-200);
+  background: var(--blue-50);
+}
+
+.expense-request-row-main {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.expense-request-row-main strong {
+  overflow: hidden;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.expense-request-row-main small {
+  overflow: hidden;
+  color: var(--slate-500);
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.expense-request-row-evidence {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--slate-500);
+  font-size: 11px;
+}
+
+.expense-request-amount {
+  color: var(--slate-900);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+.expense-request-empty {
+  margin: 0;
+  padding: 14px;
+  border-radius: 8px;
+  color: var(--slate-500);
+  background: var(--slate-100);
+  font-size: 11px;
+  text-align: center;
+}
+
+.expense-request-file-list {
+  display: grid;
+  gap: 7px;
+  margin-bottom: 12px;
+}
+
+.expense-request-file-list > div {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 9px;
+  padding: 9px 10px;
+  border-radius: 8px;
+  background: var(--slate-100);
+}
+
+.expense-request-file-list > div > svg {
+  color: var(--blue-600);
+}
+
+.expense-request-file-list span,
+.expense-request-file-list small {
+  display: block;
+  overflow: hidden;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.expense-request-file-list small {
+  margin-top: 2px;
+  color: var(--slate-500);
+  font-size: 9px;
+}
+
+.expense-request-detail {
+  display: grid;
+  gap: 11px;
+}
+
+.expense-request-detail > div {
+  display: grid;
+  grid-template-columns: 105px minmax(0, 1fr);
+  align-items: start;
+  gap: 12px;
+}
+
+.expense-request-detail > div > span:first-child {
+  color: var(--slate-500);
+  font-size: 11px;
+}
+
+.expense-request-detail > div > strong {
+  overflow-wrap: anywhere;
+  color: var(--slate-900);
+  font-size: 12px;
+}
+
+.expense-request-decision-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1.25fr;
+  gap: 9px;
+}
+
+.expense-request-decision-actions button {
+  width: 100%;
+}
+
+.expense-request-paid {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  margin: 0;
+  padding: 12px;
+  border-radius: 9px;
+  color: var(--green-700);
+  background: var(--green-100);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+@media (max-width: 680px) {
+  .expense-request-panel {
+    padding: 14px;
+  }
+
+  .expense-request-heading {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .expense-request-heading .primary-button {
+    width: 100%;
+  }
+
+  .expense-request-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 8px 10px;
+  }
+
+  .expense-request-row-main {
+    grid-column: 1 / -1;
+  }
+
+  .expense-request-row-evidence {
+    display: none;
+  }
+
+  .expense-request-amount {
+    font-size: 14px;
+  }
+
+  .expense-request-detail > div {
+    grid-template-columns: 90px minmax(0, 1fr);
+  }
+
+  .expense-request-decision-actions {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .expense-request-decision-actions .primary-button {
+    grid-column: 1 / -1;
+    grid-row: 1;
+  }
+}
+
 .ledger-summary-grid .mini-summary-card {
   position: relative;
   padding-left: 58px;

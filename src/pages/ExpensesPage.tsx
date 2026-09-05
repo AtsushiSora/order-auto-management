@@ -2,6 +2,7 @@ import { Paperclip, Pencil, Plus, Search } from "lucide-react";
 import { useMemo, useState, type FormEvent } from "react";
 import { Drawer } from "../components/Drawer";
 import { ExpenseEvidenceDrawer } from "../components/ExpenseEvidenceDrawer";
+import { ExpenseRequestsSection } from "../components/ExpenseRequestsSection";
 import { PageHeader } from "../components/PageHeader";
 import { StatusBadge } from "../components/StatusBadge";
 import { formatCurrency, formatDate } from "../lib/format";
@@ -37,7 +38,7 @@ const initialExpense = (): SaveExpenseInput => ({
 export function ExpensesPage() {
   const { data, saveExpense } = useAppData();
   const { profile } = useAuth();
-  const canEdit = profile?.role === "owner" || profile?.role === "regular" || profile?.role === "accounting";
+  const canDirectEdit = profile?.role === "owner" || profile?.role === "accounting";
   const isOwner = profile?.role === "owner";
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [search, setSearch] = useState("");
@@ -127,13 +128,15 @@ export function ExpensesPage() {
       <PageHeader
         title="経費"
         description="車両に直接かかった費用と、事業全体の経費を分けて記録します。"
-        action={canEdit ? (
+        action={canDirectEdit ? (
           <button type="button" className="primary-button" onClick={openForm}>
             <Plus size={20} />
             経費を登録
           </button>
         ) : undefined}
       />
+
+      <ExpenseRequestsSection />
 
       <section className="mini-summary-grid">
         <div className="mini-summary-card"><small>確定費用</small><strong>{formatCurrency(totals.confirmed)}</strong></div>
@@ -190,7 +193,7 @@ export function ExpensesPage() {
                         {data.attachments.filter((item) => item.expenseId === expense.id).length || "追加"}
                       </button>
                     </td>
-                    <td>{canEdit ? <button type="button" className="text-button" onClick={() => openEdit(expense)}><Pencil size={15} />修正</button> : null}</td>
+                    <td>{canDirectEdit ? <button type="button" className="text-button" onClick={() => openEdit(expense)}><Pencil size={15} />修正</button> : null}</td>
                   </tr>
                 );
               })}
@@ -274,7 +277,7 @@ export function ExpensesPage() {
         <ExpenseEvidenceDrawer
           expense={evidenceExpense}
           attachments={data.attachments.filter((item) => item.expenseId === evidenceExpense.id)}
-          canUpload={canEdit}
+          canUpload={canDirectEdit}
           isOwner={isOwner}
           onClose={() => setEvidenceExpenseId(null)}
         />

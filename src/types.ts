@@ -280,6 +280,7 @@ export type Attachment = {
   vehicleId: string | null;
   contractId: string | null;
   expenseId: string | null;
+  approvalId: string | null;
   category: AttachmentCategory;
   originalFileName: string;
   storagePath: string;
@@ -466,11 +467,37 @@ export type Contract = {
 
 export type Approval = {
   id: string;
-  vehicleId: string;
+  approvalType: "一般" | "経費申請";
+  vehicleId: string | null;
   title: string;
+  requestedById: string;
   requestedBy: string;
-  status: "承認待ち" | "承認" | "却下";
+  decidedById: string | null;
+  status: "承認待ち" | "承認" | "却下" | "差し戻し" | "取消";
+  decisionNote: string;
+  expenseId: string | null;
+  category: string;
+  description: string;
+  amount: number;
+  incurredOn: string;
+  paymentMethod: PaymentMethod | null;
+  evidenceMissingReason: string;
+  decidedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
 };
+
+export type SaveExpenseRequestInput = {
+  approvalId: string | null;
+  vehicleId: string | null;
+  category: string;
+  description: string;
+  amount: number;
+  incurredOn: string;
+  evidenceMissingReason: string;
+};
+
+export type ExpenseRequestDecision = "承認" | "差し戻し" | "却下";
 
 export type WebsiteInquiryStatus = "新着" | "対応中" | "完了";
 

@@ -51,6 +51,9 @@ export const validateEvidenceFile = (file: FileLike): { mimeType: string; extens
 export const buildExpenseEvidencePath = (expenseId: string, attachmentId: string, extension: string) =>
   `expenses/${expenseId}/${attachmentId}.${extension}`;
 
+export const buildExpenseRequestEvidencePath = (approvalId: string, attachmentId: string, extension: string) =>
+  `expense-requests/${approvalId}/${attachmentId}.${extension}`;
+
 export const formatFileSize = (byteSize: number) => {
   if (byteSize < 1024) return `${byteSize} B`;
   if (byteSize < 1024 * 1024) return `${Math.ceil(byteSize / 1024)} KB`;

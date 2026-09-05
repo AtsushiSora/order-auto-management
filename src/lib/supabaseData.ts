@@ -39,6 +39,8 @@ import type {
   SaleContractInput,
   SaveAntiqueLedgerDetailInput,
   SaveExpenseInput,
+  SaveExpenseRequestInput,
+  ExpenseRequestDecision,
   SaveJournalCandidateReviewInput,
   TaxTreatment,
   Vehicle,
@@ -154,6 +156,15 @@ const approvalStatusFromDb: Record<string, Approval["status"]> = {
   pending: "承認待ち",
   approved: "承認",
   rejected: "却下",
+  returned: "差し戻し",
+  cancelled: "取消",
+};
+const expenseWorkflowStatusFromDb: Record<string, Approval["status"]> = {
+  pending: "承認待ち",
+  approved: "承認",
+  rejected: "却下",
+  returned: "差し戻し",
+  cancelled: "取消",
 };
 const soldDisplayModeFromDb: Record<string, Vehicle["soldDisplayMode"]> = {
   show_sold: "売約済み表示",
@@ -698,6 +709,7 @@ export const mapAttachmentFromDb = (source: unknown): Attachment => {
     vehicleId: nullableString(row, "vehicle_id"),
     contractId: nullableString(row, "contract_id"),
     expenseId: nullableString(row, "expense_id"),
+    approvalId: nullableString(row, "approval_id"),
     category: stringValue(row, "category") as Attachment["category"],
     originalFileName: stringValue(row, "original_file_name"),
     storagePath: stringValue(row, "storage_path"),
@@ -1013,9 +1025,53 @@ export const mapApprovalFromDb = (source: unknown): Approval => {
   const row = source as DbRow;
   return {
     id: stringValue(row, "id"),
-    vehicleId: stringValue(row, "vehicle_id"),
+    approvalType: stringValue(row, "approval_type") === "expense_request" ? "経費申請" : "一般",
+    vehicleId: nullableString(row, "vehicle_id"),
     title: stringValue(row, "title"),
+    requestedById: stringValue(row, "requested_by"),
     requestedBy: "スタッフ",
-    status: approvalStatusFromDb[stringValue(row, "status")] ?? "承認待ち",
+    decidedById: nullableString(row, "decided_by"),
+    status: stringValue(row, "approval_type") === "expense_request"
+      ? expenseWorkflowStatusFromDb[stringValue(row, "expense_workflow_status")] ?? "承認待ち"
+      : approvalStatusFromDb[stringValue(row, "status")] ?? "承認待ち",
+    decisionNote: stringValue(row, "decision_note"),
+    expenseId: nullableString(row, "expense_id"),
+    category: stringValue(row, "expense_category"),
+    description: stringValue(row, "expense_description"),
+    amount: numberValue(row, "expense_amount"),
+    incurredOn: stringValue(row, "expense_incurred_on"),
+    paymentMethod: row.expense_payment_method == null ? null : paymentMethodFromDb[stringValue(row, "expense_payment_method")] ?? null,
+    evidenceMissingReason: stringValue(row, "evidence_missing_reason"),
+    decidedAt: nullableString(row, "decided_at"),
+    createdAt: stringValue(row, "created_at"),
+    updatedAt: stringValue(row, "updated_at"),
   };
 };
+
+export const expenseRequestToRpc = (input: SaveExpenseRequestInput) => ({
+  p_approval_id: input.approvalId,
+  p_vehicle_id: input.vehicleId,
+  p_category: input.category.trim(),
+  p_description: input.description.trim(),
+  p_amount: input.amount,
+  p_incurred_on: input.incurredOn,
+  p_evidence_missing_reason: input.evidenceMissingReason.trim() || null,
+});
+
+const expenseRequestDecisionToDb: Record<ExpenseRequestDecision, string> = {
+  承認: "approved",
+  差し戻し: "returned",
+  却下: "rejected",
+};
+
+export const expenseRequestDecisionToRpc = (
+  approvalId: string,
+  decision: ExpenseRequestDecision,
+  paymentMethod: "現金" | "振込",
+  note: string,
+) => ({
+  p_approval_id: approvalId,
+  p_decision: expenseRequestDecisionToDb[decision],
+  p_payment_method: paymentMethodToDb[paymentMethod],
+  p_note: note.trim() || null,
+});

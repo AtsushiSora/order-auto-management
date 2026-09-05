@@ -11,7 +11,7 @@ import {
 import { DataLoadError, SystemLoading } from "../components/SystemState";
 import { seedData } from "../data/seed";
 import { buildAntiqueLedgerEntries } from "../lib/antiqueLedger";
-import { buildExpenseEvidencePath, PRIVATE_BUCKET, validateEvidenceFile } from "../lib/evidence";
+import { buildExpenseEvidencePath, buildExpenseRequestEvidencePath, PRIVATE_BUCKET, validateEvidenceFile } from "../lib/evidence";
 import { canIssueDocument, findCompletedSaleReceipt, includedTaxAmount, nextDemoDocumentNumber } from "../lib/issuedDocuments";
 import { calculateStaffPlannedAmount } from "../lib/staffSettlements";
 import { validateSpotAssignment } from "../lib/spotAssignments";
@@ -34,6 +34,8 @@ import {
   mapCustomerContactLogFromDb,
   mapContractHandoffFromDb,
   mapExpenseFromDb,
+  expenseRequestToRpc,
+  expenseRequestDecisionToRpc,
   mapJournalCandidateReviewFromDb,
   mapJournalExportFromDb,
   mapMonthlyBalanceCheckFromDb,
@@ -68,6 +70,7 @@ import {
 } from "../lib/supabaseData";
 import type {
   AppData,
+  Approval,
   Attachment,
   AttachmentCategory,
   IssuedDocument,
@@ -106,6 +109,8 @@ import type {
   ProductionReadiness,
   ProductionReadinessCheckKey,
   ReadinessCheckStatus,
+  SaveExpenseRequestInput,
+  ExpenseRequestDecision,
 } from "../types";
 import { isTestLoginEnabled, useAuth } from "./AuthContext";
 
@@ -175,6 +180,10 @@ type AppDataContextValue = {
   archiveVehicle: (vehicleId: string) => Promise<void>;
   addExpense: (input: NewExpenseInput) => Promise<void>;
   saveExpense: (input: SaveExpenseInput) => Promise<void>;
+  saveExpenseRequest: (input: SaveExpenseRequestInput) => Promise<string>;
+  uploadExpenseRequestAttachment: (approvalId: string, category: AttachmentCategory, file: File) => Promise<void>;
+  decideExpenseRequest: (approvalId: string, decision: ExpenseRequestDecision, paymentMethod: "現金" | "振込", note: string) => Promise<void>;
+  cancelExpenseRequest: (approvalId: string) => Promise<void>;
   uploadExpenseAttachment: (expenseId: string, category: AttachmentCategory, file: File) => Promise<void>;
   getAttachmentUrl: (attachmentId: string) => Promise<string>;
   deleteAttachment: (attachmentId: string) => Promise<void>;
@@ -468,6 +477,9 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   }, [refreshData]);
 
   const persistExpense = useCallback(async (input: SaveExpenseInput) => {
+    if (profile?.role !== "owner" && profile?.role !== "accounting") {
+      throw new Error("経費の直接登録は事業主または経理のみです。通常スタッフは経費申請を使用してください。");
+    }
     if (!input.category.trim() || !input.description.trim()) throw new Error("費用項目と内容を入力してください。");
     if (input.amount <= 0) throw new Error("金額は1円以上で入力してください。");
     if (!input.incurredOn) throw new Error("発生日を入力してください。");
@@ -555,7 +567,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         cashflowEvents,
       };
     });
-  }, [configured, data.cashflows, data.expenses, refreshData]);
+  }, [configured, data.cashflows, data.expenses, profile?.role, refreshData]);
 
   const value = useMemo<AppDataContextValue>(() => ({
     data,
@@ -1047,6 +1059,129 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     },
     addExpense: async (input) => persistExpense({ ...input, expenseId: null }),
     saveExpense: persistExpense,
+    saveExpenseRequest: async (input) => {
+      if (!input.category.trim() || !input.description.trim()) throw new Error("費用項目と内容を入力してください。");
+      if (input.amount <= 0) throw new Error("金額は1円以上で入力してください。");
+      if (!input.incurredOn) throw new Error("発生日を入力してください。");
+      if (!profile || profile.role === "spot") throw new Error("経費を申請する権限がありません。");
+      if (configured && supabase) {
+        const { data: savedId, error } = await supabase.rpc("save_expense_request", expenseRequestToRpc(input));
+        if (error) throw new Error(error.message);
+        await refreshData();
+        return String(savedId);
+      }
+      const now = new Date().toISOString();
+      const existing = input.approvalId ? data.approvals.find((item) => item.id === input.approvalId && item.approvalType === "経費申請") : null;
+      if (input.approvalId && (!existing || existing.requestedById !== profile.id || existing.status !== "差し戻し")) {
+        throw new Error("差し戻された自分の申請だけを再申請できます。");
+      }
+      const approvalId = existing?.id ?? crypto.randomUUID();
+      const request: Approval = {
+        id: approvalId,
+        approvalType: "経費申請",
+        vehicleId: input.vehicleId,
+        title: `経費申請 ${input.category.trim()}：${input.description.trim().slice(0, 100)}`,
+        requestedById: profile.id,
+        requestedBy: profile.displayName,
+        decidedById: null,
+        status: "承認待ち",
+        decisionNote: "",
+        expenseId: null,
+        category: input.category.trim(),
+        description: input.description.trim(),
+        amount: input.amount,
+        incurredOn: input.incurredOn,
+        paymentMethod: null,
+        evidenceMissingReason: input.evidenceMissingReason.trim(),
+        decidedAt: null,
+        createdAt: existing?.createdAt ?? now,
+        updatedAt: now,
+      };
+      setData((current) => ({ ...current, approvals: [request, ...current.approvals.filter((item) => item.id !== approvalId)] }));
+      return approvalId;
+    },
+    uploadExpenseRequestAttachment: async (approvalId, category, file) => {
+      const { mimeType, extension } = validateEvidenceFile(file);
+      const attachmentId = crypto.randomUUID();
+      const storagePath = buildExpenseRequestEvidencePath(approvalId, attachmentId, extension);
+      if (configured && supabase) {
+        const { error: uploadError } = await supabase.storage.from(PRIVATE_BUCKET).upload(storagePath, file, { contentType: mimeType, upsert: false });
+        if (uploadError) throw new Error(`ファイルを保存できませんでした：${uploadError.message}`);
+        const { data: inserted, error: metadataError } = await supabase.from("attachments").insert({
+          id: attachmentId,
+          approval_id: approvalId,
+          category,
+          original_file_name: file.name.trim().slice(0, 255) || `証憑.${extension}`,
+          storage_path: storagePath,
+          mime_type: mimeType,
+          byte_size: file.size,
+        }).select("*").single();
+        if (metadataError) throw new Error(`添付情報を登録できませんでした：${metadataError.message}`);
+        const attachment = mapAttachmentFromDb(inserted);
+        setData((current) => ({ ...current, attachments: [attachment, ...current.attachments] }));
+        return;
+      }
+      const objectUrl = URL.createObjectURL(file);
+      demoEvidenceUrls.set(attachmentId, objectUrl);
+      const attachment: Attachment = {
+        id: attachmentId,
+        vehicleId: null,
+        contractId: null,
+        expenseId: null,
+        approvalId,
+        category,
+        originalFileName: file.name,
+        storagePath: `demo:${attachmentId}`,
+        mimeType,
+        byteSize: file.size,
+        createdAt: new Date().toISOString(),
+      };
+      setData((current) => ({ ...current, attachments: [attachment, ...current.attachments] }));
+    },
+    decideExpenseRequest: async (approvalId, decision, paymentMethod, note) => {
+      if (profile?.role !== "owner") throw new Error("経費申請を承認できるのは事業主だけです。");
+      if (decision !== "承認" && !note.trim()) throw new Error("差し戻し・却下の理由を入力してください。");
+      if (configured && supabase) {
+        const { error } = await supabase.rpc("decide_expense_request", expenseRequestDecisionToRpc(approvalId, decision, paymentMethod, note));
+        if (error) throw new Error(error.message);
+        await refreshData();
+        return;
+      }
+      const request = data.approvals.find((item) => item.id === approvalId && item.approvalType === "経費申請" && item.status === "承認待ち");
+      if (!request) throw new Error("承認待ちの経費申請が見つかりません。");
+      const now = new Date().toISOString();
+      const expenseId = decision === "承認" ? crypto.randomUUID() : null;
+      setData((current) => {
+        let expenses = current.expenses;
+        let cashflows = current.cashflows;
+        let attachments = current.attachments;
+        if (expenseId) {
+          expenses = [{ id: expenseId, vehicleId: request.vehicleId, category: request.category, description: request.description, amount: request.amount, expenseStatus: "確定", paymentStatus: "未払い", paymentMethod, incurredOn: request.incurredOn, createdAt: now }, ...expenses];
+          cashflows = [{ id: crypto.randomUUID(), vehicleId: request.vehicleId, expenseId, direction: "支払い", kind: "経費支払い", description: `経費 ${request.category}：${request.description}`, amount: request.amount, processedAmount: 0, status: "未処理", method: paymentMethod, scheduledOn: request.incurredOn, processedOn: null, createdAt: now }, ...cashflows];
+          attachments = attachments.map((item) => item.approvalId === approvalId ? { ...item, approvalId: null, expenseId } : item);
+        }
+        return {
+          ...current,
+          expenses,
+          cashflows,
+          attachments,
+          approvals: current.approvals.map((item) => item.id === approvalId ? { ...item, status: decision, decisionNote: note.trim(), paymentMethod: decision === "承認" ? paymentMethod : null, expenseId, decidedById: profile.id, decidedAt: now, updatedAt: now } : item),
+        };
+      });
+    },
+    cancelExpenseRequest: async (approvalId) => {
+      if (!profile || profile.role === "spot") throw new Error("経費申請を取り消す権限がありません。");
+      if (configured && supabase) {
+        const { error } = await supabase.rpc("cancel_expense_request", { p_approval_id: approvalId });
+        if (error) throw new Error(error.message);
+        await refreshData();
+        return;
+      }
+      const now = new Date().toISOString();
+      const request = data.approvals.find((item) => item.id === approvalId && item.requestedById === profile.id && (item.status === "承認待ち" || item.status === "差し戻し"));
+      if (!request) throw new Error("取り消せる経費申請が見つかりません。");
+      setData((current) => ({ ...current, approvals: current.approvals.map((item) => item.id === approvalId ? { ...item, status: "取消", decisionNote: "申請者が取り消しました。", decidedById: profile.id, decidedAt: now, updatedAt: now } : item) }));
+    },
     uploadExpenseAttachment: async (expenseId, category, file) => {
       const expense = data.expenses.find((item) => item.id === expenseId);
       if (!expense) throw new Error("対象の経費が見つかりません。");
@@ -1086,6 +1221,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         vehicleId: null,
         contractId: null,
         expenseId,
+        approvalId: null,
         category,
         originalFileName: file.name,
         storagePath: `demo:${attachmentId}`,
