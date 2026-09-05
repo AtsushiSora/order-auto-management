@@ -76,6 +76,31 @@ describe("vehicle inspection import", () => {
     expect(result.modelType).toBe("ABCDEF12345");
   });
 
+  it("joins the current five-part registered-vehicle QR3 and QR2 payloads", () => {
+    const result = parseQrPayloads([
+      "2/-  /175740019/251231/2004/6AA",
+      "-ZYX10/0074/-   /-   /0043/10/0",
+      "96/2/0/I/0001/-    /200127/14",
+      "2/品川　　５００や１０００/1/ZYX10-",
+      "1234567/A25A/1",
+    ]);
+    expect(result.registrationNumber).toBe("品川 ５００や１０００");
+    expect(result.chassisNumber).toBe("ZYX10-1234567");
+    expect(result.inspectionExpiry).toBe("2025-12-31");
+    expect(result.firstRegistration).toBe("2020-04");
+    expect(result.modelType).toBe("6AA-ZYX10");
+  });
+
+  it("ignores an unknown expiry marker", () => {
+    const result = parseQrPayloads([
+      "2/-  /175740019/999999/",
+      "2004/6AA-ZYX10/0074/-   /-   /0043/10/0",
+      "96/2/0/I/0001/-    /200127/14",
+    ]);
+    expect(result.inspectionExpiry).toBe("");
+    expect(result.firstRegistration).toBe("2020-04");
+  });
+
   it("does not guess uncertain unlabeled values", () => {
     const result = parseQrPayloads(["1234567890,unknown,data"]);
     expect(result.registrationNumber).toBe("");

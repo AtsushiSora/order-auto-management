@@ -181,28 +181,62 @@ const qrDate = (value: string, withDay: boolean) => {
   return "";
 };
 
-/** 国土交通省仕様の登録車QR2（K22）とQR3（K32）を読み取る。分割QRは券面の左から順に結合する。 */
+const joinQrParts = (payloads: string[]) => payloads
+  .join("")
+  .replace(/[\u0000\r\n]/g, "")
+  .trim();
+
+/**
+ * 現行の登録車QRを読み取る。
+ * 券面の左3個がQR3、右2個がQR2で、それぞれは構造的連結QRとして分割されている。
+ * 国土交通省の2023.1版では、どちらの結合結果も「2/」から始まる。
+ */
+const parseVersion2RegisteredVehicleQr = (payloads: string[]): Partial<VehicleInspectionData> => {
+  const result: Partial<VehicleInspectionData> = {};
+
+  if (payloads.length >= 3) {
+    const qr3Fields = joinQrParts(payloads.slice(0, 3)).split("/");
+    if (cleanQrValue(qr3Fields[0]) === "2" && qr3Fields.length >= 6) {
+      result.inspectionExpiry = qrDate(cleanQrValue(qr3Fields[3]), true);
+      result.firstRegistration = qrDate(cleanQrValue(qr3Fields[4]), false);
+      result.modelType = cleanQrValue(qr3Fields[5]);
+    }
+  }
+
+  if (payloads.length >= 5) {
+    const qr2Fields = joinQrParts(payloads.slice(3, 5)).split("/");
+    if (cleanQrValue(qr2Fields[0]) === "2" && qr2Fields.length >= 6) {
+      result.registrationNumber = cleanQrValue(qr2Fields[1]);
+      result.chassisNumber = cleanQrValue(qr2Fields[3]);
+    }
+  }
+
+  return result;
+};
+
+/** 旧実装で扱っていた識別子付きデータも、既存の読取結果との互換性のため残す。 */
 const parseRegisteredVehicleQr = (payloads: string[]): Partial<VehicleInspectionData> => {
+  const version2 = parseVersion2RegisteredVehicleQr(payloads);
   const joined = payloads.join("");
   const qr2Start = joined.indexOf("K22/");
   const qr3Start = joined.indexOf("K32/");
-  const result: Partial<VehicleInspectionData> = {};
+  const result: Partial<VehicleInspectionData> = { ...version2 };
 
   if (qr2Start >= 0) {
     const end = qr3Start > qr2Start ? qr3Start : joined.length;
     const fields = joined.slice(qr2Start, end).split("/");
     if (fields[0] === "K22") {
-      result.registrationNumber = cleanQrValue(fields[1]);
-      result.chassisNumber = cleanQrValue(fields[3]);
+      result.registrationNumber ||= cleanQrValue(fields[1]);
+      result.chassisNumber ||= cleanQrValue(fields[3]);
     }
   }
 
   if (qr3Start >= 0) {
     const fields = joined.slice(qr3Start).split("/");
     if (fields[0] === "K32") {
-      result.inspectionExpiry = qrDate(cleanQrValue(fields[3]), true);
-      result.firstRegistration = qrDate(cleanQrValue(fields[4]), false);
-      result.modelType = cleanQrValue(fields[5]);
+      result.inspectionExpiry ||= qrDate(cleanQrValue(fields[3]), true);
+      result.firstRegistration ||= qrDate(cleanQrValue(fields[4]), false);
+      result.modelType ||= cleanQrValue(fields[5]);
     }
   }
   return result;
