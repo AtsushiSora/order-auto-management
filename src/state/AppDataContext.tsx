@@ -166,6 +166,7 @@ type AppDataContextValue = {
   updateStaffProfile: (input: UpdateStaffProfileInput) => Promise<void>;
   saveStaffProfileDetails: (input: SaveStaffProfileDetailsInput, licenseFront: File | null, licenseBack: File | null) => Promise<void>;
   getStaffLicenseUrl: (staffId: string, side: "front" | "back") => Promise<string>;
+  deleteStaffProfile: (staffId: string) => Promise<void>;
   saveCustomer: (input: SaveCustomerInput) => Promise<Customer>;
   setCustomerActive: (customerId: string, isActive: boolean) => Promise<void>;
   deleteCustomer: (customerId: string) => Promise<void>;
@@ -709,6 +710,32 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       const { data: signed, error } = await supabase.storage.from(PRIVATE_BUCKET).createSignedUrl(path, 60);
       if (error || !signed?.signedUrl) throw new Error("免許証画像を開けませんでした。");
       return signed.signedUrl;
+    },
+    deleteStaffProfile: async (staffId) => {
+      if (profile?.role !== "owner" || !profile.isActive) throw new Error("スタッフを削除できるのは事業主だけです。");
+      if (staffId === profile.id) throw new Error("ログイン中の利用者は削除できません。");
+      const target = data.staffProfiles.find((staff) => staff.id === staffId);
+      if (!target) throw new Error("対象のスタッフが見つかりません。");
+      if (target.role === "owner") throw new Error("事業主アカウントは削除できません。");
+      if (target.employmentStatus !== "retired") throw new Error("削除する前に在籍情報を「退職」にしてください。");
+
+      if (configured && supabase) {
+        const { error } = await supabase.functions.invoke("delete-staff-user", {
+          body: { staffId, confirmation: "DELETE" },
+        });
+        if (error) throw new Error(await functionErrorMessage(error, "スタッフを削除できませんでした。"));
+        await refreshData();
+        return;
+      }
+
+      const hasHistory = data.staffSettlements.some((item) => item.staffId === staffId)
+        || data.spotAssignments.some((item) => item.staffId === staffId)
+        || data.customerContactLogs.some((item) => item.staffId === staffId);
+      if (hasHistory) throw new Error("業務履歴があるため削除できません。「退職」のまま履歴を保存してください。");
+      setData((current) => ({
+        ...current,
+        staffProfiles: current.staffProfiles.filter((staff) => staff.id !== staffId),
+      }));
     },
     saveCustomer: async (input) => {
       if (input.entityType === "個人" && (!input.lastName.trim() || !input.firstName.trim())) throw new Error("名字と名前を入力してください。");

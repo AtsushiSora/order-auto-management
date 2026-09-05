@@ -121,12 +121,13 @@ function StaffInvitePanel({ isDemo }: { isDemo: boolean }) {
 }
 
 function StaffProfileEditor({ staff, currentUserId }: { staff: StaffProfile; currentUserId: string | undefined }) {
-  const { updateStaffProfile, saveStaffProfileDetails, getStaffLicenseUrl } = useAppData();
+  const { updateStaffProfile, saveStaffProfileDetails, getStaffLicenseUrl, deleteStaffProfile } = useAppData();
   const [displayName, setDisplayName] = useState(staff.displayName);
   const [role, setRole] = useState<StaffRole>(staff.role);
   const [employmentStatus, setEmploymentStatus] = useState<StaffEmploymentStatus>(staff.employmentStatus ?? (staff.isActive ? "active" : "paused"));
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [detailsSaving, setDetailsSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -153,6 +154,20 @@ function StaffProfileEditor({ staff, currentUserId }: { staff: StaffProfile; cur
       setError(reason instanceof Error ? reason.message : "変更を保存できませんでした。");
     } finally {
       setSaving(false);
+    }
+  };
+
+  const remove = async () => {
+    if (!window.confirm(`${staff.displayName}（社員番号 ${formatEmployeeNumber(staff.employeeNumber)}）を完全に削除しますか？\n\n契約・経費・精算などの履歴がある場合は削除されません。`)) return;
+    if (window.prompt("最終確認です。削除する場合は「削除」と入力してください。") !== "削除") return;
+    setDeleting(true);
+    setMessage(null);
+    setError(null);
+    try {
+      await deleteStaffProfile(staff.id);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "スタッフを削除できませんでした。");
+      setDeleting(false);
     }
   };
 
@@ -194,6 +209,7 @@ function StaffProfileEditor({ staff, currentUserId }: { staff: StaffProfile; cur
       {error ? <p className="inline-error">{error}</p> : null}
       {message ? <p className="inline-success">{message}</p> : null}
       <div className="staff-profile-actions">
+        {staff.employmentStatus === "retired" && !isCurrentUser && staff.role !== "owner" ? <button type="button" className="danger-button" disabled={deleting} onClick={() => void remove()}><Trash2 size={17} />{deleting ? "削除中…" : "完全削除"}</button> : null}
         <button type="button" className="secondary-button" onClick={() => setDetailsOpen(true)}>スタッフ情報</button>
         <button type="button" className="primary-button" disabled={!changed || saving} onClick={() => void save()}>
           {saving ? "保存中…" : "変更を保存"}
