@@ -1,10 +1,11 @@
-import { Camera, Save, ShieldCheck } from "lucide-react";
+import { Camera, CheckCircle2, Save, ShieldCheck } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { formatPostalCode, lookupPostalAddress, postalCodeDigits } from "../lib/postalCode";
 import type { SaveStaffProfileDetailsInput, StaffProfile } from "../types";
 
 const currentYear = new Date().getFullYear();
 const years = Array.from({ length: currentYear - 1899 }, (_, index) => String(currentYear - index));
+const licenseYears = Array.from({ length: 31 }, (_, index) => String(currentYear - 10 + index));
 const months = Array.from({ length: 12 }, (_, index) => String(index + 1).padStart(2, "0"));
 
 const dateParts = (value: string | null | undefined) => {
@@ -38,6 +39,7 @@ export function StaffDetailsForm({
     licenseExpiry: staff.licenseExpiry ?? "",
   });
   const [birth, setBirth] = useState(dateParts(staff.birthDate));
+  const [licenseExpiry, setLicenseExpiry] = useState(dateParts(staff.licenseExpiry));
   const [licenseFront, setLicenseFront] = useState<File | null>(null);
   const [licenseBack, setLicenseBack] = useState<File | null>(null);
   const [postalMessage, setPostalMessage] = useState("");
@@ -73,6 +75,19 @@ export function StaffDetailsForm({
     }));
   };
   const dayCount = birth.year && birth.month ? new Date(Number(birth.year), Number(birth.month), 0).getDate() : 31;
+  const updateLicenseExpiry = (part: keyof typeof licenseExpiry, value: string) => {
+    const next = { ...licenseExpiry, [part]: value };
+    const maxDay = next.year && next.month ? new Date(Number(next.year), Number(next.month), 0).getDate() : 31;
+    if (Number(next.day) > maxDay) next.day = "";
+    setLicenseExpiry(next);
+    setForm((current) => ({
+      ...current,
+      licenseExpiry: next.year && next.month && next.day ? `${next.year}-${next.month}-${next.day}` : "",
+    }));
+  };
+  const licenseExpiryDayCount = licenseExpiry.year && licenseExpiry.month
+    ? new Date(Number(licenseExpiry.year), Number(licenseExpiry.month), 0).getDate()
+    : 31;
 
   const submit = async () => {
     setError("");
@@ -98,8 +113,8 @@ export function StaffDetailsForm({
       <h3>住所・連絡先</h3>
       <div className="form-grid two-columns">
         <label className="field-label postal-code-field">郵便番号 <span className="required">必須</span><input value={form.postalCode} inputMode="numeric" maxLength={8} placeholder="123-4567" onChange={(event) => { lastPostalLookup.current = ""; setPostalMessage(""); setForm((current) => ({ ...current, postalCode: formatPostalCode(event.target.value) })); }} />{postalMessage ? <small className="postal-lookup-status">{postalMessage}</small> : null}</label>
-        <label className="field-label">電話番号 <span className="required">必須</span><input value={form.phone} inputMode="tel" autoComplete="tel" onChange={(event) => setForm((current) => ({ ...current, phone: event.target.value }))} /></label>
         <label className="field-label full-span">住所 <span className="required">必須</span><input value={form.address} autoComplete="street-address" onChange={(event) => setForm((current) => ({ ...current, address: event.target.value }))} /></label>
+        <label className="field-label">電話番号 <span className="required">必須</span><input value={form.phone} inputMode="tel" autoComplete="tel" onChange={(event) => setForm((current) => ({ ...current, phone: event.target.value }))} /></label>
       </div>
     </section>
 
@@ -110,10 +125,14 @@ export function StaffDetailsForm({
         <select aria-label="生まれた月" value={birth.month} onChange={(event) => updateBirth("month", event.target.value)}><option value="">月</option>{months.map((month) => <option key={month} value={month}>{Number(month)}月</option>)}</select>
         <select aria-label="生まれた日" value={birth.day} onChange={(event) => updateBirth("day", event.target.value)}><option value="">日</option>{Array.from({ length: dayCount }, (_, index) => String(index + 1).padStart(2, "0")).map((day) => <option key={day} value={day}>{Number(day)}日</option>)}</select>
       </div><small className="field-help">年・月・日をスクロールして選択できます。</small></div>
-      <label className="field-label">運転免許証の有効期限 <span className="required">必須</span><input type="date" value={form.licenseExpiry} onChange={(event) => setForm((current) => ({ ...current, licenseExpiry: event.target.value }))} /></label>
+      <div className="field-label">運転免許証の有効期限 <span className="required">必須</span><div className="birth-date-selects">
+        <select aria-label="免許証の有効期限・年" value={licenseExpiry.year} onChange={(event) => updateLicenseExpiry("year", event.target.value)}><option value="">年</option>{licenseYears.map((year) => <option key={year} value={year}>{year}年</option>)}</select>
+        <select aria-label="免許証の有効期限・月" value={licenseExpiry.month} onChange={(event) => updateLicenseExpiry("month", event.target.value)}><option value="">月</option>{months.map((month) => <option key={month} value={month}>{Number(month)}月</option>)}</select>
+        <select aria-label="免許証の有効期限・日" value={licenseExpiry.day} onChange={(event) => updateLicenseExpiry("day", event.target.value)}><option value="">日</option>{Array.from({ length: licenseExpiryDayCount }, (_, index) => String(index + 1).padStart(2, "0")).map((day) => <option key={day} value={day}>{Number(day)}日</option>)}</select>
+      </div><small className="field-help">年・月・日をスクロールして選択できます。</small></div>
       <div className="staff-license-grid">
-        <label className="staff-license-picker"><Camera size={22} /><strong>免許証・表面</strong><span>{licenseFront?.name ?? (staff.licenseFrontPath ? "登録済み・選ぶと差し替え" : "写真を撮る／選ぶ")}</span><input type="file" accept="image/*" capture="environment" onChange={(event) => setLicenseFront(event.target.files?.[0] ?? null)} /></label>
-        <label className="staff-license-picker"><Camera size={22} /><strong>免許証・裏面</strong><span>{licenseBack?.name ?? (staff.licenseBackPath ? "登録済み・選ぶと差し替え" : "写真を撮る／選ぶ")}</span><input type="file" accept="image/*" capture="environment" onChange={(event) => setLicenseBack(event.target.files?.[0] ?? null)} /></label>
+        <label className={`staff-license-picker ${licenseFront || staff.licenseFrontPath ? "completed" : ""}`}>{licenseFront || staff.licenseFrontPath ? <CheckCircle2 size={24} /> : <Camera size={22} />}<strong>免許証・表面</strong><span className="staff-license-status">{licenseFront ? "撮影・選択完了" : staff.licenseFrontPath ? "登録済み・選ぶと差し替え" : "写真を撮る／選ぶ"}</span>{licenseFront ? <small>{licenseFront.name}</small> : null}<input type="file" accept="image/*" capture="environment" onChange={(event) => setLicenseFront(event.target.files?.[0] ?? null)} /></label>
+        <label className={`staff-license-picker ${licenseBack || staff.licenseBackPath ? "completed" : ""}`}>{licenseBack || staff.licenseBackPath ? <CheckCircle2 size={24} /> : <Camera size={22} />}<strong>免許証・裏面</strong><span className="staff-license-status">{licenseBack ? "撮影・選択完了" : staff.licenseBackPath ? "登録済み・選ぶと差し替え" : "写真を撮る／選ぶ"}</span>{licenseBack ? <small>{licenseBack.name}</small> : null}<input type="file" accept="image/*" capture="environment" onChange={(event) => setLicenseBack(event.target.files?.[0] ?? null)} /></label>
       </div>
       <p className="staff-license-note"><ShieldCheck size={17} />免許証画像は非公開で保存し、本人と事業主だけが確認できます。</p>
     </section>

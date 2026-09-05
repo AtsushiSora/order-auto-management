@@ -2862,7 +2862,27 @@ button.mini-summary-card:hover {
 
 .staff-license-picker strong { color: var(--navy-900); font-size: 12px; }
 .staff-license-picker span { color: var(--slate-600); font-size: 10px; overflow-wrap: anywhere; }
+.staff-license-picker small { color: var(--slate-500); font-size: 9px; overflow-wrap: anywhere; }
 .staff-license-picker input { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+
+.staff-license-picker.completed {
+  border-style: solid;
+  border-color: #6fc5a8;
+  color: #087b5e;
+  background: #ecfaf5;
+}
+
+.staff-license-picker.completed .staff-license-status {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 5px 12px;
+  border-radius: 999px;
+  color: #087b5e;
+  background: #d2f4e7;
+  font-size: 11px;
+  font-weight: 800;
+}
 
 .staff-license-note {
   display: flex;
