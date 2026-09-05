@@ -30,6 +30,8 @@ import {
   mapCashflowEventFromDb,
   mapCashflowOffsetFromDb,
   mapContractFromDb,
+  mapCustomerFromDb,
+  mapCustomerContactLogFromDb,
   mapContractHandoffFromDb,
   mapExpenseFromDb,
   mapJournalCandidateReviewFromDb,
@@ -55,6 +57,8 @@ import {
   vehiclePublicationToRpc,
   vehicleDocumentToDb,
   websiteInquiryStatusToRpc,
+  customerToDb,
+  customerContactToDb,
   issueDocumentToRpc,
   staffSettlementToRpc,
   spotAssignmentToRpc,
@@ -94,6 +98,10 @@ import type {
   SaveMonthlyBalanceCheckInput,
   UpdateStaffProfileInput,
   BackupRestoreMode,
+  Customer,
+  CustomerContactLog,
+  SaveCustomerInput,
+  SaveCustomerContactInput,
   SystemBackup,
   ProductionReadiness,
   ProductionReadinessCheckKey,
@@ -119,6 +127,8 @@ const functionErrorMessage = async (reason: unknown, fallback: string) => {
 };
 const emptyData: AppData = {
   staffProfiles: [],
+  customers: [],
+  customerContactLogs: [],
   spotAssignments: [],
   contractHandoffs: [],
   vehicles: [],
@@ -147,6 +157,10 @@ type AppDataContextValue = {
   productionReadiness: ProductionReadiness;
   inviteStaffProfile: (input: InviteStaffProfileInput) => Promise<void>;
   updateStaffProfile: (input: UpdateStaffProfileInput) => Promise<void>;
+  saveCustomer: (input: SaveCustomerInput) => Promise<Customer>;
+  setCustomerActive: (customerId: string, isActive: boolean) => Promise<void>;
+  deleteCustomer: (customerId: string) => Promise<void>;
+  addCustomerContact: (input: SaveCustomerContactInput) => Promise<CustomerContactLog>;
   addVehicle: (input: NewVehicleInput) => Promise<Vehicle>;
   updateVehicle: (vehicleId: string, patch: Partial<Vehicle>) => Promise<void>;
   rememberVehicleModelOption: (maker: string, model: string) => Promise<void>;
@@ -243,6 +257,8 @@ const loadInitialDemoData = (): AppData => {
       ...seed,
       ...parsed,
       staffProfiles: parsed.staffProfiles ?? seed.staffProfiles,
+      customers: parsed.customers ?? [],
+      customerContactLogs: parsed.customerContactLogs ?? [],
       spotAssignments: parsed.spotAssignments ?? [],
       contractHandoffs: parsed.contractHandoffs ?? [],
       vehicleModelOptions: parsed.vehicleModelOptions ?? [],
@@ -307,6 +323,13 @@ const nextManagementNumber = (vehicles: Vehicle[]): string => {
   return `${year}-${String(next).padStart(4, "0")}`;
 };
 
+const nextCustomerNumber = (customers: Customer[]): string => {
+  const currentNumbers = customers
+    .map((customer) => Number(customer.customerNumber.replace(/^C-/, "")))
+    .filter(Number.isFinite);
+  return `C-${String(Math.max(0, ...currentNumbers) + 1).padStart(4, "0")}`;
+};
+
 function demoCashflowKind(input: NewCashflowInput) {
   if (input.kind) return input.kind;
   if (input.direction === "支払い" && input.description.includes("買取")) return "買取代金" as const;
@@ -367,6 +390,8 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     try {
       const fetchResults = () => Promise.all([
         client.from("staff_profiles").select("*").order("display_name", { ascending: true }),
+        client.from("customers").select("*").order("customer_number", { ascending: true }),
+        client.from("customer_contact_logs").select("*").order("contacted_at", { ascending: false }),
         client.from("spot_assignments").select("*").order("created_at", { ascending: false }),
         client.from("contract_handoffs").select("*").order("issued_at", { ascending: false }),
         client.from("vehicles").select("*").is("deleted_at", null).order("created_at", { ascending: false }),
@@ -403,10 +428,12 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
 
       if (!requestIsCurrent()) return;
 
-      const [staffResult, spotAssignmentsResult, contractHandoffsResult, vehiclesResult, vehicleModelsResult, documentsResult, expensesResult, attachmentsResult, issuedDocumentsResult, staffSettlementsResult, cashflowsResult, cashflowOffsetsResult, cashflowEventsResult, monthlyBalanceChecksResult, systemBackupsResult, contractsResult, approvalsResult, inquiriesResult, ledgerResult, journalReviewsResult, journalExportsResult, readinessResult] = results;
+      const [staffResult, customersResult, customerContactLogsResult, spotAssignmentsResult, contractHandoffsResult, vehiclesResult, vehicleModelsResult, documentsResult, expensesResult, attachmentsResult, issuedDocumentsResult, staffSettlementsResult, cashflowsResult, cashflowOffsetsResult, cashflowEventsResult, monthlyBalanceChecksResult, systemBackupsResult, contractsResult, approvalsResult, inquiriesResult, ledgerResult, journalReviewsResult, journalExportsResult, readinessResult] = results;
 
       setData({
         staffProfiles: (staffResult.data ?? []).map(mapStaffProfileFromDb),
+        customers: (customersResult.data ?? []).map(mapCustomerFromDb),
+        customerContactLogs: (customerContactLogsResult.data ?? []).map(mapCustomerContactLogFromDb),
         spotAssignments: (spotAssignmentsResult.data ?? []).map(mapSpotAssignmentFromDb),
         contractHandoffs: (contractHandoffsResult.data ?? []).map(mapContractHandoffFromDb),
         vehicles: (vehiclesResult.data ?? []).map(mapVehicleFromDb),
@@ -594,6 +621,80 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
           ? { ...staff, displayName: checked.displayName, role: checked.role, isActive: checked.isActive }
           : staff),
       }));
+    },
+    saveCustomer: async (input) => {
+      if (!input.displayName.trim()) throw new Error(input.entityType === "個人" ? "氏名を入力してください。" : "会社名・業者名を入力してください。");
+      if (!input.phone.trim() && !input.email.trim()) throw new Error("電話番号またはメールアドレスを入力してください。");
+      if (profile?.role === "spot") throw new Error("顧客情報を登録・修正できるのは事業主または通常スタッフです。");
+      if (configured && supabase) {
+        const query = input.customerId
+          ? supabase.from("customers").update(customerToDb(input)).eq("id", input.customerId)
+          : supabase.from("customers").insert(customerToDb(input));
+        const { data: saved, error } = await query.select("*").single();
+        if (error) throw new Error(error.message);
+        const customer = mapCustomerFromDb(saved);
+        setData((current) => ({
+          ...current,
+          customers: [customer, ...current.customers.filter((item) => item.id !== customer.id)],
+        }));
+        return customer;
+      }
+      const now = new Date().toISOString();
+      const existing = input.customerId ? data.customers.find((customer) => customer.id === input.customerId) : null;
+      const customer: Customer = {
+        ...input,
+        id: existing?.id ?? crypto.randomUUID(),
+        customerNumber: existing?.customerNumber ?? nextCustomerNumber(data.customers),
+        displayName: input.displayName.trim(),
+        kana: input.kana.trim(),
+        contactPerson: input.contactPerson.trim(),
+        postalCode: input.postalCode.trim(),
+        address: input.address.trim(),
+        phone: input.phone.trim(),
+        email: input.email.trim().toLowerCase(),
+        invoiceRegistrationNumber: input.invoiceRegistrationNumber.trim(),
+        importantNote: input.importantNote.trim(),
+        memo: input.memo.trim(),
+        createdAt: existing?.createdAt ?? now,
+        updatedAt: now,
+      };
+      setData((current) => ({ ...current, customers: [customer, ...current.customers.filter((item) => item.id !== customer.id)] }));
+      return customer;
+    },
+    setCustomerActive: async (customerId, isActive) => {
+      if (profile?.role !== "owner") throw new Error("顧客の利用停止・復活は事業主だけが行えます。");
+      if (configured && supabase) {
+        const { error } = await supabase.from("customers").update({ is_active: isActive }).eq("id", customerId);
+        if (error) throw new Error(error.message);
+        await refreshData();
+        return;
+      }
+      setData((current) => ({ ...current, customers: current.customers.map((customer) => customer.id === customerId ? { ...customer, isActive, updatedAt: new Date().toISOString() } : customer) }));
+    },
+    deleteCustomer: async (customerId) => {
+      if (profile?.role !== "owner") throw new Error("顧客を完全削除できるのは事業主だけです。");
+      if (data.contracts.some((contract) => contract.customerId === customerId)) throw new Error("取引履歴がある顧客は完全削除できません。利用停止にしてください。");
+      if (configured && supabase) {
+        const { error } = await supabase.from("customers").delete().eq("id", customerId);
+        if (error) throw new Error(error.message);
+        await refreshData();
+        return;
+      }
+      setData((current) => ({ ...current, customers: current.customers.filter((customer) => customer.id !== customerId), customerContactLogs: current.customerContactLogs.filter((log) => log.customerId !== customerId) }));
+    },
+    addCustomerContact: async (input) => {
+      if (!input.contactedAt) throw new Error("連絡日時を入力してください。");
+      if (!input.note.trim()) throw new Error("連絡内容を入力してください。");
+      if (configured && supabase) {
+        const { data: saved, error } = await supabase.from("customer_contact_logs").insert(customerContactToDb(input)).select("*").single();
+        if (error) throw new Error(error.message);
+        const log = mapCustomerContactLogFromDb(saved);
+        setData((current) => ({ ...current, customerContactLogs: [log, ...current.customerContactLogs] }));
+        return log;
+      }
+      const log: CustomerContactLog = { id: crypto.randomUUID(), ...input, staffId: profile?.id ?? "demo-owner", note: input.note.trim(), createdAt: new Date().toISOString() };
+      setData((current) => ({ ...current, customerContactLogs: [log, ...current.customerContactLogs] }));
+      return log;
     },
     addVehicle: async (input) => {
       if (configured && supabase) {
@@ -1594,6 +1695,10 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       if (configured && supabase) {
         const { data: savedId, error } = await supabase.rpc("save_purchase_contract", purchaseContractToRpc(input));
         if (error) throw new Error(error.message);
+        if (input.customerId) {
+          const { error: linkError } = await supabase.from("contracts").update({ customer_id: input.customerId }).eq("id", savedId);
+          if (linkError) throw new Error(linkError.message);
+        }
         await refreshData();
         return String(savedId);
       }
@@ -1612,6 +1717,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         id: contractId,
         type: "買取" as const,
         vehicleId,
+        customerId: input.customerId ?? null,
         customerLabel: input.customerLabel.trim(),
         amount: input.amount,
         status: input.status,
@@ -1687,6 +1793,10 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       if (configured && supabase) {
         const { data: savedId, error } = await supabase.rpc("save_sale_contract", saleContractToRpc(input));
         if (error) throw new Error(error.message);
+        if (input.customerId) {
+          const { error: linkError } = await supabase.from("contracts").update({ customer_id: input.customerId }).eq("id", savedId);
+          if (linkError) throw new Error(linkError.message);
+        }
         await refreshData();
         return String(savedId);
       }
@@ -1710,6 +1820,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         id: contractId,
         type: "販売" as const,
         vehicleId: input.vehicleId,
+        customerId: input.customerId ?? null,
         customerLabel: input.customerLabel.trim(),
         amount: input.amount,
         status: input.status,

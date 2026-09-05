@@ -3916,6 +3916,337 @@ button.mini-summary-card:hover {
   gap: 10px;
 }
 
+.customer-summary-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.customer-summary-grid .mini-summary-card > svg {
+  color: var(--teal-700);
+}
+
+.customer-filter-bar {
+  display: grid;
+  grid-template-columns: minmax(260px, 1fr) minmax(180px, 230px) auto auto;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+  padding: 14px;
+}
+
+.customer-search {
+  min-height: 43px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 0 12px;
+  border: 1px solid var(--slate-300);
+  border-radius: 9px;
+  color: var(--slate-500);
+  background: #fff;
+}
+
+.customer-search input {
+  width: 100%;
+  border: 0;
+  outline: 0;
+  color: var(--slate-800);
+  background: transparent;
+}
+
+.customer-filter-bar > select {
+  min-height: 43px;
+  padding: 0 12px;
+  border: 1px solid var(--slate-300);
+  border-radius: 9px;
+  color: var(--slate-700);
+  background: #fff;
+}
+
+.customer-inactive-toggle {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--slate-600);
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.customer-inactive-toggle input {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--blue-600);
+}
+
+.table-subtext {
+  display: block;
+  margin-top: 4px;
+  color: var(--slate-500);
+  font-size: 10px;
+  font-weight: 500;
+}
+
+.form-grid {
+  display: grid;
+  gap: 0 13px;
+}
+
+.form-grid.two-columns {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.form-grid .full-span {
+  grid-column: 1 / -1;
+}
+
+.duplicate-customer-warning {
+  display: grid;
+  gap: 8px;
+  padding: 14px;
+  border: 1px solid #e8cd91;
+  border-radius: 10px;
+  color: var(--amber-700);
+  background: var(--amber-100);
+}
+
+.duplicate-customer-warning strong,
+.duplicate-customer-warning small {
+  color: var(--slate-700);
+}
+
+.duplicate-customer-warning button {
+  min-height: 36px;
+  padding: 0 10px;
+  border: 1px solid #ddc17c;
+  border-radius: 8px;
+  color: var(--amber-700);
+  background: #fff;
+  text-align: left;
+  cursor: pointer;
+}
+
+.detail-section-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 13px;
+}
+
+.detail-section-heading h3 {
+  margin: 0;
+}
+
+.detail-section-heading > span {
+  color: var(--slate-500);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.customer-detail .detail-list a {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--blue-700);
+}
+
+.customer-notes {
+  display: grid;
+  gap: 12px;
+}
+
+.customer-notes h3,
+.customer-notes p {
+  margin: 0;
+}
+
+.customer-notes div {
+  padding: 12px;
+  border-radius: 9px;
+  background: var(--slate-100);
+}
+
+.customer-notes div:first-of-type {
+  border: 1px solid #ecd49d;
+  background: #fff9eb;
+}
+
+.customer-notes strong {
+  color: var(--slate-800);
+  font-size: 11px;
+}
+
+.customer-notes p {
+  margin-top: 6px;
+  color: var(--slate-700);
+  font-size: 11px;
+  line-height: 1.7;
+  white-space: pre-wrap;
+}
+
+.customer-history-list,
+.contact-log-list {
+  display: grid;
+  gap: 10px;
+}
+
+.customer-history-list article,
+.contact-log-list article {
+  padding: 13px;
+  border: 1px solid var(--slate-200);
+  border-radius: 9px;
+  background: var(--slate-50);
+}
+
+.customer-history-list article > div:first-child {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.customer-history-list article > p,
+.contact-log-list p {
+  margin: 8px 0;
+  color: var(--slate-700);
+  font-size: 11px;
+  line-height: 1.6;
+}
+
+.customer-history-list dl {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 7px;
+  margin: 0;
+}
+
+.customer-history-list dl div {
+  padding: 8px;
+  border-radius: 7px;
+  background: #fff;
+}
+
+.customer-history-list dt,
+.customer-history-list dd {
+  margin: 0;
+  font-size: 10px;
+}
+
+.customer-history-list dt { color: var(--slate-500); }
+.customer-history-list dd { margin-top: 3px; color: var(--slate-800); font-weight: 700; }
+
+.customer-history-actions {
+  display: flex;
+  gap: 7px;
+  margin-top: 9px;
+}
+
+.contact-log-list article strong { color: var(--slate-800); font-size: 11px; }
+.contact-log-list article small { color: var(--slate-500); font-size: 10px; }
+.table-empty.compact { min-height: 0; margin: 0; padding: 16px 0; }
+
+.customer-danger-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 9px;
+}
+
+.customer-danger-actions h3 {
+  width: 100%;
+  margin-bottom: 3px;
+}
+
+.mobile-customer-list {
+  display: none;
+}
+
+@media (max-width: 920px) {
+  .customer-filter-bar {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (max-width: 680px) {
+  .customer-summary-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .customer-summary-grid .mini-summary-card {
+    min-height: 94px;
+    padding: 12px;
+  }
+
+  .customer-summary-grid .mini-summary-card strong {
+    font-size: 20px;
+  }
+
+  .customer-filter-bar,
+  .form-grid.two-columns {
+    grid-template-columns: 1fr;
+  }
+
+  .customer-filter-bar .secondary-button {
+    width: 100%;
+  }
+
+  .customer-table-panel .table-scroll {
+    display: none;
+  }
+
+  .mobile-customer-list {
+    display: grid;
+  }
+
+  .mobile-customer-list > button {
+    display: grid;
+    gap: 7px;
+    padding: 15px;
+    border: 0;
+    border-bottom: 1px solid var(--slate-200);
+    background: #fff;
+    text-align: left;
+  }
+
+  .mobile-customer-list > button:last-child {
+    border-bottom: 0;
+  }
+
+  .mobile-customer-heading,
+  .mobile-customer-meta {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+  }
+
+  .mobile-customer-heading strong {
+    color: var(--slate-900);
+    font-size: 14px;
+  }
+
+  .mobile-customer-list small,
+  .mobile-customer-meta {
+    color: var(--slate-500);
+    font-size: 10px;
+  }
+
+  .mobile-customer-meta {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 3px;
+  }
+
+  .customer-history-list dl {
+    grid-template-columns: 1fr;
+  }
+
+  .customer-history-actions,
+  .customer-danger-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}
+
 .inspection-import {
   --inspection-accent: #087e8b;
 }

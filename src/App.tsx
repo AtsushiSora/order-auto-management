@@ -3,6 +3,7 @@ import { Layout } from "./components/Layout";
 import { AccountingPage } from "./pages/AccountingPage";
 import { AntiqueLedgerPage } from "./pages/AntiqueLedgerPage";
 import { ContractsPage } from "./pages/ContractsPage";
+import { CustomersPage } from "./pages/CustomersPage";
 import { ContractHandoffsPage } from "./pages/ContractHandoffsPage";
 import { DashboardPage } from "./pages/DashboardPage";
 import { ExpensesPage } from "./pages/ExpensesPage";
@@ -20,6 +21,7 @@ import type { PageId } from "./types";
 
 const pageIds: PageId[] = [
   "dashboard",
+  "customers",
   "vehicles",
   "purchase-contracts",
   "sales-contracts",
@@ -54,7 +56,7 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    const spotAllowed = page === "spot-workspace" || page === "staff-settlements";
+    const spotAllowed = page === "spot-workspace" || page === "staff-settlements" || page === "customers";
     const restrictedForSpot = profile?.role === "spot" && !spotAllowed;
     const restrictedForOthers = profile?.role !== "spot" && page === "spot-workspace";
     const restrictedOwnerPage = ["settings", "contract-handoffs", "production-readiness"].includes(page) && profile?.role !== "owner";
@@ -73,6 +75,8 @@ export default function App() {
 
   const renderPage = () => {
     switch (page) {
+      case "customers":
+        return <CustomersPage onNavigate={navigate} />;
       case "vehicles":
         return (
           <VehiclesPage

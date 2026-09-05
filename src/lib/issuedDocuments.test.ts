@@ -3,7 +3,7 @@ import type { AppData, Contract, IssuedDocument } from "../types";
 import { buildIssuedDocumentHtml, canIssueDocument, includedTaxAmount, nextDemoDocumentNumber } from "./issuedDocuments";
 
 const contract: Contract = {
-  id: "contract", type: "販売", vehicleId: "vehicle", customerLabel: "テスト顧客", amount: 110000,
+  id: "contract", type: "販売", vehicleId: "vehicle", customerId: null, customerLabel: "テスト顧客", amount: 110000,
   status: "契約済み", contractedOn: "2026-09-01", updatedAt: "2026-09-01T00:00:00Z",
 };
 

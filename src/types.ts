@@ -1,5 +1,6 @@
 export type PageId =
   | "dashboard"
+  | "customers"
   | "vehicles"
   | "purchase-contracts"
   | "sales-contracts"
@@ -24,6 +25,47 @@ export type StaffProfile = {
   role: StaffRole;
   isActive: boolean;
 };
+
+export type CustomerEntityType = "個人" | "法人・業者";
+export type CustomerCategory = "一般のお客様" | "オークション" | "廃車業者" | "保険会社" | "外注先" | "その他";
+export type CustomerContactChannel = "電話" | "LINE" | "メール" | "対面" | "その他";
+
+export type Customer = {
+  id: string;
+  customerNumber: string;
+  entityType: CustomerEntityType;
+  category: CustomerCategory;
+  displayName: string;
+  kana: string;
+  birthDate: string | null;
+  contactPerson: string;
+  postalCode: string;
+  address: string;
+  phone: string;
+  email: string;
+  invoiceRegistrationNumber: string;
+  importantNote: string;
+  memo: string;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type SaveCustomerInput = Omit<Customer, "id" | "customerNumber" | "createdAt" | "updatedAt"> & {
+  customerId: string | null;
+};
+
+export type CustomerContactLog = {
+  id: string;
+  customerId: string;
+  contactedAt: string;
+  channel: CustomerContactChannel;
+  staffId: string;
+  note: string;
+  createdAt: string;
+};
+
+export type SaveCustomerContactInput = Pick<CustomerContactLog, "customerId" | "contactedAt" | "channel" | "note">;
 
 export type UpdateStaffProfileInput = {
   staffId: string;
@@ -404,6 +446,7 @@ export type Contract = {
   id: string;
   type: "買取" | "販売";
   vehicleId: string | null;
+  customerId: string | null;
   customerLabel: string;
   amount: number;
   status: ContractStatus;
@@ -528,6 +571,8 @@ export type AntiqueLedgerEntry = {
 
 export type AppData = {
   staffProfiles: StaffProfile[];
+  customers: Customer[];
+  customerContactLogs: CustomerContactLog[];
   spotAssignments: SpotAssignment[];
   contractHandoffs: ContractHandoff[];
   vehicles: Vehicle[];
@@ -676,6 +721,7 @@ export type CompleteVehicleDispositionInput = {
 
 export type PurchaseContractInput = {
   contractId: string | null;
+  customerId?: string | null;
   customerLabel: string;
   amount: number;
   status: Exclude<ContractStatus, "キャンセル済み">;
@@ -691,6 +737,7 @@ export type PurchaseContractInput = {
 
 export type SaleContractInput = {
   contractId: string | null;
+  customerId?: string | null;
   vehicleId: string;
   customerLabel: string;
   amount: number;

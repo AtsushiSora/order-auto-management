@@ -13,6 +13,10 @@ import type {
   Contract,
   ContractHandoff,
   ContractStatus,
+  Customer,
+  CustomerContactLog,
+  SaveCustomerInput,
+  SaveCustomerContactInput,
   Expense,
   ExpenseStatus,
   JournalCandidateReview,
@@ -866,6 +870,7 @@ export const mapContractFromDb = (source: unknown): Contract => {
     id: stringValue(row, "id"),
     type: stringValue(row, "type") === "sale" ? "販売" : "買取",
     vehicleId: nullableString(row, "vehicle_id"),
+    customerId: nullableString(row, "customer_id"),
     customerLabel: stringValue(row, "customer_label"),
     amount: numberValue(row, "amount"),
     status: contractStatusFromDb[stringValue(row, "status")] ?? "下書き",
@@ -881,6 +886,97 @@ export const mapContractFromDb = (source: unknown): Contract => {
     updatedAt: stringValue(row, "updated_at"),
   };
 };
+
+const customerEntityTypeFromDb: Record<string, Customer["entityType"]> = {
+  individual: "個人",
+  business: "法人・業者",
+};
+const customerEntityTypeToDb: Record<Customer["entityType"], string> = {
+  個人: "individual",
+  "法人・業者": "business",
+};
+const customerCategoryFromDb: Record<string, Customer["category"]> = {
+  general: "一般のお客様",
+  auction: "オークション",
+  scrap_dealer: "廃車業者",
+  insurance: "保険会社",
+  contractor: "外注先",
+  other: "その他",
+};
+const customerCategoryToDb = Object.fromEntries(
+  Object.entries(customerCategoryFromDb).map(([value, label]) => [label, value]),
+) as Record<Customer["category"], string>;
+const customerContactChannelFromDb: Record<string, CustomerContactLog["channel"]> = {
+  phone: "電話",
+  line: "LINE",
+  email: "メール",
+  in_person: "対面",
+  other: "その他",
+};
+const customerContactChannelToDb = Object.fromEntries(
+  Object.entries(customerContactChannelFromDb).map(([value, label]) => [label, value]),
+) as Record<CustomerContactLog["channel"], string>;
+
+export const mapCustomerFromDb = (source: unknown): Customer => {
+  const row = source as DbRow;
+  return {
+    id: stringValue(row, "id"),
+    customerNumber: stringValue(row, "customer_number"),
+    entityType: customerEntityTypeFromDb[stringValue(row, "entity_type")] ?? "個人",
+    category: customerCategoryFromDb[stringValue(row, "category")] ?? "一般のお客様",
+    displayName: stringValue(row, "display_name"),
+    kana: stringValue(row, "kana"),
+    birthDate: nullableString(row, "birth_date"),
+    contactPerson: stringValue(row, "contact_person"),
+    postalCode: stringValue(row, "postal_code"),
+    address: stringValue(row, "address"),
+    phone: stringValue(row, "phone"),
+    email: stringValue(row, "email"),
+    invoiceRegistrationNumber: stringValue(row, "invoice_registration_number"),
+    importantNote: stringValue(row, "important_note"),
+    memo: stringValue(row, "memo"),
+    isActive: Boolean(row.is_active),
+    createdAt: stringValue(row, "created_at"),
+    updatedAt: stringValue(row, "updated_at"),
+  };
+};
+
+export const customerToDb = (input: SaveCustomerInput) => ({
+  entity_type: customerEntityTypeToDb[input.entityType],
+  category: customerCategoryToDb[input.category],
+  display_name: input.displayName.trim(),
+  kana: input.kana.trim(),
+  birth_date: input.entityType === "個人" ? input.birthDate || null : null,
+  contact_person: input.entityType === "法人・業者" ? input.contactPerson.trim() : "",
+  postal_code: input.postalCode.trim(),
+  address: input.address.trim(),
+  phone: input.phone.trim(),
+  email: input.email.trim().toLowerCase(),
+  invoice_registration_number: input.entityType === "法人・業者" ? input.invoiceRegistrationNumber.trim() : "",
+  important_note: input.importantNote.trim(),
+  memo: input.memo.trim(),
+  is_active: input.isActive,
+});
+
+export const mapCustomerContactLogFromDb = (source: unknown): CustomerContactLog => {
+  const row = source as DbRow;
+  return {
+    id: stringValue(row, "id"),
+    customerId: stringValue(row, "customer_id"),
+    contactedAt: stringValue(row, "contacted_at"),
+    channel: customerContactChannelFromDb[stringValue(row, "channel")] ?? "その他",
+    staffId: stringValue(row, "staff_id"),
+    note: stringValue(row, "note"),
+    createdAt: stringValue(row, "created_at"),
+  };
+};
+
+export const customerContactToDb = (input: SaveCustomerContactInput) => ({
+  customer_id: input.customerId,
+  contacted_at: input.contactedAt,
+  channel: customerContactChannelToDb[input.channel],
+  note: input.note.trim(),
+});
 
 export const purchaseContractToRpc = (input: PurchaseContractInput) => ({
   p_contract_id: input.contractId,

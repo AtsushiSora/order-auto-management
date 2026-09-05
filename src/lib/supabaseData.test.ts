@@ -4,6 +4,8 @@ import {
   mapAntiqueLedgerDetailFromDb,
   mapCashflowFromDb,
   mapContractFromDb,
+  mapCustomerFromDb,
+  mapCustomerContactLogFromDb,
   mapExpenseFromDb,
   mapJournalCandidateReviewFromDb,
   mapJournalExportFromDb,
@@ -27,6 +29,8 @@ import {
   issueDocumentToRpc,
   staffSettlementToRpc,
   spotAssignmentToRpc,
+  customerToDb,
+  customerContactToDb,
 } from "./supabaseData";
 
 describe("Supabaseデータ変換", () => {
@@ -564,5 +568,24 @@ describe("Supabaseデータ変換", () => {
       p_lead_label: "事故車の紹介",
     });
 
+  });
+
+  it("顧客台帳と連絡履歴を安全に相互変換する", () => {
+    expect(mapCustomerFromDb({
+      id: "customer-id", customer_number: "C-0001", entity_type: "business", category: "scrap_dealer",
+      display_name: " テスト廃車株式会社 ", kana: "テストハイシャ", birth_date: null, contact_person: "担当者",
+      postal_code: "000-0000", address: "テスト住所", phone: "090-0000-0000", email: "INFO@EXAMPLE.COM",
+      invoice_registration_number: "T123", important_note: "社内のみ", memo: "メモ", is_active: true,
+      created_at: "2026-09-05T00:00:00Z", updated_at: "2026-09-05T00:00:00Z",
+    })).toMatchObject({ customerNumber: "C-0001", entityType: "法人・業者", category: "廃車業者", contactPerson: "担当者" });
+
+    expect(customerToDb({
+      customerId: null, entityType: "個人", category: "一般のお客様", displayName: " 山田 太郎 ", kana: " ヤマダ タロウ ",
+      birthDate: "1990-01-01", contactPerson: "入力されても保存しない", postalCode: "000-0000", address: " 住所 ",
+      phone: "090-1111-2222", email: " TEST@EXAMPLE.COM ", invoiceRegistrationNumber: "T999", importantNote: " 注意 ", memo: " メモ ", isActive: true,
+    })).toMatchObject({ entity_type: "individual", display_name: "山田 太郎", email: "test@example.com", contact_person: "", invoice_registration_number: "" });
+
+    expect(mapCustomerContactLogFromDb({ id: "log-id", customer_id: "customer-id", contacted_at: "2026-09-05T01:00:00Z", channel: "line", staff_id: "staff-id", note: "確認", created_at: "2026-09-05T01:00:00Z" })).toMatchObject({ channel: "LINE", note: "確認" });
+    expect(customerContactToDb({ customerId: "customer-id", contactedAt: "2026-09-05T01:00:00Z", channel: "電話", note: " 折り返し予定 " })).toMatchObject({ channel: "phone", note: "折り返し予定" });
   });
 });

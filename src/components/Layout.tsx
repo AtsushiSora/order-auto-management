@@ -14,6 +14,7 @@ import {
   Menu,
   ReceiptJapaneseYen,
   Users,
+  ContactRound,
   Settings,
   ShoppingCart,
   WalletCards,
@@ -35,6 +36,7 @@ const navItems: Array<{
 }> = [
   { id: "dashboard", label: "TOP", icon: Home },
   { id: "vehicles", label: "在庫", icon: Car },
+  { id: "customers", label: "顧客", icon: ContactRound },
   { id: "purchase-contracts", label: "買取契約", icon: FileSignature },
   { id: "sales-contracts", label: "販売契約", icon: ShoppingCart },
   { id: "expenses", label: "経費", icon: ReceiptJapaneseYen },
@@ -66,7 +68,7 @@ export function Layout({
   const { isDemo } = useAppData();
   const visibleNavItems = navItems
     .filter((item) => {
-      if (profile?.role === "spot") return item.spotOnly || item.id === "staff-settlements";
+      if (profile?.role === "spot") return item.spotOnly || item.id === "staff-settlements" || item.id === "customers";
       return !item.spotOnly && (!item.ownerOnly || profile?.role === "owner");
     })
     .map((item) => profile?.role === "spot" && item.id === "staff-settlements"
