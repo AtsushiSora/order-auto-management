@@ -22,7 +22,7 @@ describe("contract handoff", () => {
     const storage = new MemoryStorage();
     const token = "11111111-1111-4111-8111-111111111111";
     const result = createContractHandoff(storage, "sale", {
-      assignmentId: "assignment-1", completionToken: "a".repeat(64), customerName: "山田 太郎", contractDate: "2026-09-02",
+      assignmentId: "assignment-1", completionToken: "a".repeat(64), customerName: "山田 太郎", customerLastName: "山田", customerFirstName: "太郎", customerPostalCode: "731-5124", customerAddress: "広島県広島市佐伯区皆賀1-10-20", customerPhone: "070-8996-6421", customerEmail: "test@example.com", customerBirthDate: "1990-01-01", contractDate: "2026-09-02",
       vehicleName: "テスト車", vehicleMaker: "トヨタ", vehicleGrade: "G", vehicleYear: "2022",
       chassisNumber: "ABC-123", managementNumber: "26-0001", vehicleMileage: "12,000",
       vehicleColor: "白", inspectionDate: "2027-03",
@@ -34,6 +34,8 @@ describe("contract handoff", () => {
     expect(result.url).not.toContain("a".repeat(64));
     const saved = JSON.parse(storage.getItem(`${CONTRACT_HANDOFF_PREFIX}${token}`) ?? "null");
     expect(saved.payload.customerName).toBe("山田 太郎");
+    expect(saved.payload.customerAddress).toBe("広島県広島市佐伯区皆賀1-10-20");
+    expect(saved.payload.customerBirthDate).toBe("1990-01-01");
     expect(saved.payload.vehicleGrade).toBe("G");
     expect(Date.parse(saved.expiresAt) - Date.parse(saved.createdAt)).toBe(CONTRACT_HANDOFF_TTL_MS);
   });

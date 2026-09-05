@@ -5,10 +5,21 @@ export const CONTRACT_HANDOFF_TTL_MS = 10 * 60 * 1000;
 
 export type ContractHandoffTarget = "sale" | "purchase";
 
-export type SaleContractHandoff = {
+export type CustomerContractHandoff = {
+  customerName: string;
+  customerLastName?: string;
+  customerFirstName?: string;
+  customerKana?: string;
+  customerBirthDate?: string;
+  customerPostalCode?: string;
+  customerAddress?: string;
+  customerPhone?: string;
+  customerEmail?: string;
+};
+
+export type SaleContractHandoff = CustomerContractHandoff & {
   assignmentId: string | null;
   completionToken: string;
-  customerName: string;
   contractDate: string;
   vehicleName: string;
   vehicleMaker: string;
@@ -23,10 +34,9 @@ export type SaleContractHandoff = {
   paymentMethod: PaymentMethod;
 };
 
-export type PurchaseContractHandoff = {
+export type PurchaseContractHandoff = CustomerContractHandoff & {
   assignmentId: string | null;
   completionToken: string;
-  customerName: string;
   contractDate: string;
   vehicleName: string;
   chassisNumber: string;

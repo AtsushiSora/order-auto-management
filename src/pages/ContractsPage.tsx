@@ -7,9 +7,20 @@ import { createContractHandoff, getContractAppUrl, isSameOriginContractHandoff }
 import { formatCurrency, formatDate } from "../lib/format";
 import { useAppData } from "../state/AppDataContext";
 import { useAuth } from "../state/AuthContext";
-import type { Contract, SaleContractInput } from "../types";
+import type { Contract, Customer, SaleContractInput } from "../types";
 
 const today = () => new Date().toISOString().slice(0, 10);
+const customerHandoffFields = (customer?: Customer) => ({
+  customerName: customer?.displayName ?? "",
+  customerLastName: customer?.lastName ?? "",
+  customerFirstName: customer?.firstName ?? "",
+  customerKana: customer?.kana ?? "",
+  customerBirthDate: customer?.birthDate ?? "",
+  customerPostalCode: customer?.postalCode ?? "",
+  customerAddress: customer?.address ?? "",
+  customerPhone: customer?.phone ?? "",
+  customerEmail: customer?.email ?? "",
+});
 
 export function ContractsPage({ type }: { type: "買取" | "販売" }) {
   const { data, savePurchaseContract, saveSaleContract, issueDirectContractHandoff } = useAppData();
@@ -40,7 +51,7 @@ export function ContractsPage({ type }: { type: "買取" | "販売" }) {
       const customer = data.customers.find((item) => item.id === customerId);
       const contractId = await savePurchaseContract({ contractId: null, customerId: customer?.id ?? null, customerLabel: customer?.displayName ?? "契約サイトで入力", amount: 0, status: "署名待ち", contractedOn: today(), vehicleName: "車両情報入力待ち", chassisNumber: "", acquisitionSource: "一般のお客様", askingPrice: 0, storageLocation: "自宅", plannedArrivalDate: today(), paymentMethod: "振込" });
       const completion = await issueDirectContractHandoff(contractId);
-      const handoff = createContractHandoff(window.sessionStorage, "purchase", { assignmentId: null, completionToken: completion.completionToken, customerName: customer?.displayName ?? "", contractDate: today(), vehicleName: "", chassisNumber: "", amount: 0, plannedArrivalDate: today(), storageLocation: "自宅", paymentMethod: "振込" });
+      const handoff = createContractHandoff(window.sessionStorage, "purchase", { assignmentId: null, completionToken: completion.completionToken, ...customerHandoffFields(customer), contractDate: today(), vehicleName: "", chassisNumber: "", amount: 0, plannedArrivalDate: today(), storageLocation: "自宅", paymentMethod: "振込" });
       storageKey = handoff.storageKey;
       window.location.assign(handoff.url);
     } catch (reason) {
@@ -61,7 +72,7 @@ export function ContractsPage({ type }: { type: "買取" | "販売" }) {
       const input: SaleContractInput = { contractId: null, customerId: customer?.id ?? null, vehicleId: vehicle.id, customerLabel: customer?.displayName ?? "契約サイトで入力", amount: 0, status: "署名待ち", contractedOn: today(), paymentMethod: "振込" };
       const contractId = await saveSaleContract(input);
       const completion = await issueDirectContractHandoff(contractId);
-      const handoff = createContractHandoff(window.sessionStorage, "sale", { assignmentId: null, completionToken: completion.completionToken, customerName: customer?.displayName ?? "", contractDate: today(), vehicleName: vehicle.model || vehicle.name, vehicleMaker: vehicle.maker || vehicle.publicMaker, vehicleGrade: vehicle.grade || vehicle.publicGrade, vehicleYear: vehicle.firstRegistration || vehicle.publicYear, chassisNumber: vehicle.chassisNumber, managementNumber: vehicle.managementNumber, vehicleMileage: vehicle.mileage || vehicle.publicMileage, vehicleColor: vehicle.bodyColor || vehicle.publicColor, inspectionDate: vehicle.inspectionExpiry || vehicle.publicInspection, amount: 0, paymentMethod: "振込" });
+      const handoff = createContractHandoff(window.sessionStorage, "sale", { assignmentId: null, completionToken: completion.completionToken, ...customerHandoffFields(customer), contractDate: today(), vehicleName: vehicle.model || vehicle.name, vehicleMaker: vehicle.maker || vehicle.publicMaker, vehicleGrade: vehicle.grade || vehicle.publicGrade, vehicleYear: vehicle.firstRegistration || vehicle.publicYear, chassisNumber: vehicle.chassisNumber, managementNumber: vehicle.managementNumber, vehicleMileage: vehicle.mileage || vehicle.publicMileage, vehicleColor: vehicle.bodyColor || vehicle.publicColor, inspectionDate: vehicle.inspectionExpiry || vehicle.publicInspection, amount: 0, paymentMethod: "振込" });
       storageKey = handoff.storageKey;
       window.location.assign(handoff.url);
     } catch (reason) {
@@ -88,11 +99,15 @@ export function ContractsPage({ type }: { type: "買取" | "販売" }) {
     let storageKey = "";
     try {
       const completion = await issueDirectContractHandoff(contract.id);
+      const customer = contract.customerId ? data.customers.find((item) => item.id === contract.customerId) : undefined;
+      const customerFields = customer
+        ? customerHandoffFields(customer)
+        : { customerName: contract.customerLabel === "契約サイトで入力" ? "" : contract.customerLabel };
       const handoff = target === "purchase"
         ? createContractHandoff(window.sessionStorage, "purchase", {
             assignmentId: null,
             completionToken: completion.completionToken,
-            customerName: contract.customerLabel === "契約サイトで入力" ? "" : contract.customerLabel,
+            ...customerFields,
             contractDate: contract.contractedOn,
             vehicleName: contract.vehicleName === "車両情報入力待ち" ? "" : contract.vehicleName ?? "",
             chassisNumber: contract.chassisNumber ?? "",
@@ -104,7 +119,7 @@ export function ContractsPage({ type }: { type: "買取" | "販売" }) {
         : createContractHandoff(window.sessionStorage, "sale", {
             assignmentId: null,
             completionToken: completion.completionToken,
-            customerName: contract.customerLabel === "契約サイトで入力" ? "" : contract.customerLabel,
+            ...customerFields,
             contractDate: contract.contractedOn,
             vehicleName: vehicle!.model || vehicle!.name,
             vehicleMaker: vehicle!.maker || vehicle!.publicMaker,
@@ -141,7 +156,7 @@ export function ContractsPage({ type }: { type: "買取" | "販売" }) {
 
     <section className="panel table-panel"><div className="table-scroll"><table className="data-table"><thead><tr><th>契約日</th><th>車両</th><th>お客様・取引先</th><th>状態</th><th className="number-cell">契約金額</th><th>操作</th></tr></thead><tbody>{contracts.map((contract) => { const vehicle = data.vehicles.find((item) => item.id === contract.vehicleId); return <tr key={contract.id}><td className="muted-cell">{formatDate(contract.contractedOn)}</td><td><span className="vehicle-reference"><strong>{vehicle?.managementNumber ?? "在庫登録前"}</strong><small>{vehicle?.name || contract.vehicleName || "契約サイトで入力中"}</small></span></td><td>{contract.customerLabel === "契約サイトで入力" ? "入力中" : contract.customerLabel}</td><td><StatusBadge>{contract.status}</StatusBadge></td><td className="number-cell"><strong>{formatCurrency(contract.amount)}</strong></td><td><button type="button" className="table-action-button" onClick={() => setSelectedContract(contract)}><Eye size={16} />確認</button></td></tr>; })}</tbody></table></div>{contracts.length === 0 ? <div className="table-empty"><Icon size={28} /><p>{type}契約はまだありません。</p></div> : null}</section>
 
-    {purchaseDrawerOpen ? <Drawer title="買取するお客様を選択" subtitle="新しいお客様は契約サイトで入力できます" onClose={() => setPurchaseDrawerOpen(false)}><div className="form-stack"><section className="form-section"><label className="field-label">顧客<select value={customerId} onChange={(event) => setCustomerId(event.target.value)}><option value="">契約サイトで新規入力</option>{data.customers.filter((item) => item.isActive).map((customer) => <option key={customer.id} value={customer.id}>{customer.customerNumber}　{customer.displayName}</option>)}</select></label><p className="form-hint">既存顧客を選ぶと氏名を契約サイトへ引き継ぎます。</p></section>{error ? <p className="form-error">{error}</p> : null}<div className="form-actions"><button type="button" className="secondary-button" onClick={() => setPurchaseDrawerOpen(false)}>キャンセル</button><button type="button" className="primary-button" disabled={submitting} onClick={() => void openPurchaseSite()}><ExternalLink size={18} />{submitting ? "準備中" : "買取契約サイトへ進む"}</button></div></div></Drawer> : null}
+    {purchaseDrawerOpen ? <Drawer title="買取するお客様を選択" subtitle="新しいお客様は契約サイトで入力できます" onClose={() => setPurchaseDrawerOpen(false)}><div className="form-stack"><section className="form-section"><label className="field-label">顧客<select value={customerId} onChange={(event) => setCustomerId(event.target.value)}><option value="">契約サイトで新規入力</option>{data.customers.filter((item) => item.isActive).map((customer) => <option key={customer.id} value={customer.id}>{customer.customerNumber}　{customer.displayName}</option>)}</select></label><p className="form-hint">既存顧客を選ぶと氏名・住所・電話番号・生年月日・メールを契約サイトへ引き継ぎます。</p></section>{error ? <p className="form-error">{error}</p> : null}<div className="form-actions"><button type="button" className="secondary-button" onClick={() => setPurchaseDrawerOpen(false)}>キャンセル</button><button type="button" className="primary-button" disabled={submitting} onClick={() => void openPurchaseSite()}><ExternalLink size={18} />{submitting ? "準備中" : "買取契約サイトへ進む"}</button></div></div></Drawer> : null}
 
     {saleDrawerOpen ? <Drawer title="販売する車両とお客様を選択" subtitle="販売金額などは販売契約サイトで入力します" onClose={() => setSaleDrawerOpen(false)}><div className="form-stack"><section className="form-section"><label className="field-label">対象車両 <span className="required">必須</span><select value={saleVehicleId} onChange={(event) => setSaleVehicleId(event.target.value)}><option value="">選択してください</option>{availableSaleVehicles.map((vehicle) => <option key={vehicle.id} value={vehicle.id}>{vehicle.managementNumber}　{vehicle.name}（{vehicle.status}）</option>)}</select></label>{availableSaleVehicles.length === 0 ? <p className="form-hint">入庫済みまたは販売中の車両がありません。</p> : null}<label className="field-label">顧客<select value={customerId} onChange={(event) => setCustomerId(event.target.value)}><option value="">契約サイトで新規入力</option>{data.customers.filter((item) => item.isActive).map((customer) => <option key={customer.id} value={customer.id}>{customer.customerNumber}　{customer.displayName}</option>)}</select></label></section>{error ? <p className="form-error">{error}</p> : null}<div className="form-actions"><button type="button" className="secondary-button" onClick={() => setSaleDrawerOpen(false)}>キャンセル</button><button type="button" className="primary-button" disabled={submitting || !saleVehicleId} onClick={() => void openSaleSite()}><ExternalLink size={18} />{submitting ? "準備中" : "販売契約サイトへ進む"}</button></div></div></Drawer> : null}
 
