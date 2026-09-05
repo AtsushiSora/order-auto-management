@@ -4534,6 +4534,47 @@ button.mini-summary-card:hover {
   background: #061f38;
 }
 
+.inspection-camera-frame {
+  position: relative;
+  overflow: hidden;
+  border-radius: 12px;
+  background: #061f38;
+}
+
+.inspection-camera-frame.hidden {
+  display: none;
+}
+
+.inspection-camera-frame .inspection-camera {
+  display: block;
+}
+
+.inspection-camera-target {
+  position: absolute;
+  inset: 16% 12%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 3px solid #fff;
+  border-radius: 14px;
+  color: #fff;
+  text-align: center;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.75);
+  box-shadow: 0 0 0 999px rgba(0, 18, 34, 0.38), inset 0 0 18px rgba(0, 0, 0, 0.18);
+  pointer-events: none;
+}
+
+.inspection-camera-target span {
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.inspection-camera-target strong {
+  font-size: 15px;
+}
+
 .inspection-camera.hidden {
   display: none;
 }
@@ -4541,6 +4582,138 @@ button.mini-summary-card:hover {
 .qr-read-count {
   color: var(--inspection-accent) !important;
   font-weight: 750;
+}
+
+.qr-kind-section > p {
+  margin: 5px 0 14px;
+}
+
+.qr-kind-options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.qr-kind-options > button {
+  display: flex;
+  min-height: 128px;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 7px;
+  padding: 16px;
+  border: 1px solid var(--slate-200);
+  border-radius: 12px;
+  color: var(--navy-900);
+  background: #fff;
+  text-align: left;
+  cursor: pointer;
+}
+
+.qr-kind-options > button:hover {
+  border-color: var(--blue-500);
+  background: #f4f9ff;
+}
+
+.qr-kind-options > button span {
+  color: var(--slate-600);
+  font-size: 11px;
+  line-height: 1.55;
+}
+
+.qr-guide-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.qr-progress {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(64px, 1fr));
+  gap: 6px;
+}
+
+.qr-progress > span {
+  display: flex;
+  min-height: 62px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 7px 4px;
+  border: 1px solid var(--slate-200);
+  border-radius: 9px;
+  color: var(--slate-500);
+  background: #f7f9fc;
+  font-weight: 800;
+}
+
+.qr-progress > span.current {
+  border: 2px solid var(--blue-500);
+  color: var(--blue-700);
+  background: #eef6ff;
+}
+
+.qr-progress > span.complete {
+  border-color: #9fd8c3;
+  color: #08785a;
+  background: #edf9f4;
+}
+
+.qr-progress small {
+  font-size: 9px;
+  line-height: 1.3;
+  text-align: center;
+}
+
+.qr-read-count.complete {
+  color: #08785a !important;
+}
+
+.qr-correction-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.qr-detected-preview {
+  padding: 13px;
+  border: 1px solid #9fd8c3;
+  border-radius: 10px;
+  background: #f3fbf7;
+}
+
+.qr-detected-preview > strong {
+  display: block;
+  margin-bottom: 10px;
+}
+
+.qr-detected-preview .inspection-reference {
+  margin-bottom: 8px;
+}
+
+.file-button.disabled {
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+@media (max-width: 560px) {
+  .qr-kind-options {
+    grid-template-columns: 1fr;
+  }
+
+  .qr-kind-options > button {
+    min-height: 104px;
+  }
+
+  .qr-guide-heading {
+    flex-direction: column;
+  }
+
+  .qr-guide-heading .text-button {
+    align-self: flex-start;
+  }
 }
 
 .privacy-note {

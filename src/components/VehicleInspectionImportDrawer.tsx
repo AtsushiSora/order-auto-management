@@ -1,16 +1,20 @@
 import type { IScannerControls } from "@zxing/browser";
 import {
+  ArrowLeft,
   Camera,
+  CheckCircle2,
   FileJson,
   Image as ImageIcon,
   RotateCcw,
   Save,
   ScanLine,
   ShieldCheck,
+  Undo2,
   Upload,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent } from "react";
 import { parseOfficialVehicleInspectionText, parseQrPayloads } from "../lib/vehicleInspection";
+import { qrGuideProgress, vehicleQrGuides, type VehicleQrKind } from "../lib/vehicleQrGuide";
 import type {
   AntiqueLedgerDetail,
   Vehicle,
@@ -61,12 +65,14 @@ export function VehicleInspectionImportDrawer({
   const [result, setResult] = useState<VehicleInspectionData>(blankResult);
   const [hasRead, setHasRead] = useState(false);
   const [qrPayloads, setQrPayloads] = useState<string[]>([]);
+  const [qrKind, setQrKind] = useState<VehicleQrKind | null>(null);
   const [scanning, setScanning] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const controlsRef = useRef<IScannerControls | null>(null);
+  const qrProgress = useMemo(() => qrKind ? qrGuideProgress(qrKind, qrPayloads.length) : null, [qrKind, qrPayloads.length]);
 
   const selectedVehicle = useMemo(
     () => vehicles.find((vehicle) => vehicle.id === vehicleId) ?? null,
@@ -134,21 +140,30 @@ export function VehicleInspectionImportDrawer({
   };
 
   const acceptQrText = (text: string) => {
+    if (!qrKind) return setError("普通車か軽自動車を先に選択してください。");
     const payload = text.trim();
     if (!payload) return;
-    const next = qrPayloads.includes(payload) ? qrPayloads : [...qrPayloads, payload];
+    if (qrPayloads.includes(payload)) return setError("同じQRコードは読み取り済みです。次のQRコードを写してください。");
+    if (qrGuideProgress(qrKind, qrPayloads.length).isComplete) return setError("必要なQRコードはすべて読み取り済みです。");
+    const next = [...qrPayloads, payload];
     setQrPayloads(next);
-    applyDetected(parseQrPayloads(next));
+    setResult(mergeDetected(baseForVehicle(selectedVehicle), parseQrPayloads(next)));
+    setHasRead(true);
+    setError("");
+    const nextProgress = qrGuideProgress(qrKind, next.length);
+    setMessage(nextProgress.isComplete ? "必要なQRコードをすべて読み取りました。内容を確認してから反映してください。" : `次は「${nextProgress.nextStep}」を写してください。`);
   };
 
   const startCamera = async () => {
+    if (!qrKind) return setError("普通車か軽自動車を先に選択してください。");
+    if (qrProgress?.isComplete) return setError("必要なQRコードはすべて読み取り済みです。");
     if (!navigator.mediaDevices?.getUserMedia || !window.isSecureContext) {
       setError("カメラはHTTPSの公開URLまたはlocalhostで利用できます。画像からの読み取りも使用できます。");
       return;
     }
     stopCamera();
     setError("");
-    setMessage("QRコードをカメラの中央に合わせてください。");
+    setMessage(`「${qrProgress?.nextStep}」を白い枠の中央に合わせてください。`);
     setScanning(true);
     try {
       const { BrowserQRCodeReader } = await import("@zxing/browser");
@@ -169,6 +184,26 @@ export function VehicleInspectionImportDrawer({
       setScanning(false);
       setError("カメラを開始できませんでした。カメラの許可を確認するか、QR画像を選んでください。");
     }
+  };
+
+  const chooseQrKind = (nextKind: VehicleQrKind) => {
+    stopCamera();
+    setQrKind(nextKind);
+    setQrPayloads([]);
+    setHasRead(false);
+    setResult(baseForVehicle(selectedVehicle));
+    setError("");
+    setMessage(`最初は「${qrGuideProgress(nextKind, 0).nextStep}」を写してください。`);
+  };
+
+  const undoLastQr = () => {
+    stopCamera();
+    const next = qrPayloads.slice(0, -1);
+    setQrPayloads(next);
+    setHasRead(next.length > 0);
+    setResult(next.length ? mergeDetected(baseForVehicle(selectedVehicle), parseQrPayloads(next)) : baseForVehicle(selectedVehicle));
+    setError("");
+    if (qrKind) setMessage(next.length ? `次は「${qrGuideProgress(qrKind, next.length).nextStep}」を写してください。` : `最初は「${qrGuideProgress(qrKind, 0).nextStep}」を写してください。`);
   };
 
   const readQrImage = async (event: ChangeEvent<HTMLInputElement>) => {
@@ -242,15 +277,25 @@ export function VehicleInspectionImportDrawer({
               <div><strong>電子車検証はこちら</strong><p>国土交通省「車検証閲覧アプリ」で保存したJSONまたはCSVを選択します。</p></div>
               <label className="primary-button file-button"><Upload size={18} />{busy ? "読み取り中" : "ファイルを選ぶ"}<input type="file" accept=".json,.csv,application/json,text/csv" disabled={busy} onChange={(event) => void readFile(event)} /></label>
             </div>
+          ) : !qrKind ? (
+            <div className="inspection-read-panel qr-kind-section">
+              <strong>車検証の種類を選択</strong>
+              <p>QRコードの個数と撮影位置を正しく案内します。</p>
+              <div className="qr-kind-options">
+                {(Object.keys(vehicleQrGuides) as VehicleQrKind[]).map((option) => <button type="button" key={option} onClick={() => chooseQrKind(option)}><ScanLine size={24} /><strong>{vehicleQrGuides[option].label}</strong><span>{vehicleQrGuides[option].description}</span></button>)}
+              </div>
+            </div>
           ) : (
             <div className="inspection-read-panel qr-panel">
-              <div><strong>券面のQRコード</strong><p>複数ある場合は、QR2の①→②、続けてQR3の③→④→⑤の順に読み取ります。</p></div>
-              <video ref={videoRef} className={`inspection-camera ${scanning ? "" : "hidden"}`} muted playsInline />
+              <div className="qr-guide-heading"><div><strong>{qrProgress?.label}のQRコード</strong><p>{qrProgress?.description}</p></div><button type="button" className="text-button" onClick={() => { resetRead(); setQrKind(null); }}><ArrowLeft size={15} />種類を選び直す</button></div>
+              <div className="qr-progress">{qrProgress?.steps.map((step, index) => <span key={step} className={index < qrPayloads.length ? "complete" : index === qrPayloads.length ? "current" : ""}>{index < qrPayloads.length ? <CheckCircle2 size={16} /> : index + 1}<small>{step}</small></span>)}</div>
+              <div className={`inspection-camera-frame ${scanning ? "active" : "hidden"}`}><video ref={videoRef} className="inspection-camera" muted playsInline /><div className="inspection-camera-target"><span>次に読む場所</span><strong>{qrProgress?.nextStep}</strong></div></div>
               <div className="inspection-read-actions">
-                <button type="button" className={scanning ? "secondary-button" : "primary-button"} disabled={busy} onClick={() => void (scanning ? stopCamera() : startCamera())}><Camera size={18} />{scanning ? "カメラを止める" : qrPayloads.length ? "別のQRを読む" : "カメラで読む"}</button>
-                <label className="secondary-button file-button"><ImageIcon size={18} />QR画像を選ぶ<input type="file" accept="image/*" capture="environment" disabled={busy} onChange={(event) => void readQrImage(event)} /></label>
+                <button type="button" className={scanning ? "secondary-button" : "primary-button"} disabled={busy || qrProgress?.isComplete} onClick={() => void (scanning ? stopCamera() : startCamera())}><Camera size={18} />{scanning ? "カメラを止める" : qrPayloads.length ? "次のQRを読む" : "カメラで読む"}</button>
+                <label className={`secondary-button file-button ${qrProgress?.isComplete ? "disabled" : ""}`}><ImageIcon size={18} />QR画像を選ぶ<input type="file" accept="image/*" disabled={busy || qrProgress?.isComplete} onChange={(event) => void readQrImage(event)} /></label>
               </div>
-              {qrPayloads.length ? <p className="qr-read-count">QRコードを{qrPayloads.length}件読み取り済み</p> : null}
+              <p className={`qr-read-count ${qrProgress?.isComplete ? "complete" : ""}`}>{qrProgress?.completedCount}/{qrProgress?.expectedCount}件 読み取り済み</p>
+              {qrPayloads.length ? <div className="qr-correction-actions"><button type="button" className="secondary-button" onClick={undoLastQr}><Undo2 size={17} />1つ前を取り消す</button><button type="button" className="text-button" onClick={resetRead}><RotateCcw size={16} />最初からやり直す</button></div> : null}
             </div>
           )}
           <div className="privacy-note"><ShieldCheck size={18} /><p>選択したファイルやQR全文は端末内だけで解析します。確認後は下の4項目だけを保存します。</p></div>
@@ -270,7 +315,7 @@ export function VehicleInspectionImportDrawer({
 
         {error ? <p className="form-error">{error}</p> : null}
         {message ? <p className="form-success">{message}</p> : null}
-        <div className="form-actions"><button type="button" className="secondary-button" onClick={onClose}>キャンセル</button><button type="submit" className="primary-button" disabled={busy || !hasRead || !vehicleId}><Save size={18} />{busy ? "反映中" : "確認して反映"}</button></div>
+        <div className="form-actions"><button type="button" className="secondary-button" onClick={onClose}>キャンセル</button><button type="submit" className="primary-button" disabled={busy || !hasRead || !vehicleId || (method === "qr" && !qrProgress?.isComplete)}><Save size={18} />{busy ? "反映中" : "確認して反映"}</button></div>
       </form>
     </Drawer>
   );
