@@ -2794,16 +2794,44 @@ button.mini-summary-card:hover {
   }
 
   .alerts-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 9px;
   }
 
   .alert-card {
-    min-height: 79px;
-    padding: 13px 15px;
+    min-width: 0;
+    min-height: 76px;
+    gap: 10px;
+    padding: 11px 12px;
+  }
+
+  .alert-icon {
+    width: 35px;
+    height: 35px;
+  }
+
+  .alert-icon svg {
+    width: 20px;
+    height: 20px;
+  }
+
+  .alert-card small {
+    margin-bottom: 2px;
+    font-size: 12px;
   }
 
   .alert-card strong {
-    font-size: 23px;
+    font-size: 21px;
+  }
+
+  .alert-card strong em {
+    margin-left: 2px;
+    font-size: 12px;
+  }
+
+  .alert-card .status-word {
+    margin-top: 5px;
+    font-size: 16px;
   }
 
   .recent-panel .panel-heading {
