@@ -21,6 +21,7 @@ import {
   X,
 } from "lucide-react";
 import { useState, type ReactNode } from "react";
+import { formatEmployeeNumber } from "../lib/staffDetails";
 import { useAppData } from "../state/AppDataContext";
 import { useAuth } from "../state/AuthContext";
 import { staffRoleLabels, type PageId } from "../types";
@@ -75,7 +76,7 @@ export function Layout({
       ? { ...item, label: "紹介料確認" }
       : item);
   const userLabel = profile?.displayName ?? "利用者";
-  const roleLabel = profile ? staffRoleLabels[profile.role] : "確認中";
+  const roleLabel = profile ? `#${formatEmployeeNumber(profile.employeeNumber)}　${staffRoleLabels[profile.role]}` : "確認中";
   const mobileNavItems = profile?.role === "spot"
     ? [
         { id: "spot-workspace" as PageId, label: "担当案件", icon: BriefcaseBusiness },

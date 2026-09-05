@@ -341,6 +341,22 @@ export const mapStaffProfileFromDb = (source: unknown): StaffProfile => {
     displayName: stringValue(row, "display_name"),
     role: staffRoleFromDb[stringValue(row, "role")] ?? "regular",
     isActive: Boolean(row.is_active),
+    employeeNumber: row.employee_number == null ? null : numberValue(row, "employee_number"),
+    employmentStatus: ["active", "paused", "retired"].includes(stringValue(row, "employment_status"))
+      ? stringValue(row, "employment_status") as StaffProfile["employmentStatus"]
+      : Boolean(row.is_active) ? "active" : "paused",
+    lastName: stringValue(row, "last_name"),
+    firstName: stringValue(row, "first_name"),
+    lastNameKana: stringValue(row, "last_name_kana"),
+    firstNameKana: stringValue(row, "first_name_kana"),
+    postalCode: stringValue(row, "postal_code"),
+    address: stringValue(row, "address"),
+    phone: stringValue(row, "phone"),
+    birthDate: nullableString(row, "birth_date"),
+    licenseFrontPath: stringValue(row, "license_front_path"),
+    licenseBackPath: stringValue(row, "license_back_path"),
+    licenseExpiry: nullableString(row, "license_expiry"),
+    profileCompletedAt: nullableString(row, "profile_completed_at"),
   };
 };
 

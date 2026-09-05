@@ -2,10 +2,10 @@ import type { AppData } from "../types";
 
 export const seedData: AppData = {
   staffProfiles: [
-    { id: "demo-owner", displayName: "事業主", role: "owner", isActive: true },
-    { id: "demo-accounting", displayName: "妻・税務担当", role: "accounting", isActive: true },
-    { id: "demo-regular", displayName: "通常スタッフ", role: "regular", isActive: true },
-    { id: "demo-spot", displayName: "スポットスタッフ", role: "spot", isActive: true },
+    { id: "demo-owner", displayName: "事業主", role: "owner", isActive: true, employeeNumber: 1, employmentStatus: "active", profileCompletedAt: "2026-08-01T09:00:00+09:00" },
+    { id: "demo-accounting", displayName: "妻・税務担当", role: "accounting", isActive: true, employeeNumber: 2, employmentStatus: "active", profileCompletedAt: "2026-08-02T09:00:00+09:00" },
+    { id: "demo-regular", displayName: "通常スタッフ", role: "regular", isActive: true, employeeNumber: 3, employmentStatus: "active", profileCompletedAt: "2026-08-03T09:00:00+09:00" },
+    { id: "demo-spot", displayName: "スポットスタッフ", role: "spot", isActive: true, employeeNumber: 4, employmentStatus: "active", profileCompletedAt: "2026-08-04T09:00:00+09:00" },
   ],
   customers: [],
   customerContactLogs: [],

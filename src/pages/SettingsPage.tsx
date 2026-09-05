@@ -1,12 +1,15 @@
 import { useEffect, useRef, useState } from "react";
 import { CloudUpload, Database, Download, ExternalLink, HardDrive, KeyRound, MailPlus, Plus, RotateCcw, ShieldCheck, Trash2, UserCog } from "lucide-react";
+import { Drawer } from "../components/Drawer";
 import { PageHeader } from "../components/PageHeader";
+import { StaffDetailsForm } from "../components/StaffDetailsForm";
 import { formatDateTime } from "../lib/format";
 import { requestGoogleDriveAccessToken } from "../lib/googleDrive";
+import { formatEmployeeNumber, staffEmploymentLabels } from "../lib/staffDetails";
 import { staffRoleLabels, validateStaffInvitationInput } from "../lib/staffProfiles";
 import { useAuth } from "../state/AuthContext";
 import { useAppData } from "../state/AppDataContext";
-import type { BackupRestoreMode, StaffProfile, StaffRole } from "../types";
+import type { BackupRestoreMode, StaffEmploymentStatus, StaffProfile, StaffRole } from "../types";
 
 const staffRoles = Object.keys(staffRoleLabels) as StaffRole[];
 const inviteRoles = ["accounting", "regular", "spot"] as const;
@@ -118,30 +121,33 @@ function StaffInvitePanel({ isDemo }: { isDemo: boolean }) {
 }
 
 function StaffProfileEditor({ staff, currentUserId }: { staff: StaffProfile; currentUserId: string | undefined }) {
-  const { updateStaffProfile } = useAppData();
+  const { updateStaffProfile, saveStaffProfileDetails, getStaffLicenseUrl } = useAppData();
   const [displayName, setDisplayName] = useState(staff.displayName);
   const [role, setRole] = useState<StaffRole>(staff.role);
-  const [isActive, setIsActive] = useState(staff.isActive);
+  const [employmentStatus, setEmploymentStatus] = useState<StaffEmploymentStatus>(staff.employmentStatus ?? (staff.isActive ? "active" : "paused"));
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const [detailsSaving, setDetailsSaving] = useState(false);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const isCurrentUser = staff.id === currentUserId;
+  const isActive = employmentStatus === "active";
   const changed = displayName.trim() !== staff.displayName
     || role !== staff.role
-    || isActive !== staff.isActive;
+    || employmentStatus !== (staff.employmentStatus ?? (staff.isActive ? "active" : "paused"));
 
   useEffect(() => {
     setDisplayName(staff.displayName);
     setRole(staff.role);
-    setIsActive(staff.isActive);
-  }, [staff.displayName, staff.isActive, staff.role]);
+    setEmploymentStatus(staff.employmentStatus ?? (staff.isActive ? "active" : "paused"));
+  }, [staff.displayName, staff.employmentStatus, staff.isActive, staff.role]);
 
   const save = async () => {
     setSaving(true);
     setMessage(null);
     setError(null);
     try {
-      await updateStaffProfile({ staffId: staff.id, displayName, role, isActive });
+      await updateStaffProfile({ staffId: staff.id, displayName, role, isActive, employmentStatus });
       setMessage("変更を保存しました。");
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "変更を保存できませんでした。");
@@ -154,10 +160,10 @@ function StaffProfileEditor({ staff, currentUserId }: { staff: StaffProfile; cur
     <article className={`staff-profile-card ${isActive ? "active" : "inactive"}`}>
       <div className="staff-profile-heading">
         <div>
-          <strong>{staff.displayName}</strong>
+          <strong><span className="staff-number">#{formatEmployeeNumber(staff.employeeNumber)}</span>{staff.displayName}</strong>
           <span>{staffRoleLabels[staff.role]}{isCurrentUser ? "・ログイン中" : ""}</span>
         </div>
-        <span className={`staff-status ${isActive ? "active" : "inactive"}`}>{isActive ? "利用中" : "利用停止"}</span>
+        <span className={`staff-status ${isActive ? "active" : "inactive"}`}>{staffEmploymentLabels[employmentStatus]}</span>
       </div>
 
       <div className="staff-profile-fields">
@@ -169,23 +175,45 @@ function StaffProfileEditor({ staff, currentUserId }: { staff: StaffProfile; cur
             {staffRoles.map((value) => <option key={value} value={value}>{staffRoleLabels[value]}</option>)}
           </select>
         </label>
-        <label className="field-label">利用状態
-          <select value={isActive ? "active" : "inactive"} disabled={isCurrentUser} onChange={(event) => setIsActive(event.target.value === "active")}>
-            <option value="active">利用中</option>
-            <option value="inactive">利用停止</option>
+        <label className="field-label">在籍情報
+          <select value={employmentStatus} disabled={isCurrentUser} onChange={(event) => setEmploymentStatus(event.target.value as StaffEmploymentStatus)}>
+            <option value="active">在籍</option>
+            <option value="paused">休止</option>
+            <option value="retired">退職</option>
           </select>
         </label>
       </div>
 
-      {!isActive ? <p className="staff-stop-note">利用停止中は管理システムのデータへアクセスできません。利用中へ戻すと復活します。</p> : null}
+      {!isActive ? <p className="staff-stop-note">休止・退職中は管理システムへログインできません。「在籍」へ戻すと利用を再開できます。</p> : null}
       {isCurrentUser ? <p className="staff-self-note">安全のため、ログイン中の事業主自身の権限と利用状態は変更できません。</p> : null}
+      <dl className="staff-summary-details">
+        <div><dt>氏名</dt><dd>{staff.lastName || staff.firstName ? `${staff.lastName ?? ""} ${staff.firstName ?? ""}` : "未登録"}</dd></div>
+        <div><dt>電話番号</dt><dd>{staff.phone || "未登録"}</dd></div>
+        <div><dt>免許証</dt><dd>{staff.licenseFrontPath && staff.licenseBackPath ? "表・裏 登録済み" : "未登録"}</dd></div>
+      </dl>
       {error ? <p className="inline-error">{error}</p> : null}
       {message ? <p className="inline-success">{message}</p> : null}
       <div className="staff-profile-actions">
+        <button type="button" className="secondary-button" onClick={() => setDetailsOpen(true)}>スタッフ情報</button>
         <button type="button" className="primary-button" disabled={!changed || saving} onClick={() => void save()}>
           {saving ? "保存中…" : "変更を保存"}
         </button>
       </div>
+      {detailsOpen ? <Drawer title="スタッフ情報" subtitle={`社員番号 ${formatEmployeeNumber(staff.employeeNumber)}・${staff.displayName}`} onClose={() => setDetailsOpen(false)}>
+        <StaffDetailsForm staff={staff} submitting={detailsSaving} onCancel={() => setDetailsOpen(false)} onSubmit={async (input, front, back) => {
+          setDetailsSaving(true);
+          try {
+            await saveStaffProfileDetails(input, front, back);
+            setDetailsOpen(false);
+          } finally {
+            setDetailsSaving(false);
+          }
+        }} />
+        {staff.licenseFrontPath || staff.licenseBackPath ? <div className="staff-license-links">
+          <strong>登録済み免許証を確認</strong>
+          {(["front", "back"] as const).map((side) => (side === "front" ? staff.licenseFrontPath : staff.licenseBackPath) ? <button key={side} type="button" className="text-button" onClick={() => void getStaffLicenseUrl(staff.id, side).then((url) => window.open(url, "_blank", "noopener,noreferrer")).catch((reason) => setError(reason instanceof Error ? reason.message : "画像を開けませんでした。"))}>{side === "front" ? "表面を開く" : "裏面を開く"}</button> : null)}
+        </div> : null}
+      </Drawer> : null}
     </article>
   );
 }

@@ -14,6 +14,7 @@ import { ProductionReadinessPage } from "./pages/ProductionReadinessPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { SiteIntegrationPage } from "./pages/SiteIntegrationPage";
 import { StaffSettlementsPage } from "./pages/StaffSettlementsPage";
+import { StaffProfileSetupPage } from "./pages/StaffProfileSetupPage";
 import { SpotWorkspacePage } from "./pages/SpotWorkspacePage";
 import { VehiclesPage } from "./pages/VehiclesPage";
 import { useAuth } from "./state/AuthContext";
@@ -45,7 +46,7 @@ const getPageFromHash = (): PageId => {
 };
 
 export default function App() {
-  const { profile } = useAuth();
+  const { profile, isTestSession } = useAuth();
   const [page, setPage] = useState<PageId>(getPageFromHash);
   const [vehicleFormRequested, setVehicleFormRequested] = useState(false);
 
@@ -124,6 +125,8 @@ export default function App() {
         );
     }
   };
+
+  if (!isTestSession && profile && !profile.profileCompletedAt) return <StaffProfileSetupPage />;
 
   return (
     <Layout currentPage={page} onNavigate={navigate}>

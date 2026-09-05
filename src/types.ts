@@ -18,12 +18,27 @@ export type PageId =
   | "settings";
 
 export type StaffRole = "owner" | "accounting" | "regular" | "spot";
+export type StaffEmploymentStatus = "active" | "paused" | "retired";
 
 export type StaffProfile = {
   id: string;
   displayName: string;
   role: StaffRole;
   isActive: boolean;
+  employeeNumber?: number | null;
+  employmentStatus?: StaffEmploymentStatus;
+  lastName?: string;
+  firstName?: string;
+  lastNameKana?: string;
+  firstNameKana?: string;
+  postalCode?: string;
+  address?: string;
+  phone?: string;
+  birthDate?: string | null;
+  licenseFrontPath?: string;
+  licenseBackPath?: string;
+  licenseExpiry?: string | null;
+  profileCompletedAt?: string | null;
 };
 
 export type CustomerEntityType = "個人" | "法人・業者";
@@ -74,6 +89,20 @@ export type UpdateStaffProfileInput = {
   displayName: string;
   role: StaffRole;
   isActive: boolean;
+  employmentStatus?: StaffEmploymentStatus;
+};
+
+export type SaveStaffProfileDetailsInput = {
+  staffId: string;
+  lastName: string;
+  firstName: string;
+  lastNameKana: string;
+  firstNameKana: string;
+  postalCode: string;
+  address: string;
+  phone: string;
+  birthDate: string;
+  licenseExpiry: string;
 };
 
 export type InviteStaffProfileInput = {

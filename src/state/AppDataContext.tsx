@@ -16,6 +16,7 @@ import { canIssueDocument, findCompletedSaleReceipt, includedTaxAmount, nextDemo
 import { calculateStaffPlannedAmount } from "../lib/staffSettlements";
 import { validateSpotAssignment } from "../lib/spotAssignments";
 import { validateStaffInvitationInput, validateStaffProfileUpdate } from "../lib/staffProfiles";
+import { validateStaffDetails } from "../lib/staffDetails";
 import { calculateMonthlyBalance, calculateMonthlyMovement } from "../lib/monthlyBalance";
 import { emptyProductionReadiness, normalizeProductionReadiness, statusToDb } from "../lib/productionReadiness";
 import { isVehicleReceiptChecklistComplete } from "../lib/vehicleReceiptChecklist";
@@ -111,6 +112,7 @@ import type {
   ReadinessCheckStatus,
   SaveExpenseRequestInput,
   ExpenseRequestDecision,
+  SaveStaffProfileDetailsInput,
 } from "../types";
 import { isTestLoginEnabled, useAuth } from "./AuthContext";
 
@@ -162,6 +164,8 @@ type AppDataContextValue = {
   productionReadiness: ProductionReadiness;
   inviteStaffProfile: (input: InviteStaffProfileInput) => Promise<void>;
   updateStaffProfile: (input: UpdateStaffProfileInput) => Promise<void>;
+  saveStaffProfileDetails: (input: SaveStaffProfileDetailsInput, licenseFront: File | null, licenseBack: File | null) => Promise<void>;
+  getStaffLicenseUrl: (staffId: string, side: "front" | "back") => Promise<string>;
   saveCustomer: (input: SaveCustomerInput) => Promise<Customer>;
   setCustomerActive: (customerId: string, isActive: boolean) => Promise<void>;
   deleteCustomer: (customerId: string) => Promise<void>;
@@ -398,7 +402,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     setLoadError(null);
     try {
       const fetchResults = () => Promise.all([
-        client.from("staff_profiles").select("*").order("display_name", { ascending: true }),
+        client.from("staff_profiles").select("*").order("employee_number", { ascending: true }),
         client.from("customers").select("*").order("customer_number", { ascending: true }),
         client.from("customer_contact_logs").select("*").order("contacted_at", { ascending: false }),
         client.from("spot_assignments").select("*").order("created_at", { ascending: false }),
@@ -606,6 +610,9 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
           displayName: checked.displayName,
           role: checked.role,
           isActive: true,
+          employeeNumber: Math.max(0, ...current.staffProfiles.map((staff) => staff.employeeNumber ?? 0)) + 1,
+          employmentStatus: "active",
+          profileCompletedAt: null,
         }],
       }));
     },
@@ -619,6 +626,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
             role: checked.role,
             is_active: checked.isActive,
             deactivated_at: checked.isActive ? null : new Date().toISOString(),
+            employment_status: checked.employmentStatus ?? (checked.isActive ? "active" : "paused"),
           })
           .eq("id", checked.staffId);
         if (error) throw new Error(error.message);
@@ -630,9 +638,73 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       setData((current) => ({
         ...current,
         staffProfiles: current.staffProfiles.map((staff) => staff.id === checked.staffId
-          ? { ...staff, displayName: checked.displayName, role: checked.role, isActive: checked.isActive }
+          ? { ...staff, displayName: checked.displayName, role: checked.role, isActive: checked.isActive, employmentStatus: checked.employmentStatus ?? (checked.isActive ? "active" : "paused") }
           : staff),
       }));
+    },
+    saveStaffProfileDetails: async (input, licenseFront, licenseBack) => {
+      const current = data.staffProfiles.find((staff) => staff.id === input.staffId)
+        ?? (profile?.id === input.staffId ? profile : undefined);
+      if (!current) throw new Error("対象のスタッフが見つかりません。");
+      if (profile?.id !== input.staffId && profile?.role !== "owner") throw new Error("このスタッフ情報は変更できません。");
+      const checked = validateStaffDetails(input, current, licenseFront, licenseBack);
+
+      if (configured && supabase) {
+        const client = supabase;
+        const upload = async (side: "front" | "back", file: File | null, existingPath: string | undefined) => {
+          if (!file) return existingPath ?? "";
+          const validated = validateEvidenceFile(file);
+          if (!validated.mimeType.startsWith("image/")) throw new Error("免許証は画像ファイルで添付してください。");
+          const path = `staff-licenses/${checked.staffId}/${side}.${validated.extension}`;
+          const { error } = await client.storage.from(PRIVATE_BUCKET).upload(path, file, {
+            upsert: true,
+            contentType: validated.mimeType,
+          });
+          if (error) throw new Error(`免許証の${side === "front" ? "表面" : "裏面"}を保存できませんでした。`);
+          return path;
+        };
+        const frontPath = await upload("front", licenseFront, current.licenseFrontPath);
+        const backPath = await upload("back", licenseBack, current.licenseBackPath);
+        const { error } = await client.rpc("save_staff_profile_details", {
+          p_staff_id: checked.staffId,
+          p_last_name: checked.lastName,
+          p_first_name: checked.firstName,
+          p_last_name_kana: checked.lastNameKana,
+          p_first_name_kana: checked.firstNameKana,
+          p_postal_code: checked.postalCode,
+          p_address: checked.address,
+          p_phone: checked.phone,
+          p_birth_date: checked.birthDate,
+          p_license_front_path: frontPath,
+          p_license_back_path: backPath,
+          p_license_expiry: checked.licenseExpiry,
+        });
+        if (error) throw new Error(error.message);
+        if (checked.staffId === profile?.id) await refreshProfile();
+        await refreshData();
+        return;
+      }
+
+      setData((state) => ({
+        ...state,
+        staffProfiles: state.staffProfiles.map((staff) => staff.id === checked.staffId ? {
+          ...staff,
+          ...checked,
+          displayName: `${checked.lastName} ${checked.firstName}`,
+          licenseFrontPath: licenseFront ? `demo/${checked.staffId}/front` : staff.licenseFrontPath,
+          licenseBackPath: licenseBack ? `demo/${checked.staffId}/back` : staff.licenseBackPath,
+          profileCompletedAt: new Date().toISOString(),
+        } : staff),
+      }));
+    },
+    getStaffLicenseUrl: async (staffId, side) => {
+      const staff = data.staffProfiles.find((item) => item.id === staffId);
+      const path = side === "front" ? staff?.licenseFrontPath : staff?.licenseBackPath;
+      if (!path) throw new Error("免許証画像はまだ登録されていません。");
+      if (!configured || !supabase) throw new Error("テストデータには画像がありません。");
+      const { data: signed, error } = await supabase.storage.from(PRIVATE_BUCKET).createSignedUrl(path, 60);
+      if (error || !signed?.signedUrl) throw new Error("免許証画像を開けませんでした。");
+      return signed.signedUrl;
     },
     saveCustomer: async (input) => {
       if (input.entityType === "個人" && (!input.lastName.trim() || !input.firstName.trim())) throw new Error("名字と名前を入力してください。");

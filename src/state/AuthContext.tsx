@@ -45,6 +45,9 @@ const demoProfile: StaffProfile = {
   displayName: "事業主",
   role: "owner",
   isActive: true,
+  employeeNumber: 1,
+  employmentStatus: "active",
+  profileCompletedAt: new Date().toISOString(),
 };
 
 const demoSpotProfile: StaffProfile = {
@@ -52,6 +55,9 @@ const demoSpotProfile: StaffProfile = {
   displayName: "スポットスタッフ",
   role: "spot",
   isActive: true,
+  employeeNumber: 4,
+  employmentStatus: "active",
+  profileCompletedAt: new Date().toISOString(),
 };
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -63,6 +69,22 @@ const parseProfile = (data: unknown): StaffProfile => {
     displayName: String(row.display_name),
     role: row.role as StaffRole,
     isActive: Boolean(row.is_active),
+    employeeNumber: row.employee_number == null ? null : Number(row.employee_number),
+    employmentStatus: (["active", "paused", "retired"].includes(String(row.employment_status))
+      ? String(row.employment_status)
+      : Boolean(row.is_active) ? "active" : "paused") as StaffProfile["employmentStatus"],
+    lastName: String(row.last_name ?? ""),
+    firstName: String(row.first_name ?? ""),
+    lastNameKana: String(row.last_name_kana ?? ""),
+    firstNameKana: String(row.first_name_kana ?? ""),
+    postalCode: String(row.postal_code ?? ""),
+    address: String(row.address ?? ""),
+    phone: String(row.phone ?? ""),
+    birthDate: row.birth_date ? String(row.birth_date) : null,
+    licenseFrontPath: String(row.license_front_path ?? ""),
+    licenseBackPath: String(row.license_back_path ?? ""),
+    licenseExpiry: row.license_expiry ? String(row.license_expiry) : null,
+    profileCompletedAt: row.profile_completed_at ? String(row.profile_completed_at) : null,
   };
 };
 
@@ -98,7 +120,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setError(null);
     const { data, error: profileError } = await supabase
       .from("staff_profiles")
-      .select("id, display_name, role, is_active")
+      .select("*")
       .eq("id", nextSession.user.id)
       .maybeSingle();
 
