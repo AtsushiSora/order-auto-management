@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { SaveStaffProfileDetailsInput, StaffProfile } from "../types";
-import { formatEmployeeNumber, validateStaffDetails } from "./staffDetails";
+import { formatEmployeeNumber, getStaffLicenseAlerts, validateStaffDetails } from "./staffDetails";
 
 const staff: StaffProfile = {
   id: "staff-1",
@@ -41,5 +41,22 @@ describe("staffDetails", () => {
   it("初回登録では免許証の表裏を必須にする", () => {
     expect(() => validateStaffDetails(input, { ...staff, licenseFrontPath: "", licenseBackPath: "" }, null, null))
       .toThrow("運転免許証の表面を添付してください。");
+  });
+
+  it("有効期限を期限切れ・30日以内・90日以内に分類する", () => {
+    const profiles: StaffProfile[] = [
+      { ...staff, id: "missing", employeeNumber: 1, licenseExpiry: null },
+      { ...staff, id: "expired", employeeNumber: 2, licenseExpiry: "2026-09-04" },
+      { ...staff, id: "urgent", employeeNumber: 3, licenseExpiry: "2026-10-05" },
+      { ...staff, id: "soon", employeeNumber: 4, licenseExpiry: "2026-12-04" },
+      { ...staff, id: "safe", employeeNumber: 5, licenseExpiry: "2026-12-05" },
+      { ...staff, id: "retired", employeeNumber: 6, isActive: false, licenseExpiry: null },
+    ];
+    expect(getStaffLicenseAlerts(profiles, "2026-09-05").map((item) => [item.staff.id, item.status, item.daysRemaining])).toEqual([
+      ["missing", "unregistered", null],
+      ["expired", "expired", -1],
+      ["urgent", "within30", 30],
+      ["soon", "within90", 90],
+    ]);
   });
 });

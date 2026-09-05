@@ -1,5 +1,11 @@
 import type { SaveStaffProfileDetailsInput, StaffProfile } from "../types";
 
+export type StaffLicenseAlert = {
+  staff: StaffProfile;
+  status: "unregistered" | "expired" | "within30" | "within90";
+  daysRemaining: number | null;
+};
+
 export const formatEmployeeNumber = (value: number | null | undefined) =>
   value && value > 0 ? String(value).padStart(4, "0") : "採番待ち";
 
@@ -8,6 +14,29 @@ export const staffEmploymentLabels = {
   paused: "休止",
   retired: "退職",
 } as const;
+
+const isoDateToUtc = (value: string) => {
+  const [year, month, day] = value.slice(0, 10).split("-").map(Number);
+  return Date.UTC(year, month - 1, day);
+};
+
+export const getStaffLicenseAlerts = (profiles: StaffProfile[], today: string): StaffLicenseAlert[] => profiles
+  .filter((staff) => staff.isActive)
+  .map((staff): StaffLicenseAlert | null => {
+    if (!staff.licenseExpiry) return { staff, status: "unregistered", daysRemaining: null };
+    const daysRemaining = Math.ceil((isoDateToUtc(staff.licenseExpiry) - isoDateToUtc(today)) / 86_400_000);
+    if (daysRemaining < 0) return { staff, status: "expired", daysRemaining };
+    if (daysRemaining <= 30) return { staff, status: "within30", daysRemaining };
+    if (daysRemaining <= 90) return { staff, status: "within90", daysRemaining };
+    return null;
+  })
+  .filter((alert): alert is StaffLicenseAlert => Boolean(alert))
+  .sort((a, b) => {
+    const order = { unregistered: 0, expired: 1, within30: 2, within90: 3 };
+    return order[a.status] - order[b.status]
+      || (a.daysRemaining ?? -99999) - (b.daysRemaining ?? -99999)
+      || (a.staff.employeeNumber ?? Number.MAX_SAFE_INTEGER) - (b.staff.employeeNumber ?? Number.MAX_SAFE_INTEGER);
+  });
 
 export const validateStaffDetails = (
   input: SaveStaffProfileDetailsInput,

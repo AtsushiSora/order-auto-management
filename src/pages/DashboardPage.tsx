@@ -8,6 +8,7 @@ import {
   FileWarning,
   Handshake,
   HardDrive,
+  IdCard,
   ListTodo,
   Plus,
   WalletCards,
@@ -15,8 +16,9 @@ import {
 import { PageHeader } from "../components/PageHeader";
 import { StatusBadge } from "../components/StatusBadge";
 import { calculateVehicleProfit, getDashboardCounts } from "../lib/calculations";
-import { formatCurrency, formatDateTime } from "../lib/format";
+import { formatCurrency, formatDate, formatDateTime } from "../lib/format";
 import { readinessProgress } from "../lib/productionReadiness";
+import { formatEmployeeNumber, getStaffLicenseAlerts, type StaffLicenseAlert } from "../lib/staffDetails";
 import { useAppData } from "../state/AppDataContext";
 import { useAuth } from "../state/AuthContext";
 import type { PageId } from "../types";
@@ -38,6 +40,14 @@ export function DashboardPage({
   const latestBackup = data.systemBackups[0];
   const backupDue = !latestBackup || Date.now() - new Date(latestBackup.createdAt).getTime() >= 30 * 24 * 60 * 60 * 1000;
   const readiness = readinessProgress(productionReadiness);
+  const japanToday = new Intl.DateTimeFormat("sv-SE", {
+    timeZone: "Asia/Tokyo",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
+  const licenseAlerts = profile?.role === "owner" ? getStaffLicenseAlerts(data.staffProfiles, japanToday) : [];
+  const licenseUrgent = licenseAlerts.some((item) => item.status === "unregistered" || item.status === "expired" || item.status === "within30");
 
   const summaryCards = [
     {
@@ -177,8 +187,27 @@ export function DashboardPage({
             <span className="alert-icon">{productionReadiness.approvedAt ? <CheckCircle2 size={24} /> : <ClipboardCheck size={24} />}</span>
             <span><small>本番前チェック</small><strong className="status-word">{productionReadiness.approvedAt ? "承認済み" : `${readiness.confirmed}/${readiness.total}`}</strong></span>
           </button> : null}
+          {profile?.role === "owner" ? <button type="button" className={`alert-card ${licenseAlerts.length === 0 ? "clear" : licenseUrgent ? "urgent" : "warning"}`} aria-label={`免許証確認 ${licenseAlerts.length}件`} onClick={() => onNavigate("settings")}>
+            <span className="alert-icon">{licenseAlerts.length === 0 ? <CheckCircle2 size={24} /> : <IdCard size={24} />}</span>
+            <span><small>免許証確認</small><strong>{licenseAlerts.length}<em>件</em></strong></span>
+          </button> : null}
         </div>
       </section>
+
+      {profile?.role === "owner" && licenseAlerts.length > 0 ? <section className="panel license-alert-panel">
+        <div className="panel-heading">
+          <div><h2>スタッフの免許証</h2><p>期限切れと更新時期が近い順に表示しています。</p></div>
+          <button className="text-button" type="button" onClick={() => onNavigate("settings")}>スタッフ管理を開く</button>
+        </div>
+        <div className="license-alert-list">
+          {licenseAlerts.map((alert) => <button type="button" key={alert.staff.id} className={`license-alert-row ${alert.status}`} onClick={() => onNavigate("settings")}>
+            <span className="license-alert-symbol"><IdCard size={21} /></span>
+            <span className="license-alert-person"><small>#{formatEmployeeNumber(alert.staff.employeeNumber)}</small><strong>{alert.staff.displayName}</strong></span>
+            <span className="license-alert-expiry"><small>免許証有効期限</small><strong>{alert.staff.licenseExpiry ? formatDate(alert.staff.licenseExpiry) : "未登録"}</strong></span>
+            <span className="license-alert-status">{licenseAlertLabel(alert)}</span>
+          </button>)}
+        </div>
+      </section> : null}
 
       <section className="panel recent-panel">
         <div className="panel-heading">
@@ -248,3 +277,11 @@ export function DashboardPage({
     </>
   );
 }
+
+const licenseAlertLabel = (alert: StaffLicenseAlert) => {
+  if (alert.status === "unregistered") return "登録が必要";
+  if (alert.status === "expired") return `${Math.abs(alert.daysRemaining ?? 0)}日超過`;
+  if (alert.daysRemaining === 0) return "本日期限";
+  if (alert.status === "within30") return `要対応・あと${alert.daysRemaining}日`;
+  return `更新時期・あと${alert.daysRemaining}日`;
+};
