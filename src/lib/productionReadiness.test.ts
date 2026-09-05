@@ -35,4 +35,19 @@ describe("production readiness", () => {
       expect(item.steps.every((step) => step.trim().length > 0)).toBe(true);
     }
   });
+
+  it("追加した業務の確認が終わるまで完了にしない", () => {
+    const readiness = emptyProductionReadiness();
+    for (const item of productionReadinessItems) {
+      readiness.checks[item.key] = { status: "確認済み", note: "確認", checkedAt: null };
+    }
+    expect(readinessProgress(readiness).complete).toBe(true);
+
+    delete readiness.checks.customer_management;
+    expect(readinessProgress(readiness)).toMatchObject({
+      confirmed: productionReadinessItems.length - 1,
+      total: productionReadinessItems.length,
+      complete: false,
+    });
+  });
 });

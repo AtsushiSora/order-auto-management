@@ -18,7 +18,7 @@ import { validateSpotAssignment } from "../lib/spotAssignments";
 import { validateStaffInvitationInput, validateStaffProfileUpdate } from "../lib/staffProfiles";
 import { validateStaffDetails } from "../lib/staffDetails";
 import { calculateMonthlyBalance, calculateMonthlyMovement } from "../lib/monthlyBalance";
-import { emptyProductionReadiness, normalizeProductionReadiness, statusToDb } from "../lib/productionReadiness";
+import { emptyProductionReadiness, normalizeProductionReadiness, readinessProgress, statusToDb } from "../lib/productionReadiness";
 import { isVehicleReceiptChecklistComplete } from "../lib/vehicleReceiptChecklist";
 import { validateVehicleDispositionCompletion } from "../lib/vehicleDisposition";
 import { supabase } from "../lib/supabase";
@@ -1932,7 +1932,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         return;
       }
       const now = new Date().toISOString();
-      const allConfirmed = Object.values(productionReadiness.checks).filter((check) => check.status === "確認済み").length === 14;
+      const allConfirmed = readinessProgress(productionReadiness).complete;
       if (approved && !allConfirmed) throw new Error("すべての確認項目を確認済みにしてから承認してください。");
       setProductionReadiness((current) => ({ ...current, approvedAt: approved ? now : null, approvedBy: approved ? profile.id : null, updatedAt: now }));
     },

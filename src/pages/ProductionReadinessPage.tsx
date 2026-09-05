@@ -87,7 +87,7 @@ export function ProductionReadinessPage() {
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const progress = readinessProgress(productionReadiness);
-  const approved = Boolean(productionReadiness.approvedAt);
+  const approved = Boolean(productionReadiness.approvedAt) && progress.complete;
   const categories = [...new Set(productionReadinessItems.map((item) => item.category))];
 
   const changeApproval = async (next: boolean) => {

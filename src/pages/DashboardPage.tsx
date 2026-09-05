@@ -40,6 +40,7 @@ export function DashboardPage({
   const latestBackup = data.systemBackups[0];
   const backupDue = !latestBackup || Date.now() - new Date(latestBackup.createdAt).getTime() >= 30 * 24 * 60 * 60 * 1000;
   const readiness = readinessProgress(productionReadiness);
+  const readinessApproved = Boolean(productionReadiness.approvedAt) && readiness.complete;
   const japanToday = new Intl.DateTimeFormat("sv-SE", {
     timeZone: "Asia/Tokyo",
     year: "numeric",
@@ -183,9 +184,9 @@ export function DashboardPage({
             <span className="alert-icon">{backupDue ? <HardDrive size={24} /> : <CheckCircle2 size={24} />}</span>
             <span><small>バックアップ</small><strong className="status-word">{backupDue ? "要作成" : "正常"}</strong></span>
           </button> : null}
-          {profile?.role === "owner" ? <button type="button" className={`alert-card ${productionReadiness.approvedAt ? "success" : "warning"}`} aria-label={`本番前チェック ${productionReadiness.approvedAt ? "承認済み" : `${readiness.confirmed}/${readiness.total}`}`} onClick={() => onNavigate("production-readiness")}>
-            <span className="alert-icon">{productionReadiness.approvedAt ? <CheckCircle2 size={24} /> : <ClipboardCheck size={24} />}</span>
-            <span><small>本番前チェック</small><strong className="status-word">{productionReadiness.approvedAt ? "承認済み" : `${readiness.confirmed}/${readiness.total}`}</strong></span>
+          {profile?.role === "owner" ? <button type="button" className={`alert-card ${readinessApproved ? "success" : "warning"}`} aria-label={`本番前チェック ${readinessApproved ? "承認済み" : `${readiness.confirmed}/${readiness.total}`}`} onClick={() => onNavigate("production-readiness")}>
+            <span className="alert-icon">{readinessApproved ? <CheckCircle2 size={24} /> : <ClipboardCheck size={24} />}</span>
+            <span><small>本番前チェック</small><strong className="status-word">{readinessApproved ? "承認済み" : `${readiness.confirmed}/${readiness.total}`}</strong></span>
           </button> : null}
           {profile?.role === "owner" ? <button type="button" className={`alert-card ${licenseAlerts.length === 0 ? "clear" : licenseUrgent ? "urgent" : "warning"}`} aria-label={`免許証確認 ${licenseAlerts.length}件`} onClick={() => onNavigate("settings")}>
             <span className="alert-icon">{licenseAlerts.length === 0 ? <CheckCircle2 size={24} /> : <IdCard size={24} />}</span>
