@@ -1,10 +1,48 @@
 import type { IScannerControls } from "@zxing/browser";
-import { ArrowLeft, Camera, CheckCircle2, Image as ImageIcon, RotateCcw, ScanLine, Undo2 } from "lucide-react";
-import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
+import { ArrowLeft, Camera, CheckCircle2, Image as ImageIcon, QrCode, RotateCcw, ScanLine, Undo2 } from "lucide-react";
 import { parseQrPayloads } from "../lib/vehicleInspection";
 import { qrGuideProgress, vehicleQrGuides, type VehicleQrKind } from "../lib/vehicleQrGuide";
 import type { VehicleInspectionData } from "../types";
 import { Drawer } from "./Drawer";
+
+function QrPlacementDiagram({ kind, readCount = 0, compact = false }: { kind: VehicleQrKind; readCount?: number; compact?: boolean }) {
+  const guide = vehicleQrGuides[kind];
+  const nextPosition = Math.min(readCount + 1, guide.steps.length);
+  return (
+    <div className={`qr-placement-diagram ${compact ? "compact" : ""}`} aria-label={`${guide.label}のQRコード配置と読み取り順`}>
+      <div className="qr-paper-preview">
+        <div className="qr-paper-title">車検証記録事項</div>
+        <div className="qr-paper-lines" aria-hidden="true"><span /><span /><span /></div>
+        <div className="qr-paper-bottom">
+          <span className="qr-location-label">用紙の下側</span>
+          <div className="qr-code-groups">
+            {guide.groups.map((group, groupIndex) => (
+              <Fragment key={group.label}>
+                {groupIndex > 0 ? <span className="qr-group-arrow" aria-hidden="true">→</span> : null}
+                <div className="qr-code-group">
+                  <small>{group.label}</small>
+                  <div>
+                    {group.positions.map((position, index) => (
+                      <Fragment key={position}>
+                        {index > 0 ? <span className="qr-position-arrow" aria-hidden="true">→</span> : null}
+                        <span className={`qr-position ${position <= readCount ? "complete" : position === nextPosition ? "current" : ""}`}>
+                          <QrCode aria-hidden="true" />
+                          <b>{position}</b>
+                        </span>
+                      </Fragment>
+                    ))}
+                  </div>
+                </div>
+              </Fragment>
+            ))}
+          </div>
+        </div>
+      </div>
+      <p><strong>①から矢印の順</strong>に、1個ずつカメラの中央へ写します。</p>
+    </div>
+  );
+}
 
 export function VehicleQrReaderDrawer({
   onRead,
@@ -154,6 +192,7 @@ export function VehicleQrReaderDrawer({
               {(Object.keys(vehicleQrGuides) as VehicleQrKind[]).map((option) => (
                 <button type="button" key={option} onClick={() => chooseKind(option)}>
                   <ScanLine size={24} /><strong>{vehicleQrGuides[option].label}</strong><span>{vehicleQrGuides[option].description}</span>
+                  <QrPlacementDiagram kind={option} compact />
                 </button>
               ))}
             </div>
@@ -164,6 +203,7 @@ export function VehicleQrReaderDrawer({
               <div><ScanLine size={26} /><strong>{progress?.label}のQRコード</strong><p>{progress?.description}</p></div>
               <button type="button" className="text-button" onClick={selectKindAgain}><ArrowLeft size={15} />種類を選び直す</button>
             </div>
+            <QrPlacementDiagram kind={kind} readCount={payloads.length} />
             <div className="qr-progress" aria-label={`${progress?.completedCount}/${progress?.expectedCount}件読み取り済み`}>
               {progress?.steps.map((step, index) => <span key={step} className={index < payloads.length ? "complete" : index === payloads.length ? "current" : ""}>{index < payloads.length ? <CheckCircle2 size={16} /> : index + 1}<small>{step}</small></span>)}
             </div>

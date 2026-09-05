@@ -13,6 +13,10 @@ describe("vehicle QR guide", () => {
       nextStep: "読み取り完了",
       isComplete: true,
     });
+    expect(qrGuideProgress("registered", 0).groups).toEqual([
+      { label: "QR2", positions: [1, 2] },
+      { label: "QR3", positions: [3, 4, 5] },
+    ]);
   });
 
   it("guides a light vehicle through its two QR codes", () => {
@@ -22,5 +26,9 @@ describe("vehicle QR guide", () => {
       isComplete: false,
     });
     expect(qrGuideProgress("light", 2).isComplete).toBe(true);
+    expect(qrGuideProgress("light", 0).groups).toEqual([
+      { label: "コード2", positions: [1] },
+      { label: "コード3", positions: [2] },
+    ]);
   });
 });
