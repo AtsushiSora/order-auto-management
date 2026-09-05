@@ -1,4 +1,4 @@
-import type { VehicleInspectionData, VehicleInspectionSourceType } from "../types";
+import type { Vehicle, VehicleInspectionData, VehicleInspectionSourceType } from "../types";
 
 type FlatRecord = Map<string, string>;
 
@@ -225,4 +225,24 @@ export const parseQrPayloads = (payloads: string[]): VehicleInspectionData => {
   result.modelType ||= official.modelType ?? "";
   if (!result.chassisNumber) result.chassisNumber = inferChassisNumber(cleaned);
   return result;
+};
+
+const normalizeVehicleIdentity = (value: string) => value
+  .normalize("NFKC")
+  .toUpperCase()
+  .replace(/[\s\-－ー−‐‑‒–—―]/g, "");
+
+/** 納車・廃車前の在庫に同じ車台番号または登録番号がある場合だけ、二重登録として扱う。 */
+export const findVehicleInspectionDuplicate = (
+  vehicles: Vehicle[],
+  inspection: Pick<VehicleInspectionData, "chassisNumber" | "registrationNumber">,
+) => {
+  const chassisNumber = normalizeVehicleIdentity(inspection.chassisNumber);
+  const registrationNumber = normalizeVehicleIdentity(inspection.registrationNumber);
+  return vehicles.find((vehicle) => {
+    if (["納車済み", "廃車処分"].includes(vehicle.status)) return false;
+    const sameChassis = Boolean(chassisNumber) && normalizeVehicleIdentity(vehicle.chassisNumber) === chassisNumber;
+    const sameRegistration = Boolean(registrationNumber) && normalizeVehicleIdentity(vehicle.registrationNumber) === registrationNumber;
+    return sameChassis || sameRegistration;
+  }) ?? null;
 };

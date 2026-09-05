@@ -1,9 +1,23 @@
 import { describe, expect, it } from "vitest";
 import {
+  findVehicleInspectionDuplicate,
   parseCsvRows,
   parseOfficialVehicleInspectionText,
   parseQrPayloads,
 } from "./vehicleInspection";
+import type { Vehicle } from "../types";
+
+const activeVehicle = {
+  id: "vehicle-1",
+  managementNumber: "26-0001",
+  name: "トヨタ プリウス",
+  maker: "トヨタ",
+  model: "プリウス",
+  grade: "",
+  chassisNumber: "ZVW30-1234567",
+  registrationNumber: "広島 300 あ 12-34",
+  status: "販売中",
+} as Vehicle;
 
 describe("vehicle inspection import", () => {
   it("reads official app JSON fields", () => {
@@ -66,5 +80,19 @@ describe("vehicle inspection import", () => {
     const result = parseQrPayloads(["1234567890,unknown,data"]);
     expect(result.registrationNumber).toBe("");
     expect(result.vehicleName).toBe("");
+  });
+
+  it("detects an active vehicle even when chassis formatting differs", () => {
+    expect(findVehicleInspectionDuplicate([activeVehicle], {
+      chassisNumber: "zvw30 1234567",
+      registrationNumber: "",
+    })?.id).toBe("vehicle-1");
+  });
+
+  it("allows a previously delivered vehicle to be registered again", () => {
+    expect(findVehicleInspectionDuplicate([{ ...activeVehicle, status: "納車済み" }], {
+      chassisNumber: "ZVW30-1234567",
+      registrationNumber: "",
+    })).toBeNull();
   });
 });

@@ -22,6 +22,7 @@ import type {
   VehicleInspectionImportInput,
 } from "../types";
 import { Drawer } from "./Drawer";
+import { QrPlacementDiagram } from "./QrPlacementDiagram";
 
 type ImportMethod = "file" | "qr";
 
@@ -282,12 +283,13 @@ export function VehicleInspectionImportDrawer({
               <strong>車検証の種類を選択</strong>
               <p>QRコードの個数と撮影位置を正しく案内します。</p>
               <div className="qr-kind-options">
-                {(Object.keys(vehicleQrGuides) as VehicleQrKind[]).map((option) => <button type="button" key={option} onClick={() => chooseQrKind(option)}><ScanLine size={24} /><strong>{vehicleQrGuides[option].label}</strong><span>{vehicleQrGuides[option].description}</span></button>)}
+                {(Object.keys(vehicleQrGuides) as VehicleQrKind[]).map((option) => <button type="button" key={option} onClick={() => chooseQrKind(option)}><ScanLine size={24} /><strong>{vehicleQrGuides[option].label}</strong><span>{vehicleQrGuides[option].description}</span><QrPlacementDiagram kind={option} compact /></button>)}
               </div>
             </div>
           ) : (
             <div className="inspection-read-panel qr-panel">
               <div className="qr-guide-heading"><div><strong>{qrProgress?.label}のQRコード</strong><p>{qrProgress?.description}</p></div><button type="button" className="text-button" onClick={() => { resetRead(); setQrKind(null); }}><ArrowLeft size={15} />種類を選び直す</button></div>
+              <QrPlacementDiagram kind={qrKind} readCount={qrPayloads.length} />
               <div className="qr-progress">{qrProgress?.steps.map((step, index) => <span key={step} className={index < qrPayloads.length ? "complete" : index === qrPayloads.length ? "current" : ""}>{index < qrPayloads.length ? <CheckCircle2 size={16} /> : index + 1}<small>{step}</small></span>)}</div>
               <div className={`inspection-camera-frame ${scanning ? "active" : "hidden"}`}><video ref={videoRef} className="inspection-camera" muted playsInline /><div className="inspection-camera-target"><span>次に読む場所</span><strong>{qrProgress?.nextStep}</strong></div></div>
               <div className="inspection-read-actions">

@@ -24,6 +24,7 @@ import { VehicleInspectionImportDrawer } from "../components/VehicleInspectionIm
 import { VehicleQrReaderDrawer } from "../components/VehicleQrReaderDrawer";
 import { calculateVehicleProfit, outstandingAmount } from "../lib/calculations";
 import { formatCurrency, formatDate } from "../lib/format";
+import { findVehicleInspectionDuplicate } from "../lib/vehicleInspection";
 import {
   isVehicleReceiptChecklistComplete,
   vehicleDocumentInputForStatus,
@@ -111,6 +112,7 @@ export function VehiclesPage({
   const [selectedVehicleId, setSelectedVehicleId] = useState<string | null>(null);
   const [form, setForm] = useState<NewVehicleInput>(initialVehicleForm);
   const [formError, setFormError] = useState("");
+  const [formMessage, setFormMessage] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [inspectionImportOpen, setInspectionImportOpen] = useState(false);
   const [registrationQrOpen, setRegistrationQrOpen] = useState(false);
@@ -133,13 +135,44 @@ export function VehiclesPage({
   const openNewVehicle = () => {
     setForm(initialVehicleForm());
     setFormError("");
+    setFormMessage("");
     setDrawerMode("new");
+  };
+
+  const openNewVehicleFromQr = () => {
+    setForm(initialVehicleForm());
+    setFormError("");
+    setFormMessage("");
+    setDrawerMode("new");
+    setRegistrationQrOpen(true);
+  };
+
+  const applyQrToNewVehicle = (result: VehicleInspectionData) => {
+    const duplicate = findVehicleInspectionDuplicate(data.vehicles, result);
+    if (duplicate) {
+      setFormError(`同じ車両が在庫にあります（${duplicate.managementNumber}　${duplicate.name}）。新規登録せず、登録済み車両への反映を使用してください。`);
+      setFormMessage("");
+      return;
+    }
+    const detectedMaker = vehicleMakers.find((maker) => maker === result.vehicleName.trim());
+    setForm((current) => ({
+      ...current,
+      maker: detectedMaker ?? current.maker,
+      chassisNumber: result.chassisNumber || current.chassisNumber,
+      registrationNumber: result.registrationNumber || current.registrationNumber,
+      firstRegistration: result.firstRegistration || current.firstRegistration,
+      inspectionExpiry: result.inspectionExpiry || current.inspectionExpiry,
+      modelType: result.modelType || current.modelType,
+    }));
+    setFormError("");
+    setFormMessage("QRから車検証情報を入力しました。メーカー・車種・金額などを確認して登録してください。");
   };
 
   useEffect(() => {
     if (!openNewForm) return;
     setForm(initialVehicleForm());
     setFormError("");
+    setFormMessage("");
     setDrawerMode("new");
     onNewFormOpened?.();
   }, [openNewForm, onNewFormOpened]);
@@ -165,7 +198,7 @@ export function VehiclesPage({
 
   return (
     <>
-      <PageHeader title="在庫" description="入庫予定から納車済みまで、車両ごとの取引を管理します。" action={canEdit ? <div className="page-header-actions">{isOwner ? <button type="button" className="secondary-button" onClick={() => setModelOptionsOpen(true)}>車種候補を管理</button> : null}<button type="button" className="secondary-button" onClick={() => setInspectionImportOpen(true)}><ScanLine size={19} />車検証を読み取る</button><button type="button" className="primary-button vehicle-header-register" onClick={openNewVehicle}><Plus size={20} />車両を登録</button></div> : undefined} />
+      <PageHeader title="在庫" description="入庫予定から納車済みまで、車両ごとの取引を管理します。" action={canEdit ? <div className="page-header-actions">{isOwner ? <button type="button" className="secondary-button" onClick={() => setModelOptionsOpen(true)}>車種候補を管理</button> : null}<button type="button" className="secondary-button" onClick={() => setInspectionImportOpen(true)}><ScanLine size={19} />登録済み車両へ反映</button><button type="button" className="primary-button" onClick={openNewVehicleFromQr}><ScanLine size={19} />QRから新規登録</button><button type="button" className="primary-button vehicle-header-register" onClick={openNewVehicle}><Plus size={20} />手入力で登録</button></div> : undefined} />
 
       <div className="filter-bar panel">
         <label className="search-field"><Search size={19} /><input type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="管理番号・メーカー・車種・グレード・車台番号で検索" /></label>
@@ -228,6 +261,7 @@ export function VehiclesPage({
                 <label className="field-label">保管場所 <span className="required">必須</span><input value={form.storageLocation} onChange={(event) => setForm({ ...form, storageLocation: event.target.value })} /></label>
               </div>
             </div>
+            {formMessage ? <p className="form-success">{formMessage}</p> : null}
             {formError ? <p className="form-error">{formError}</p> : null}
             <div className="form-actions"><button type="button" className="secondary-button" onClick={() => setDrawerMode(null)}>キャンセル</button><button type="submit" className="primary-button" disabled={submitting}>{submitting ? "登録中" : "登録する"}</button></div>
           </form>
@@ -236,7 +270,7 @@ export function VehiclesPage({
 
       {drawerMode === "detail" && selectedVehicle ? <VehicleDetailDrawer vehicle={selectedVehicle} documents={selectedDocuments} expenses={data.expenses} cashflows={data.cashflows.filter((cashflow) => cashflow.vehicleId === selectedVehicle.id)} canEdit={canEdit} canManagePayments={canManagePayments} isOwner={isOwner} onClose={() => setDrawerMode(null)} onUpdate={(patch) => updateVehicle(selectedVehicle.id, patch)} onCompleteDisposition={completeVehicleDisposition} onMarkArrived={markVehicleArrived} onMarkDelivered={markVehicleDelivered} onDocumentUpdate={updateVehicleDocument} onAddExpense={addExpense} onCompleteCashflow={completeCashflow} onArchive={async () => { await archiveVehicle(selectedVehicle.id); setDrawerMode(null); }} /> : null}
       {inspectionImportOpen ? <VehicleInspectionImportDrawer vehicles={data.vehicles} antiqueLedgerDetails={data.antiqueLedgerDetails} onApply={applyVehicleInspectionImport} onClose={() => setInspectionImportOpen(false)} /> : null}
-      {registrationQrOpen ? <VehicleQrReaderDrawer onRead={(result: VehicleInspectionData) => setForm((current) => ({ ...current, maker: result.vehicleName || current.maker, chassisNumber: result.chassisNumber || current.chassisNumber, registrationNumber: result.registrationNumber || current.registrationNumber, firstRegistration: result.firstRegistration || current.firstRegistration, inspectionExpiry: result.inspectionExpiry || current.inspectionExpiry, modelType: result.modelType || current.modelType }))} onClose={() => setRegistrationQrOpen(false)} /> : null}
+      {registrationQrOpen ? <VehicleQrReaderDrawer onRead={applyQrToNewVehicle} onClose={() => setRegistrationQrOpen(false)} /> : null}
       {modelOptionsOpen ? <VehicleModelOptionsDrawer options={data.vehicleModelOptions} onAdd={rememberVehicleModelOption} onUpdate={updateVehicleModelOption} onDelete={deleteVehicleModelOption} onClose={() => setModelOptionsOpen(false)} /> : null}
     </>
   );
