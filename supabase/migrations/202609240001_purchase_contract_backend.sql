@@ -1,0 +1,244 @@
+-- Purchase contract backend hosted in the shared order-auto-production project.
+-- Names are prefixed so they can coexist with the management system's contracts table.
+
+create table if not exists public.purchase_contracts (
+  id text primary key,
+  status text not null default '下書き',
+  data jsonb not null default '{}'::jsonb,
+  signature_data text,
+  identity_files jsonb not null default '[]'::jsonb,
+  consent_status text,
+  consent_result jsonb,
+  remote_access_hash text,
+  remote_link_hash text,
+  remote_access_expires_at timestamptz,
+  remote_used_at timestamptz,
+  remote_failed_attempts integer not null default 0,
+  remote_locked_until timestamptz,
+  customer_pdf_path text,
+  download_access_hash text,
+  download_access_expires_at timestamptz,
+  reviewed_at timestamptz,
+  customer_confirmation_sent_at timestamptz,
+  confirmation_email_status text,
+  parent_contract_id text,
+  version_number integer not null default 1,
+  locked_at timestamptz,
+  contract_number text,
+  created_at_text text,
+  updated_at_text text,
+  completed_at_text text,
+  signed_at_text text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create index if not exists purchase_contracts_remote_link_hash_idx
+  on public.purchase_contracts (remote_link_hash)
+  where remote_link_hash is not null;
+
+create index if not exists purchase_contracts_parent_contract_id_idx
+  on public.purchase_contracts (parent_contract_id)
+  where parent_contract_id is not null;
+
+create unique index if not exists purchase_contracts_download_access_hash_key
+  on public.purchase_contracts (download_access_hash)
+  where download_access_hash is not null;
+
+create unique index if not exists purchase_contracts_contract_number_key
+  on public.purchase_contracts (contract_number)
+  where contract_number is not null;
+
+create table if not exists public.purchase_contract_number_sequences (
+  sequence_date date primary key,
+  last_value smallint not null check (last_value between 1 and 99),
+  updated_at timestamptz not null default now()
+);
+
+alter table public.purchase_contract_number_sequences enable row level security;
+
+create or replace function public.assign_purchase_contract_number(
+  p_contract_id text,
+  p_preferred_number text default null
+)
+returns text
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  current_number text;
+  assigned_number text;
+  sequence_value smallint;
+  next_existing_value smallint;
+  sequence_date_jst date := (timezone('Asia/Tokyo', now()))::date;
+begin
+  if auth.uid() is null then
+    raise exception 'Administrator authentication is required' using errcode = '42501';
+  end if;
+  if p_contract_id is null or length(trim(p_contract_id)) = 0 or length(p_contract_id) > 100 then
+    raise exception 'Invalid contract id' using errcode = '22023';
+  end if;
+
+  perform pg_advisory_xact_lock(hashtext('order-auto-purchase-contract-number'));
+
+  select contract_number
+    into current_number
+    from public.purchase_contracts
+   where id = p_contract_id
+   for update;
+
+  if current_number is not null then
+    return current_number;
+  end if;
+
+  if p_preferred_number ~ '^[0-9]{1,8}$'
+     and not exists (
+       select 1
+         from public.purchase_contracts
+        where contract_number = p_preferred_number
+          and id <> p_contract_id
+     ) then
+    assigned_number := p_preferred_number;
+  else
+    select coalesce(max(right(contract_number, 2)::smallint), 0) + 1
+      into next_existing_value
+      from public.purchase_contracts
+     where contract_number ~ ('^' || to_char(sequence_date_jst, 'YYMMDD') || '[0-9]{2}$');
+
+    if next_existing_value > 99 then
+      raise exception 'Daily contract number limit reached' using errcode = '22000';
+    end if;
+
+    insert into public.purchase_contract_number_sequences (sequence_date, last_value, updated_at)
+    values (sequence_date_jst, next_existing_value, now())
+    on conflict (sequence_date) do update
+      set last_value = greatest(
+            public.purchase_contract_number_sequences.last_value,
+            excluded.last_value - 1
+          ) + 1,
+          updated_at = now()
+      where greatest(
+              public.purchase_contract_number_sequences.last_value,
+              excluded.last_value - 1
+            ) < 99
+    returning last_value into sequence_value;
+
+    if sequence_value is null then
+      raise exception 'Daily contract number limit reached' using errcode = '22000';
+    end if;
+
+    assigned_number :=
+      to_char(sequence_date_jst, 'YYMMDD') || lpad(sequence_value::text, 2, '0');
+  end if;
+
+  insert into public.purchase_contracts (id, contract_number, updated_at)
+  values (p_contract_id, assigned_number, now())
+  on conflict (id) do update
+    set contract_number = coalesce(public.purchase_contracts.contract_number, excluded.contract_number),
+        updated_at = now()
+  returning contract_number into current_number;
+
+  return current_number;
+end;
+$$;
+
+revoke all on table public.purchase_contract_number_sequences from anon, authenticated;
+revoke all on function public.assign_purchase_contract_number(text, text) from public, anon;
+grant execute on function public.assign_purchase_contract_number(text, text) to authenticated;
+
+create table if not exists public.purchase_consent_events (
+  id bigint generated always as identity primary key,
+  contract_id text not null references public.purchase_contracts(id) on delete cascade,
+  event_type text not null,
+  payload jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now()
+);
+
+create table if not exists public.purchase_admin_notifications (
+  id bigint generated always as identity primary key,
+  contract_id text references public.purchase_contracts(id) on delete cascade,
+  notification_type text not null,
+  title text not null,
+  message text not null,
+  payload jsonb not null default '{}'::jsonb,
+  read_at timestamptz,
+  created_at timestamptz not null default now()
+);
+
+alter table public.purchase_contracts enable row level security;
+alter table public.purchase_consent_events enable row level security;
+alter table public.purchase_admin_notifications enable row level security;
+
+grant usage on schema public to authenticated;
+grant select, insert, update, delete on table public.purchase_contracts to authenticated;
+grant select on table public.purchase_consent_events to authenticated;
+grant select, update, delete on table public.purchase_admin_notifications to authenticated;
+
+grant usage on schema public to service_role;
+grant select, update on table public.purchase_contracts to service_role;
+grant insert on table public.purchase_consent_events to service_role;
+grant insert on table public.purchase_admin_notifications to service_role;
+grant usage, select on sequence public.purchase_consent_events_id_seq to service_role;
+grant usage, select on sequence public.purchase_admin_notifications_id_seq to service_role;
+
+drop policy if exists "authenticated users can manage purchase contracts" on public.purchase_contracts;
+create policy "authenticated users can manage purchase contracts"
+on public.purchase_contracts
+for all
+to authenticated
+using (private.has_role(array['owner', 'regular', 'spot']::public.staff_role[]))
+with check (private.has_role(array['owner', 'regular', 'spot']::public.staff_role[]));
+
+drop policy if exists "authenticated users can read purchase consent events" on public.purchase_consent_events;
+create policy "authenticated users can read purchase consent events"
+on public.purchase_consent_events
+for select
+to authenticated
+using (private.has_role(array['owner', 'regular', 'spot']::public.staff_role[]));
+
+drop policy if exists "authenticated users can manage purchase admin notifications" on public.purchase_admin_notifications;
+create policy "authenticated users can manage purchase admin notifications"
+on public.purchase_admin_notifications
+for all
+to authenticated
+using (private.has_role(array['owner', 'regular', 'spot']::public.staff_role[]))
+with check (private.has_role(array['owner', 'regular', 'spot']::public.staff_role[]));
+
+create or replace function public.prevent_completed_purchase_contract_overwrite()
+returns trigger
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+begin
+  if old.status = '完了' and coalesce(auth.role(), '') <> 'service_role' then
+    raise exception 'Completed contracts are locked. Create a new version instead.' using errcode = '42501';
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists protect_completed_purchase_contracts on public.purchase_contracts;
+create trigger protect_completed_purchase_contracts
+before update on public.purchase_contracts
+for each row
+execute function public.prevent_completed_purchase_contract_overwrite();
+
+insert into storage.buckets (id, name, public)
+values ('purchase-contract-files', 'purchase-contract-files', false)
+on conflict (id) do update set public = false;
+
+drop policy if exists "authenticated users can manage purchase contract files" on storage.objects;
+create policy "authenticated users can manage purchase contract files"
+on storage.objects
+for all
+to authenticated
+using (
+  bucket_id = 'purchase-contract-files'
+  and private.has_role(array['owner', 'regular', 'spot']::public.staff_role[])
+)
+with check (
+  bucket_id = 'purchase-contract-files'
+  and private.has_role(array['owner', 'regular', 'spot']::public.staff_role[])
+);
